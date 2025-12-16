@@ -72,24 +72,38 @@ class GaussianWellsPotential:
 
     def potential(self, z_uhp: ArrayLike, z_action: float | None = None) -> float:
         z = np.asarray(z_uhp, dtype=np.complex128)
-        z_col = z.ravel()[:, None]
-        c_row = self.centers.ravel()[None, ...]
-        dist2 = np.abs(z_col - c_row) ** 2
-        wells = np.exp(-dist2 / (2 * self.width**2))
-        V_wells = -self._annealed_weight(z_action) * wells.sum()
+        z_flat = z.ravel()
+        c_flat = self.centers.ravel()
+        if c_flat.size == 0 or z_flat.size == 0:
+            V_prior, _ = self._global_confinement(z)
+            return float(V_prior)
+
+        weight = self._annealed_weight(z_action)
+        V_wells_sum = 0.0
+        for c in c_flat:
+            dists = np.array([uhp_distance_and_grad(zi, c)[0] for zi in z_flat], dtype=float)
+            wells = np.exp(-(dists**2) / (2 * self.width**2))
+            V_wells_sum += wells.sum()
+
+        V_wells = -weight * V_wells_sum
         V_prior, _ = self._global_confinement(z)
         return float(V_wells + V_prior)
 
     def dV_dz(self, z_uhp: ArrayLike, z_action: float | None = None) -> NDArray[np.complex128]:
         z = np.asarray(z_uhp, dtype=np.complex128)
-        weight = self._annealed_weight(z_action)
         z_flat = z.ravel()
+        c_flat = self.centers.ravel()
+        weight = self._annealed_weight(z_action)
         grad_flat = np.zeros_like(z_flat, dtype=np.complex128)
-        centers_flat = self.centers.ravel()
+
         for i, zi in enumerate(z_flat):
-            diff = zi - centers_flat
-            coeff = weight * np.exp(-np.abs(diff) ** 2 / (2 * self.width**2)) / (self.width**2)
-            grad_flat[i] = np.sum(coeff * diff)
+            accum = 0.0 + 0.0j
+            for c in c_flat:
+                d, grad_d = uhp_distance_and_grad(zi, c)
+                coeff = -(d / (self.width**2)) * np.exp(-(d**2) / (2 * self.width**2))
+                accum += weight * coeff * grad_d
+            grad_flat[i] = accum
+
         grad = grad_flat.reshape(z.shape)
         _, grad_prior = self._global_confinement(z)
         return grad + grad_prior

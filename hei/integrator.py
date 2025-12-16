@@ -38,7 +38,7 @@ class IntegratorConfig:
     min_dt: float = 1e-6
     fixed_point_iters: int = 2
     v_floor: float = 1e-6  # floor for |xi| to avoid exploding dt
-    torque_dt_scale: float = 0.1  # weight on torque norm in adaptive dt denominator
+    torque_dt_scale: float = 0.001  # weight on torque norm in adaptive dt denominator
     xi_clip: float = 200.0  # cap on |xi| to avoid blow-up
     step_clip: float = 5.0  # cap on |xi|*dt to avoid huge exp
     relax_eta: float = 0.2  # structural relaxation strength on -∇V term (fluid deformation)
@@ -117,7 +117,8 @@ class ContactSplittingIntegrator:
         """
         xi_norm = float(np.linalg.norm(xi))
         torque_norm = float(np.linalg.norm(torque))
-        denom = max(1e-9, xi_norm + self.config.torque_dt_scale * torque_norm)
+        # reduce torque penalty to allow larger steps under strong forcing
+        denom = max(1e-9, xi_norm + 0.001 * torque_norm)
         dt_geo = self.config.eps_disp / denom
         gamma_curr = state.gamma_last if state.gamma_last > 0 else 1.0
         # allow semi-implicit scheme to tolerate larger h*gamma before cutting dt

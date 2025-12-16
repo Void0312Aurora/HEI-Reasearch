@@ -28,12 +28,12 @@ class SimulationConfig:
     steps: int = 1000
     max_rho: float = 3.0
     enable_diamond: bool = True
-    initial_xi: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    initial_xi: tuple[float, float, float] = (0.1, 0.0, 0.0)
     force_clip: float | None = None  # clip magnitude of forces/gradients
     use_hyperbolic_centroid: bool = True
-    eps_dt: float = 1e-2  # interpreted as displacement cap in integrator
-    max_dt: float = 1e-3
-    min_dt: float = 1e-4
+    eps_dt: float = 1e-1  # interpreted as displacement cap in integrator
+    max_dt: float = 5e-2
+    min_dt: float = 1e-5
     disable_dissipation: bool = False
     v_floor: float = 5e-2
     beta: float = 1.0
@@ -109,7 +109,7 @@ def gamma_weighted_by_inertia(z_uhp: ArrayLike) -> float:
     Mass/inertia-weighted damping: emphasize regions contributing more to rotation.
 
     Uses disk radius r as a proxy for lever arm; blends local geometric damping
-    with inertia weights to avoid edge outliers freezing the system.
+    with median aggregation to avoid edge outliers freezing the system.
     """
     z_disk = cayley_uhp_to_disk(z_uhp)
     r = np.abs(z_disk)
@@ -118,8 +118,8 @@ def gamma_weighted_by_inertia(z_uhp: ArrayLike) -> float:
     r_safe = np.minimum(r, 0.95)
     local_gamma = 2.0 / (1.0 - r_safe**2)
     local_gamma += np.where(r > 0.85, 10.0 * (r - 0.85), 0.0)
-    weights = r * r + 1e-3  # inertia proxy
-    gamma_eff = np.sum(local_gamma * weights) / np.sum(weights)
+    gamma_eff = float(np.median(local_gamma))
+    gamma_eff = max(gamma_eff, 1.0)
     return float(np.minimum(gamma_eff, 50.0))
 
 

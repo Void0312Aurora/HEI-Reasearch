@@ -14,52 +14,57 @@ def constant_inertia(diag: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> NDAr
 
 def locked_inertia_uhp(z_uhp: ArrayLike, weights: ArrayLike | None = None) -> NDArray[np.float64]:
     """
-    Compute locked inertia tensor on the upper half-plane from point set {z_k}.
-
-    Uses kinetic energy 2T = sum_k m_k |v + 2u z_k - w z_k^2|^2 / y_k^2,
-    yielding I(a) so that T = 0.5 * xi^T I xi for xi=(u,v,w).
+    Compute locked inertia tensor with trace normalization to avoid edge blow-up.
     """
     z_arr = np.asarray(z_uhp, dtype=np.complex128).ravel()
-    if z_arr.size == 0:
+    n_points = z_arr.size
+    if n_points == 0:
         return np.eye(3)
+
     if weights is None:
         w_arr = np.ones_like(z_arr, dtype=float)
     else:
         w_arr = np.asarray(weights, dtype=float).ravel()
         if w_arr.shape != z_arr.shape:
             raise ValueError("weights must match z_uhp shape")
+
     I = np.zeros((3, 3), dtype=float)
-    MAX_INERTIA_SCALE = 1e14  # allow very large inertia near boundary
+
+    # Raw inertia accumulation
     for zc, mass in zip(z_arr, w_arr):
         y = np.imag(zc)
-        y_safe = max(y, 1e-12)
-        raw_scale = mass / (y_safe * y_safe)
-        scale = min(raw_scale, MAX_INERTIA_SCALE)
+        y_safe = max(y, 1e-6)
+        raw_scale = min(mass / (y_safe * y_safe), 1e6)  # cap single-point leverage
+
         a_u = 2.0 * zc
         a_v = 1.0 + 0j
         a_w = -zc * zc
-        # diagonals
-        I[0, 0] += scale * np.abs(a_u) ** 2
-        I[1, 1] += scale * np.abs(a_v) ** 2
-        I[2, 2] += scale * np.abs(a_w) ** 2
-        # off-diagonals: Re(a_i conj(a_j))
-        I_uv = scale * np.real(a_u * np.conj(a_v))
-        I_uw = scale * np.real(a_u * np.conj(a_w))
-        I_vw = scale * np.real(a_v * np.conj(a_w))
+
+        I[0, 0] += raw_scale * np.abs(a_u) ** 2
+        I[1, 1] += raw_scale * np.abs(a_v) ** 2
+        I[2, 2] += raw_scale * np.abs(a_w) ** 2
+
+        I_uv = raw_scale * np.real(a_u * np.conj(a_v))
+        I_uw = raw_scale * np.real(a_u * np.conj(a_w))
+        I_vw = raw_scale * np.real(a_v * np.conj(a_w))
         I[0, 1] += I_uv
         I[1, 0] += I_uv
         I[0, 2] += I_uw
         I[2, 0] += I_uw
         I[1, 2] += I_vw
         I[2, 1] += I_vw
-    # base cognitive mass once
-    I += 0.5 * np.eye(3)
-    # Condition spectrum to avoid ill-conditioned inversion near the boundary.
-    EIG_FLOOR = 1e-3
-    EIG_CAP = 1e14
-    vals, vecs = np.linalg.eigh(I)
-    vals_clamped = np.clip(vals, EIG_FLOOR, EIG_CAP)
-    I = (vecs * vals_clamped) @ vecs.T
+
+    # Trace normalization: keep total mass ~ O(N)
+    current_trace = float(np.trace(I))
+    target_trace = 10.0 * n_points
+    if current_trace > 1e-9:
+        I = I * (target_trace / current_trace)
+    else:
+        I = np.eye(3) * target_trace
+
+    # Base mass to ensure positive definiteness
+    I += 1.0 * np.eye(3)
+
     return I
 
 
