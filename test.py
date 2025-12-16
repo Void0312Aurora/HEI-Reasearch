@@ -8,6 +8,7 @@ from hei.inertia import locked_inertia_uhp
 from hei.potential import GaussianWellsPotential
 from hei.integrator import ContactSplittingIntegrator, IntegratorConfig, IntegratorState
 from hei.lie import exp_sl2
+from hei.lie import vec_to_matrix
 
 def test_0_geometry_boundary():
     print("\n=== Test 0: Geometry Boundary Stability ===")
@@ -119,12 +120,38 @@ def test_3_free_particle_drift():
     # 诊断：如果自由粒子的能量都在剧烈漂移，说明积分器本身的离散化公式有问题，
     # 或者 exp_sl2 的实现精度不够。
 
+
+def test_4_exp_sl2_consistency():
+    print("\n=== Test 4: exp_sl2 consistency (local + group + det) ===")
+    xi = np.array([0.2, -0.1, 0.05])
+    A = vec_to_matrix(xi)
+    dt = 1e-3
+    g = exp_sl2(xi, dt)
+    g_series = np.eye(2) + dt * A + 0.5 * (dt * dt) * (A @ A)
+    err_local = np.linalg.norm(g - g_series, ord="fro")
+    print(f"Local error ||exp - series||_F: {err_local:.3e}")
+
+    dt1, dt2 = 0.3, -0.2
+    g1 = exp_sl2(xi, dt1)
+    g2 = exp_sl2(xi, dt2)
+    g12 = exp_sl2(xi, dt1 + dt2)
+    err_group = np.linalg.norm(g1 @ g2 - g12, ord="fro")
+    print(f"Group property error ||g1 g2 - g12||_F: {err_group:.3e}")
+
+    det_g = np.linalg.det(exp_sl2(xi, 0.7))
+    print(f"det(exp_sl2) at dt=0.7: {det_g:.6f}")
+    # Expect small local error, good composition, det~1
+    assert err_local < 1e-6, "exp_sl2 local expansion off"
+    assert err_group < 1e-6, "exp_sl2 group property off"
+    assert abs(det_g - 1.0) < 1e-6, "exp_sl2 not in SL(2)"
+
 if __name__ == "__main__":
     try:
         test_0_geometry_boundary()
         test_1_force_direction()
         test_2_inertia_at_infinity()
         test_3_free_particle_drift()
+        test_4_exp_sl2_consistency()
     except Exception as e:
         print(f"\n!!! CRITICAL FAILURE !!!\n{e}")
         import traceback

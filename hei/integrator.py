@@ -41,17 +41,20 @@ class IntegratorConfig:
     torque_dt_scale: float = 0.1  # weight on torque norm in adaptive dt denominator
     xi_clip: float = 200.0  # cap on |xi| to avoid blow-up
     step_clip: float = 5.0  # cap on |xi|*dt to avoid huge exp
+    relax_eta: float = 0.2  # structural relaxation strength on -∇V term (fluid deformation)
 
 
 class ContactSplittingIntegrator:
     """
     Discrete contact variational integrator (DCVI) with implicit fixed-point solve.
 
-    Update equation (semi-implicit):
-        I(a_k) xi_k = alpha_{k-1} Ad^*_{exp(-h xi_{k-1})}(I(a_{k-1}) xi_{k-1}) + h^2 J(a_k)
+    Implementation follows a semi-implicit update:
+        I(a_k) xi_k = alpha_{k-1} Ad^*_{exp(-h xi_{k-1})}(I(a_{k-1}) xi_{k-1}) + h * torque(a_k)
         Z_{k+1} = alpha_k Z_k + h/(1 + h gamma_k / 2) * (T_k - V_k)
+        z_{k+1} = exp(h xi_k) ⋅ z_k  + h * (-eta ∇V)   # structural relaxation (non-rigid)
 
-    We approximate Ad^*_{exp(-h xi)} via truncated BCH on the coadjoint action.
+    torques are geometric (diamond) forces; scaling is dt-linear and consistent
+    with the residual diagnostics.
     """
 
     def __init__(
@@ -191,6 +194,11 @@ class ContactSplittingIntegrator:
             g_step = exp_sl2(xi_new, dt)
             z_guess = mobius_action_matrix(g_step, state.z_uhp)
             z_guess = self._stabilize_uhp(z_guess)
+            # Structural relaxation: allow non-rigid drift along -∇V
+            if self.config.relax_eta > 0.0:
+                relax_force = self.force_fn(z_guess, action_guess)
+                z_relaxed = z_guess + dt * self.config.relax_eta * relax_force
+                z_guess = self._stabilize_uhp(z_relaxed)
 
             # Contact action update (using current guess)
             T = 0.5 * float(xi_new @ (state.I @ xi_new))
