@@ -104,23 +104,20 @@ def gamma_from_geometry(z_uhp: ArrayLike) -> float:
     return float(np.mean(gamma_field)) if gamma_field.size else 0.0
 
 
-def gamma_weighted_by_inertia(z_uhp: ArrayLike) -> float:
+def gamma_critical_inertia(z_uhp: ArrayLike, scale: float = 1.0) -> float:
     """
-    Mass/inertia-weighted damping: emphasize regions contributing more to rotation.
+    Critical damping from inertia spectrum: gamma ~ scale * sqrt(lambda_max(I)).
 
-    Uses disk radius r as a proxy for lever arm; blends local geometric damping
-    with median aggregation to avoid edge outliers freezing the system.
+    Aligns with CCD theory (gamma ∝ sqrt(metric eigenvalue)): larger inertia/curvature
+    -> larger damping to reach critical regime.
     """
-    z_disk = cayley_uhp_to_disk(z_uhp)
-    r = np.abs(z_disk)
-    if r.size == 0:
+    I = locked_inertia_uhp(z_uhp)
+    eigs = np.linalg.eigvalsh(I)
+    if eigs.size == 0:
         return 0.0
-    r_safe = np.minimum(r, 0.95)
-    local_gamma = 2.0 / (1.0 - r_safe**2)
-    local_gamma += np.where(r > 0.85, 10.0 * (r - 0.85), 0.0)
-    gamma_eff = float(np.median(local_gamma))
-    gamma_eff = max(gamma_eff, 1.0)
-    return float(np.minimum(gamma_eff, 50.0))
+    eig_max = float(max(eigs.max(), 1e-12))
+    gamma = scale * np.sqrt(eig_max)
+    return float(np.clip(gamma, 0.0, 100.0))
 
 
 def make_force_fn(potential: PotentialOracle) -> Callable[[ArrayLike, float], NDArray[np.complex128]]:
@@ -158,7 +155,7 @@ def run_simulation(
     integrator = ContactSplittingIntegrator(
         force_fn=force_fn,
         potential_fn=lambda z, action: pot.potential(z, action),
-        gamma_fn=lambda z_uhp: 0.0 if cfg.disable_dissipation else gamma_weighted_by_inertia(z_uhp),
+        gamma_fn=lambda z_uhp: 0.0 if cfg.disable_dissipation else gamma_critical_inertia(z_uhp),
         config=IntegratorConfig(eps_disp=cfg.eps_dt, max_dt=cfg.max_dt, min_dt=cfg.min_dt, v_floor=cfg.v_floor),
     )
 

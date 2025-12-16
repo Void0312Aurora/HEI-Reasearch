@@ -41,7 +41,7 @@ class IntegratorConfig:
     torque_dt_scale: float = 0.001  # weight on torque norm in adaptive dt denominator
     xi_clip: float = 200.0  # cap on |xi| to avoid blow-up
     step_clip: float = 5.0  # cap on |xi|*dt to avoid huge exp
-    relax_eta: float = 0.2  # structural relaxation strength on -∇V term (fluid deformation)
+    relax_eta: float = 0.0  # structural relaxation on -∇V; 0 disables to avoid drift by default
     dt_damping_safety: float = 1.5  # allow h*gamma up to ~dt_damping_safety for semi-implicit stability
 
 
@@ -113,12 +113,17 @@ class ContactSplittingIntegrator:
         """
         Choose dt using strict First-Principles constraints:
         1. Displacement limit (Kinematic constraint)
-        2. Damping stability (Thermodynamic constraint): h * gamma < 1.0
+        2. Damping stability (Thermodynamic constraint): h * gamma < safety
+        3. Spectral stability: account for inertia spectrum when strong torques push acceleration
         """
         xi_norm = float(np.linalg.norm(xi))
         torque_norm = float(np.linalg.norm(torque))
-        # reduce torque penalty to allow larger steps under strong forcing
-        denom = max(1e-9, xi_norm + 0.001 * torque_norm)
+        # spectral leverage from inertia: ||I^{-1}|| ~ 1 / eig_min(I)
+        vals = np.linalg.eigvalsh(state.I)
+        eig_min = float(max(vals.min(), 1e-9))
+        inv_spec = 1.0 / eig_min
+        # blend velocity and acceleration scales
+        denom = max(1e-9, xi_norm + self.config.torque_dt_scale * inv_spec * torque_norm)
         dt_geo = self.config.eps_disp / denom
         gamma_curr = state.gamma_last if state.gamma_last > 0 else 1.0
         # allow semi-implicit scheme to tolerate larger h*gamma before cutting dt
@@ -200,7 +205,10 @@ class ContactSplittingIntegrator:
             # Structural relaxation: allow non-rigid drift along -∇V
             if self.config.relax_eta > 0.0:
                 relax_force = self.force_fn(z_guess, action_guess)
-                z_relaxed = z_guess + dt * self.config.relax_eta * relax_force
+                # hyperbolic metric factor ~ 1 / y^2 to avoid overshoot near boundary
+                y = np.maximum(np.imag(z_guess), 1e-6)
+                relax_step = (self.config.relax_eta * dt) * (relax_force / (y * y))
+                z_relaxed = z_guess + relax_step
                 z_guess = self._stabilize_uhp(z_relaxed)
 
             # Contact action update (using current guess)

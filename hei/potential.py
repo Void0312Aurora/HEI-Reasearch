@@ -12,6 +12,16 @@ from .geometry import cayley_disk_to_uhp, sample_disk_hyperbolic, uhp_distance_a
 from .metrics import pairwise_tree_distance
 
 
+def _curvature_scale(z: np.ndarray) -> float:
+    """
+    Median metric factor 1/y^2 capturing local curvature weighting from current memory layout.
+    """
+    y = np.maximum(np.imag(np.asarray(z, dtype=np.complex128)).ravel(), 1e-6)
+    if y.size == 0:
+        return 1.0
+    return float(np.median(1.0 / (y * y)))
+
+
 class PotentialOracle(Protocol):
     """
     Interface for potential differentials on the upper half-plane.
@@ -57,17 +67,17 @@ class GaussianWellsPotential:
         Harmonic confinement to UHP origin: V = 0.5 * k * d(z, i)^2.
         Returns (potential_sum, gradient array).
         """
+        k_eff = self.prior_stiffness * _curvature_scale(z)
         origin = 1.0j
         z_flat = z.ravel()
         pot_sum = 0.0
         grad_flat = np.zeros_like(z_flat, dtype=np.complex128)
-        k = self.prior_stiffness
-        if k <= 0:
+        if k_eff <= 0:
             return pot_sum, grad_flat.reshape(z.shape)
         for i, val in enumerate(z_flat):
             d, g_d = uhp_distance_and_grad(val, origin)
-            pot_sum += 0.5 * k * (d ** 2)
-            grad_flat[i] = k * d * g_d
+            pot_sum += 0.5 * k_eff * (d ** 2)
+            grad_flat[i] = k_eff * d * g_d
         return pot_sum, grad_flat.reshape(z.shape)
 
     def potential(self, z_uhp: ArrayLike, z_action: float | None = None) -> float:
@@ -79,10 +89,12 @@ class GaussianWellsPotential:
             return float(V_prior)
 
         weight = self._annealed_weight(z_action)
+        curv_scale = _curvature_scale(z)
+        width_eff = self.width / max(np.sqrt(curv_scale), 1e-6)
         V_wells_sum = 0.0
         for c in c_flat:
             dists = np.array([uhp_distance_and_grad(zi, c)[0] for zi in z_flat], dtype=float)
-            wells = np.exp(-(dists**2) / (2 * self.width**2))
+            wells = np.exp(-(dists**2) / (2 * width_eff**2))
             V_wells_sum += wells.sum()
 
         V_wells = -weight * V_wells_sum
@@ -94,13 +106,15 @@ class GaussianWellsPotential:
         z_flat = z.ravel()
         c_flat = self.centers.ravel()
         weight = self._annealed_weight(z_action)
+        curv_scale = _curvature_scale(z)
+        width_eff = self.width / max(np.sqrt(curv_scale), 1e-6)
         grad_flat = np.zeros_like(z_flat, dtype=np.complex128)
 
         for i, zi in enumerate(z_flat):
             accum = 0.0 + 0.0j
             for c in c_flat:
                 d, grad_d = uhp_distance_and_grad(zi, c)
-                coeff = (d / (self.width**2)) * np.exp(-(d**2) / (2 * self.width**2))
+                coeff = (d / (width_eff**2)) * np.exp(-(d**2) / (2 * width_eff**2))
                 accum += weight * coeff * grad_d
             grad_flat[i] = accum
 
@@ -239,10 +253,10 @@ class HierarchicalSoftminPotential:
         grads_arr = np.stack(grads)  # (K, ...)
         return logits_arr, grads_arr
 
-    def _prior_strength(self) -> float:
-        """Scale prior by tree depth to confine more strongly for deeper hierarchies."""
+    def _prior_strength(self, z: np.ndarray) -> float:
+        """Scale prior by tree depth and current curvature (via metric factor)."""
         depth_scale = max(1.0, float(self.max_depth)) if self.max_depth else 1.0
-        return self.prior_weight * depth_scale
+        return self.prior_weight * depth_scale * _curvature_scale(z)
 
     def _compute_gaps(
         self, z_uhp: np.ndarray, soft: np.ndarray
@@ -373,7 +387,7 @@ class HierarchicalSoftminPotential:
                 d, _ = uhp_distance_and_grad(val, center_uhp)
                 dists_origin.append(d * d)
                 it.iternext()
-            V_prior = 0.5 * self._prior_strength() * sum(dists_origin)
+            V_prior = 0.5 * self._prior_strength(z) * sum(dists_origin)
 
         return float(V_wells + V_rep + lam * H_sib + V_prior)
 
@@ -424,7 +438,7 @@ class HierarchicalSoftminPotential:
             while not it.finished:
                 val = complex(it[0])
                 d, g_d = uhp_distance_and_grad(val, center_uhp)
-                grad_prior[it.multi_index] = self._prior_strength() * d * g_d
+                grad_prior[it.multi_index] = self._prior_strength(z) * d * g_d
                 it.iternext()
 
         return grad_wells + grad_prior
@@ -482,7 +496,7 @@ class HierarchicalSoftminPotential:
             while not it.finished:
                 val = complex(it[0])
                 d, g_d = uhp_distance_and_grad(val, center_uhp)
-                grad_prior[it.multi_index] = self._prior_strength() * d * g_d
+                grad_prior[it.multi_index] = self._prior_strength(z) * d * g_d
                 it.iternext()
 
         grad_total = grad_align + grad_entropy + grad_prior
