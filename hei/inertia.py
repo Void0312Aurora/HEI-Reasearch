@@ -14,14 +14,21 @@ def constant_inertia(diag: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> NDAr
 
 def locked_inertia_uhp(z_uhp: ArrayLike, weights: ArrayLike | None = None) -> NDArray[np.float64]:
     """
-    Compute locked inertia tensor on the upper half-plane from point set {z_k}.
+    Compute regularized inertia tensor with vacuum inertia and soft spatial clamp.
 
-    Uses kinetic energy 2T = sum_k m_k |v + 2u z_k - w z_k^2|^2 / y_k^2,
-    yielding I(a) so that T = 0.5 * xi^T I xi for xi=(u,v,w).
+    Physics fixes:
+    1) Vacuum inertia: add epsilon * I to guarantee lambda_min > 0.
+    2) Spatial regularization: soft clamp coordinate contribution to avoid lambda_max blow-up.
     """
     z_arr = np.asarray(z_uhp, dtype=np.complex128).ravel()
+
+    # 1) Vacuum inertia baseline
+    EPSILON_INERTIA = 1e-4
+    I = np.eye(3, dtype=float) * EPSILON_INERTIA
+
     if z_arr.size == 0:
-        return np.eye(3)
+        return I
+
     if weights is None:
         w_arr = np.ones_like(z_arr, dtype=float)
     else:
@@ -29,17 +36,23 @@ def locked_inertia_uhp(z_uhp: ArrayLike, weights: ArrayLike | None = None) -> ND
         if w_arr.shape != z_arr.shape:
             raise ValueError("weights must match z_uhp shape")
 
-    I = np.zeros((3, 3), dtype=float)
-    MAX_INERTIA_SCALE = 1e12  # allow large inertia near boundary but avoid overflow
+    COORD_CLIP = 50.0  # soft clamp scale for coordinates
     for zc, mass in zip(z_arr, w_arr):
-        y = np.imag(zc)
-        y_safe = max(y, 1e-12)
-        raw_scale = mass / (y_safe * y_safe)
-        scale = min(raw_scale, MAX_INERTIA_SCALE)
+        # covariant mass (already renormalized): no 1/y^2 factor
+        scale = mass
 
-        a_u = 2.0 * zc
+        x, y = float(np.real(zc)), float(np.imag(zc))
+        # smooth clamp via tanh and magnitude limiter
+        x_eff = COORD_CLIP * np.tanh(x / COORD_CLIP)
+        y_eff = COORD_CLIP * np.tanh(y / COORD_CLIP)
+        z_eff = complex(x_eff, y_eff)
+        z_mag = abs(zc)
+        if z_mag > COORD_CLIP:
+            z_eff = zc * (COORD_CLIP / z_mag)
+
+        a_u = 2.0 * z_eff
         a_v = 1.0 + 0j
-        a_w = -zc * zc
+        a_w = -z_eff * z_eff
 
         I[0, 0] += scale * np.abs(a_u) ** 2
         I[1, 1] += scale * np.abs(a_v) ** 2
@@ -55,9 +68,9 @@ def locked_inertia_uhp(z_uhp: ArrayLike, weights: ArrayLike | None = None) -> ND
         I[1, 2] += I_vw
         I[2, 1] += I_vw
 
-    # Condition spectrum to keep inversion stable while preserving magnitude
-    EIG_FLOOR = 1e-9
-    EIG_CAP = 1e12
+    # Spectral conditioning to avoid extreme condition numbers
+    EIG_FLOOR = 1e-6
+    EIG_CAP = 1e6
     vals, vecs = np.linalg.eigh(I)
     vals_clamped = np.clip(vals, EIG_FLOOR, EIG_CAP)
     I = (vecs * vals_clamped) @ vecs.T
@@ -70,8 +83,9 @@ def apply_inertia(I: ArrayLike, xi: ArrayLike) -> NDArray[np.float64]:
 
 
 def invert_inertia(I: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
-    """Compute xi = I^{-1} m."""
-    return np.linalg.solve(np.asarray(I, dtype=float), np.asarray(m, dtype=float))
+    """Compute xi = I^{-1} m with mild Tikhonov regularization."""
+    I_reg = np.asarray(I, dtype=float) + 1e-8 * np.eye(3)
+    return np.linalg.solve(I_reg, np.asarray(m, dtype=float))
 
 
 def moment_map_covariance(

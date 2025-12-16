@@ -101,23 +101,22 @@ def gamma_from_geometry(z_uhp: ArrayLike) -> float:
 
     MAX_GAMMA = 500.0
     gamma_field = np.minimum(total_gamma, MAX_GAMMA)
-    return float(np.mean(gamma_field)) if gamma_field.size else 0.0
+    return gamma_field
 
 
 def gamma_critical_inertia(z_uhp: ArrayLike, scale: float = 1.0) -> float:
     """
-    Critical damping from inertia spectrum: gamma ~ scale * sqrt(lambda_max(I)).
-
-    Aligns with CCD theory (gamma ∝ sqrt(metric eigenvalue)): larger inertia/curvature
-    -> larger damping to reach critical regime.
+    Critical damping from inertia spectrum, normalized to remove absolute blow-up:
+    gamma ~ scale * sqrt(lambda_max / mean_lambda).
     """
     I = locked_inertia_uhp(z_uhp)
     eigs = np.linalg.eigvalsh(I)
     if eigs.size == 0:
         return 0.0
     eig_max = float(max(eigs.max(), 1e-12))
-    gamma = scale * np.sqrt(eig_max)
-    return float(np.clip(gamma, 0.0, 100.0))
+    eig_mean = float(max(eigs.mean(), 1e-12))
+    gamma = scale * np.sqrt(eig_max / eig_mean)
+    return float(np.clip(gamma, 0.0, 50.0))
 
 
 def make_force_fn(potential: PotentialOracle) -> Callable[[ArrayLike, float], NDArray[np.complex128]]:

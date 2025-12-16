@@ -38,7 +38,7 @@ class IntegratorConfig:
     min_dt: float = 1e-6
     fixed_point_iters: int = 2
     v_floor: float = 1e-6  # floor for |xi| to avoid exploding dt
-    torque_dt_scale: float = 0.001  # weight on torque norm in adaptive dt denominator
+    torque_dt_scale: float = 1e-4  # weight on torque norm in adaptive dt denominator
     xi_clip: float = 200.0  # cap on |xi| to avoid blow-up
     step_clip: float = 5.0  # cap on |xi|*dt to avoid huge exp
     relax_eta: float = 0.0  # structural relaxation on -∇V; 0 disables to avoid drift by default
@@ -86,8 +86,9 @@ class ContactSplittingIntegrator:
         """
         return self._coadjoint_transport(xi, m, dt)
 
-    def _alpha(self, gamma_val: float, dt: float) -> float:
-        return (1.0 - 0.5 * dt * gamma_val) / (1.0 + 0.5 * dt * gamma_val)
+    def _alpha(self, gamma_val: ArrayLike, dt: float) -> ArrayLike:
+        # Exponential decay for damping to improve stability under strong gamma
+        return np.exp(-dt * np.asarray(gamma_val, dtype=float))
 
     def _max_hyperbolic_disp(self, z_old: NDArray[np.complex128], z_new: NDArray[np.complex128]) -> float:
         """Maximum hyperbolic distance between two position sets (elementwise paired)."""
@@ -120,7 +121,7 @@ class ContactSplittingIntegrator:
         torque_norm = float(np.linalg.norm(torque))
         # spectral leverage from inertia: ||I^{-1}|| ~ 1 / eig_min(I)
         vals = np.linalg.eigvalsh(state.I)
-        eig_min = float(max(vals.min(), 1e-9))
+        eig_min = float(max(vals.min(), 1e-6))
         inv_spec = 1.0 / eig_min
         # blend velocity and acceleration scales
         denom = max(1e-9, xi_norm + self.config.torque_dt_scale * inv_spec * torque_norm)
@@ -153,7 +154,8 @@ class ContactSplittingIntegrator:
             state.xi = state.xi * 0.01
             state.m = apply_inertia(state.I, state.xi)
 
-        gamma_prev = self.gamma_fn(state.z_uhp)
+        gamma_field_prev = self.gamma_fn(state.z_uhp)
+        gamma_prev = float(np.mean(gamma_field_prev)) if np.asarray(gamma_field_prev).size else 0.0
         xi_prev = state.xi
         m_prev = state.m if state.m is not None else apply_inertia(state.I, xi_prev)
 
@@ -169,7 +171,13 @@ class ContactSplittingIntegrator:
         alpha_prev = self._alpha(gamma_prev, dt)
 
         for _ in range(max(1, self.config.fixed_point_iters)):
+            gamma_field = self.gamma_fn(z_guess)
+            gamma_eff = float(np.mean(gamma_field)) if np.asarray(gamma_field).size else 0.0
+            alpha_prev = self._alpha(gamma_eff, dt)
+
             forces = self.force_fn(z_guess, action_guess)
+            if np.ndim(gamma_field) > 0:
+                forces = forces / (1.0 + 0.5 * dt * gamma_field)
             torque = aggregate_torque(z_guess, forces)
             m_advected = self._coadjoint_transport(xi_prev, m_prev, dt)
             m_new = alpha_prev * m_advected + dt * torque
@@ -177,8 +185,7 @@ class ContactSplittingIntegrator:
             from .inertia import locked_inertia_uhp
             I_new = locked_inertia_uhp(z_guess)
             state.I = I_new
-            gamma_curr = self.gamma_fn(z_guess)
-            alpha_prev = self._alpha(gamma_curr, dt)
+            gamma_curr = gamma_eff
             xi_new = invert_inertia(I_new, m_new)
             # limit per-step speed based on current dt to avoid huge jumps
             max_xi_norm = 10.0 / max(dt, 1e-8)
@@ -207,7 +214,7 @@ class ContactSplittingIntegrator:
                 relax_force = self.force_fn(z_guess, action_guess)
                 # hyperbolic metric factor ~ 1 / y^2 to avoid overshoot near boundary
                 y = np.maximum(np.imag(z_guess), 1e-6)
-                relax_step = (self.config.relax_eta * dt) * (relax_force / (y * y))
+                relax_step = (self.config.relax_eta * dt) * (relax_force * (y * y))
                 z_relaxed = z_guess + relax_step
                 z_guess = self._stabilize_uhp(z_relaxed)
 
