@@ -83,9 +83,20 @@ def apply_inertia(I: ArrayLike, xi: ArrayLike) -> NDArray[np.float64]:
 
 
 def invert_inertia(I: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
-    """Compute xi = I^{-1} m with mild Tikhonov regularization."""
-    I_reg = np.asarray(I, dtype=float) + 1e-8 * np.eye(3)
-    return np.linalg.solve(I_reg, np.asarray(m, dtype=float))
+    """
+    Compute xi = I^{-1} m with spectral regularization to limit condition number.
+
+    Clamp eigenvalues to [lambda_min, lambda_max] and rebuild inverse.
+    """
+    I_arr = np.asarray(I, dtype=float)
+    m_arr = np.asarray(m, dtype=float)
+    vals, vecs = np.linalg.eigh(I_arr)
+    LAMBDA_MIN = 1e-4
+    LAMBDA_MAX = 1e6
+    vals_clamped = np.clip(vals, LAMBDA_MIN, LAMBDA_MAX)
+    inv_vals = 1.0 / vals_clamped
+    I_inv = (vecs * inv_vals) @ vecs.T
+    return I_inv @ m_arr
 
 
 def moment_map_covariance(

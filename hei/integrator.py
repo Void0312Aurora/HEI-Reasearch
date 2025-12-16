@@ -126,9 +126,10 @@ class ContactSplittingIntegrator:
         # blend velocity and acceleration scales
         denom = max(1e-9, xi_norm + self.config.torque_dt_scale * inv_spec * torque_norm)
         dt_geo = self.config.eps_disp / denom
-        gamma_curr = state.gamma_last if state.gamma_last > 0 else 1.0
-        # allow semi-implicit scheme to tolerate larger h*gamma before cutting dt
-        SAFETY_FACTOR = self.config.dt_damping_safety
+        # use current geometry damping rather than last-step gamma
+        gamma_field = self.gamma_fn(state.z_uhp)
+        gamma_curr = float(np.mean(gamma_field)) if np.asarray(gamma_field).size else 1.0
+        SAFETY_FACTOR = 0.8  # more conservative to avoid over-damping dt squeeze
         dt_thermo = SAFETY_FACTOR / (gamma_curr + 1e-9)
         dt = min(self.config.max_dt, dt_geo, dt_thermo)
         dt = max(dt, self.config.min_dt)
