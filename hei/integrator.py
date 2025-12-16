@@ -160,7 +160,7 @@ class ContactSplittingIntegrator:
         for _ in range(max(1, self.config.fixed_point_iters)):
             forces = self.force_fn(z_guess, action_guess)
             torque = aggregate_torque(z_guess, forces)
-            m_advected = self._coadjoint_transport(xi_prev, m_prev, -dt)
+            m_advected = self._coadjoint_transport(xi_prev, m_prev, dt)
             m_new = alpha_prev * m_advected + dt * torque
             # refresh inertia and gamma with updated geometry
             from .inertia import locked_inertia_uhp
