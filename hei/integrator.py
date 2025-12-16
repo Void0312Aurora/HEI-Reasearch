@@ -9,7 +9,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from .diamond import aggregate_torque
-from .inertia import apply_inertia, invert_inertia
+from .inertia import apply_inertia, invert_inertia, locked_inertia_uhp, compute_kinetic_energy_gradient
 from .lie import exp_sl2, mobius_action_matrix, matrix_to_vec, vec_to_matrix
 from .geometry import cayley_uhp_to_disk, cayley_disk_to_uhp, clamp_disk_radius, clamp_uhp
 from .metrics import poincare_distance_disk
@@ -142,7 +142,14 @@ class ContactSplittingIntegrator:
             z_trial = mobius_action_matrix(g_step, state.z_uhp)
             z_trial = self._stabilize_uhp(z_trial)
             disp = self._max_hyperbolic_disp(state.z_uhp, z_trial)
-            if np.isnan(disp) or np.isinf(disp) or disp > self.config.eps_disp * 1.5:
+            I_trial = locked_inertia_uhp(z_trial)
+            I_diff_norm = np.linalg.norm(I_trial - state.I) / (np.linalg.norm(state.I) + 1e-6)
+            if (
+                np.isnan(disp)
+                or np.isinf(disp)
+                or disp > self.config.eps_disp * 1.5
+                or I_diff_norm > 0.1
+            ):
                 dt *= 0.5
                 if dt < self.config.min_dt:
                     dt = self.config.min_dt
@@ -169,7 +176,9 @@ class ContactSplittingIntegrator:
         m_new = m_prev
 
         # determine step size once per step using initial torque guess
-        forces0 = self.force_fn(z_guess, action_guess)
+        forces_pot = self.force_fn(z_guess, action_guess)
+        forces_kin = compute_kinetic_energy_gradient(z_guess, xi_prev)
+        forces0 = forces_pot + forces_kin
         torque0 = aggregate_torque(z_guess, forces0)
         dt, z_guess = self._backtrack_dt(state, torque0, xi_prev)
         alpha_prev = self._alpha(gamma_prev, dt)
@@ -179,14 +188,15 @@ class ContactSplittingIntegrator:
             gamma_eff = float(np.mean(gamma_field)) if np.asarray(gamma_field).size else 0.0
             alpha_prev = self._alpha(gamma_eff, dt)
 
-            forces = self.force_fn(z_guess, action_guess)
+            forces_pot = self.force_fn(z_guess, action_guess)
+            forces_kin = compute_kinetic_energy_gradient(z_guess, xi_prev)
+            forces = forces_pot + forces_kin
             if np.ndim(gamma_field) > 0:
                 forces = forces / (1.0 + 0.5 * dt * gamma_field)
             torque = aggregate_torque(z_guess, forces)
             m_advected = self._coadjoint_transport(xi_prev, m_prev, dt)
             m_new = alpha_prev * m_advected + dt * torque
             # refresh inertia and gamma with updated geometry
-            from .inertia import locked_inertia_uhp
             I_new = locked_inertia_uhp(z_guess)
             state.I = I_new
             gamma_curr = gamma_eff

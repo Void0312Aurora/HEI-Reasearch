@@ -106,17 +106,10 @@ def gamma_from_geometry(z_uhp: ArrayLike) -> float:
 
 def gamma_critical_inertia(z_uhp: ArrayLike, scale: float = 1.0) -> float:
     """
-    Critical damping from inertia spectrum, normalized to remove absolute blow-up:
-    gamma ~ scale * sqrt(lambda_max / mean_lambda).
+    Use a fixed, geometry-agnostic damping rate once inertia is well-conditioned.
     """
-    I = locked_inertia_uhp(z_uhp)
-    eigs = np.linalg.eigvalsh(I)
-    if eigs.size == 0:
-        return 0.0
-    eig_max = float(max(eigs.max(), 1e-12))
-    eig_mean = float(max(eigs.mean(), 1e-12))
-    gamma = scale * np.sqrt(eig_max / eig_mean)
-    return float(np.clip(gamma, 0.0, 50.0))
+    # 使用固定阻尼比，依赖锁定惯性良态化后的谱性质
+    return 2.0
 
 
 def make_force_fn(potential: PotentialOracle) -> Callable[[ArrayLike, float], NDArray[np.complex128]]:
