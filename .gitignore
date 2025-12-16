@@ -1,3 +1,4 @@
-./outputs/*
-./test.py
+outputs/
+test.py
 **/__pycache__/
+*.py[cod]
