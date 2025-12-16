@@ -42,27 +42,26 @@ def exp_sl2(xi: ArrayLike, dt: float = 1.0) -> NDArray[np.float64]:
     Exponential map for sl(2) elements (u, v, w) -> SL(2) matrix.
 
     Uses closed form for traceless 2x2 matrices:
-    exp(A) = cosh(s) I + sinh(s)/s * A, where s = dt * sqrt(u^2 + v w).
+    exp(A) = cosh(s) I + sinh(s)/k * A, where k = sqrt(u^2 + v w), s = dt * k.
     Falls back to 2nd order series when s is tiny.
     """
     u, v, w = np.asarray(xi, dtype=float)
     A = np.array([[u, v], [w, -u]], dtype=float)
     lam2 = u * u + v * w
-    s = dt * np.sqrt(abs(lam2))
-    s_clamped = min(s, 50.0)  # avoid overflow in cosh/sinh
-    if s < 1e-8:
+    k = np.sqrt(abs(lam2))
+    s = dt * k
+    if abs(s) < 1e-8:
         # series: I + dt A + dt^2/2 A^2
         I = np.eye(2)
         return I + dt * A + 0.5 * (dt * dt) * (A @ A)
+    s_clamped = np.clip(s, -50.0, 50.0)  # avoid overflow but keep sign
     if lam2 > 0:
         ch = np.cosh(s_clamped)
-        sh_over_s = np.sinh(s_clamped) / (s_clamped + 1e-12)
+        sh_over_k = np.sinh(s_clamped) / (k + 1e-12)
     else:
-        # imaginary eigenvalues -> use cos/sin with |s|
-        s_real = dt * np.sqrt(-lam2)
-        ch = np.cos(s_real)
-        sh_over_s = np.sin(s_real) / (s_real + 1e-12)
-    return ch * np.eye(2) + sh_over_s * A
+        ch = np.cos(s_clamped)
+        sh_over_k = np.sin(s_clamped) / (k + 1e-12)
+    return ch * np.eye(2) + sh_over_k * A
 
 
 def mobius_action_matrix(g: ArrayLike, z: ArrayLike) -> NDArray[np.complex128]:
