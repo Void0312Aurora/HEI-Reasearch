@@ -42,6 +42,7 @@ class IntegratorConfig:
     xi_clip: float = 200.0  # cap on |xi| to avoid blow-up
     step_clip: float = 5.0  # cap on |xi|*dt to avoid huge exp
     relax_eta: float = 0.2  # structural relaxation strength on -∇V term (fluid deformation)
+    dt_damping_safety: float = 1.5  # allow h*gamma up to ~dt_damping_safety for semi-implicit stability
 
 
 class ContactSplittingIntegrator:
@@ -119,8 +120,9 @@ class ContactSplittingIntegrator:
         denom = max(1e-9, xi_norm + self.config.torque_dt_scale * torque_norm)
         dt_geo = self.config.eps_disp / denom
         gamma_curr = state.gamma_last if state.gamma_last > 0 else 1.0
-        SAFETY_FACTOR = 0.5
-        dt_thermo = SAFETY_FACTOR / gamma_curr
+        # allow semi-implicit scheme to tolerate larger h*gamma before cutting dt
+        SAFETY_FACTOR = self.config.dt_damping_safety
+        dt_thermo = SAFETY_FACTOR / (gamma_curr + 1e-9)
         dt = min(self.config.max_dt, dt_geo, dt_thermo)
         dt = max(dt, self.config.min_dt)
         z_trial = state.z_uhp

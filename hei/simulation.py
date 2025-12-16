@@ -14,6 +14,7 @@ from .geometry import (
     hyperbolic_karcher_mean_disk,
     sample_disk_hyperbolic,
 )
+from .lie import moebius_flow
 from .metrics import assign_nearest, pairwise_poincare
 from .diamond import aggregate_torque
 from .inertia import apply_inertia, locked_inertia_uhp
@@ -73,6 +74,9 @@ class SimulationLog:
     torque_norm: list[float]
     inertia_eig_min: list[float]
     inertia_eig_max: list[float]
+    rigid_speed2: list[float]
+    relax_speed2: list[float]
+    total_speed2: list[float]
 
 
 def gamma_from_geometry(z_uhp: ArrayLike) -> float:
@@ -100,6 +104,25 @@ def gamma_from_geometry(z_uhp: ArrayLike) -> float:
     return float(np.mean(gamma_field)) if gamma_field.size else 0.0
 
 
+def gamma_weighted_by_inertia(z_uhp: ArrayLike) -> float:
+    """
+    Mass/inertia-weighted damping: emphasize regions contributing more to rotation.
+
+    Uses disk radius r as a proxy for lever arm; blends local geometric damping
+    with inertia weights to avoid edge outliers freezing the system.
+    """
+    z_disk = cayley_uhp_to_disk(z_uhp)
+    r = np.abs(z_disk)
+    if r.size == 0:
+        return 0.0
+    r_safe = np.minimum(r, 0.95)
+    local_gamma = 2.0 / (1.0 - r_safe**2)
+    local_gamma += np.where(r > 0.85, 10.0 * (r - 0.85), 0.0)
+    weights = r * r + 1e-3  # inertia proxy
+    gamma_eff = np.sum(local_gamma * weights) / np.sum(weights)
+    return float(np.minimum(gamma_eff, 50.0))
+
+
 def make_force_fn(potential: PotentialOracle) -> Callable[[ArrayLike, float], NDArray[np.complex128]]:
     def force(z_uhp: ArrayLike, action: float) -> NDArray[np.complex128]:
         return -potential.dV_dz(z_uhp, action)
@@ -116,6 +139,9 @@ def run_simulation(
     rng = np.random.default_rng() if rng is None else rng
 
     pot = potential or build_baseline_potential(rng=rng)
+    # Force-disable annealing to keep wells active throughout simulation
+    if hasattr(pot, "anneal_beta"):
+        pot.anneal_beta = 0.0
     z_disk0 = sample_disk_hyperbolic(n=cfg.n_points, max_rho=cfg.max_rho, rng=rng)
     z_uhp0 = cayley_disk_to_uhp(z_disk0)
 
@@ -132,7 +158,7 @@ def run_simulation(
     integrator = ContactSplittingIntegrator(
         force_fn=force_fn,
         potential_fn=lambda z, action: pot.potential(z, action),
-        gamma_fn=lambda z_uhp: 0.0 if cfg.disable_dissipation else gamma_from_geometry(z_uhp),
+        gamma_fn=lambda z_uhp: 0.0 if cfg.disable_dissipation else gamma_weighted_by_inertia(z_uhp),
         config=IntegratorConfig(eps_disp=cfg.eps_dt, max_dt=cfg.max_dt, min_dt=cfg.min_dt, v_floor=cfg.v_floor),
     )
 
@@ -166,6 +192,9 @@ def run_simulation(
         torque_norm=[],
         inertia_eig_min=[],
         inertia_eig_max=[],
+        rigid_speed2=[],
+        relax_speed2=[],
+        total_speed2=[],
     )
 
     for _ in range(cfg.steps):
@@ -181,6 +210,15 @@ def run_simulation(
             scale = np.maximum(1.0, mag / cfg.force_clip)
             grad = grad / scale
         forces = -grad
+        # Hyperbolic velocity diagnostics (per-point mean squared speed)
+        y = np.maximum(np.imag(state.z_uhp), 1e-9)
+        rigid_vel = moebius_flow(state.xi, state.z_uhp)
+        relax_eta = getattr(integrator.config, "relax_eta", 0.0)
+        relax_vel = relax_eta * forces
+        rigid_speed2 = float(np.mean((np.abs(rigid_vel) ** 2) / (y * y)))
+        relax_speed2 = float(np.mean((np.abs(relax_vel) ** 2) / (y * y)))
+        total_speed2 = float(np.mean((np.abs(rigid_vel + relax_vel) ** 2) / (y * y)))
+
         torque_now = aggregate_torque(state.z_uhp, forces)
         potential_energy = pot.potential(state.z_uhp, state.action)
         n_pts = state.z_uhp.size
@@ -285,6 +323,9 @@ def run_simulation(
             log.bridge_ratio.append(0.0)
             log.ratio_break.append(0.0)
             log.beta_series.append(0.0)
+        log.rigid_speed2.append(rigid_speed2)
+        log.relax_speed2.append(relax_speed2)
+        log.total_speed2.append(total_speed2)
 
         prev_state = state
         state = integrator.step(state)

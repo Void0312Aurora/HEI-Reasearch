@@ -47,6 +47,9 @@ def plot_log(
     bridge_ratio: list[float] | None = None,
     ratio_break: list[float] | None = None,
     beta_series: list[float] | None = None,
+    rigid_speed2: list[float] | None = None,
+    relax_speed2: list[float] | None = None,
+    total_speed2: list[float] | None = None,
 ) -> None:
     """Plot energy/xi norms/grad and trajectories on the disk."""
     steps = len(energy)
@@ -246,6 +249,23 @@ def plot_log(
         plt.close(fig_dyn)
         print(f"Saved silhouette overlay plot to {dyn_path}")
 
+    if rigid_speed2 is not None and relax_speed2 is not None:
+        fig_speed, ax_speed = plt.subplots(1, 1, figsize=(6, 3))
+        ax_speed.plot(rigid_speed2, label="rigid |v|_g^2", color="tab:blue")
+        ax_speed.plot(relax_speed2, label="relax |v|_g^2", color="tab:orange")
+        if total_speed2 is not None:
+            ax_speed.plot(total_speed2, label="total |v|_g^2", color="tab:green")
+        ax_speed.set_title("Hyperbolic mean squared speeds")
+        ax_speed.set_xlabel("Step")
+        ax_speed.set_ylabel("Mean |v|_g^2")
+        ax_speed.grid(True, alpha=0.3)
+        ax_speed.legend()
+        fig_speed.tight_layout()
+        speed_path = out_path.with_name(out_path.stem + "_speed.png")
+        fig_speed.savefig(speed_path, dpi=200, bbox_inches="tight")
+        plt.close(fig_speed)
+        print(f"Saved speed plot to {speed_path}")
+
     if hier_series is not None:
         fig_hier, axh = plt.subplots(1, 4, figsize=(16, 3))
         axh[0].plot(hier_series["mean_depth"])
@@ -384,6 +404,9 @@ def main() -> None:
         bridge_ratio=log.bridge_ratio if hasattr(log, "bridge_ratio") else None,
         ratio_break=log.ratio_break if hasattr(log, "ratio_break") else None,
         beta_series=log.beta_series if hasattr(log, "beta_series") else None,
+        rigid_speed2=log.rigid_speed2 if hasattr(log, "rigid_speed2") else None,
+        relax_speed2=log.relax_speed2 if hasattr(log, "relax_speed2") else None,
+        total_speed2=log.total_speed2 if hasattr(log, "total_speed2") else None,
     )
 
     if args.metrics_out:
