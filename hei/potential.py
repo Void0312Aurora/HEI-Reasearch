@@ -100,7 +100,7 @@ class GaussianWellsPotential:
             accum = 0.0 + 0.0j
             for c in c_flat:
                 d, grad_d = uhp_distance_and_grad(zi, c)
-                coeff = -(d / (self.width**2)) * np.exp(-(d**2) / (2 * self.width**2))
+                coeff = (d / (self.width**2)) * np.exp(-(d**2) / (2 * self.width**2))
                 accum += weight * coeff * grad_d
             grad_flat[i] = accum
 
