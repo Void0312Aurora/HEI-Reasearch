@@ -37,6 +37,7 @@ def locked_inertia_uhp(z_uhp: ArrayLike, weights: ArrayLike | None = None) -> ND
             raise ValueError("weights must match z_uhp shape")
 
     COORD_CLIP = 50.0  # soft clamp scale for coordinates
+    MAX_LEVER_ARM = 100.0  # align with diamond lever-arm clamp
     for zc, mass in zip(z_arr, w_arr):
         # covariant mass (already renormalized): no 1/y^2 factor
         scale = mass
@@ -47,8 +48,8 @@ def locked_inertia_uhp(z_uhp: ArrayLike, weights: ArrayLike | None = None) -> ND
         y_eff = COORD_CLIP * np.tanh(y / COORD_CLIP)
         z_eff = complex(x_eff, y_eff)
         z_mag = abs(zc)
-        if z_mag > COORD_CLIP:
-            z_eff = zc * (COORD_CLIP / z_mag)
+        if z_mag > MAX_LEVER_ARM:
+            z_eff = zc * (MAX_LEVER_ARM / z_mag)
 
         a_u = 2.0 * z_eff
         a_v = 1.0 + 0j
@@ -86,7 +87,8 @@ def invert_inertia(I: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     """
     Compute xi = I^{-1} m with spectral regularization to limit condition number.
 
-    Clamp eigenvalues to [lambda_min, lambda_max] and rebuild inverse.
+    Clamp eigenvalues to [lambda_min, lambda_max] and rebuild inverse; set very
+    small eigenvalues to zero (pseudo-inverse) to avoid injecting spurious modes.
     """
     I_arr = np.asarray(I, dtype=float)
     m_arr = np.asarray(m, dtype=float)
@@ -94,7 +96,9 @@ def invert_inertia(I: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     LAMBDA_MIN = 1e-4
     LAMBDA_MAX = 1e6
     vals_clamped = np.clip(vals, LAMBDA_MIN, LAMBDA_MAX)
-    inv_vals = 1.0 / vals_clamped
+    max_val = float(vals_clamped.max())
+    tol = max_val / 1e6  # relative tolerance for pseudo-inverse
+    inv_vals = np.where(vals_clamped < tol, 0.0, 1.0 / vals_clamped)
     I_inv = (vecs * inv_vals) @ vecs.T
     return I_inv @ m_arr
 

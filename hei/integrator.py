@@ -131,6 +131,9 @@ class ContactSplittingIntegrator:
         gamma_curr = float(np.mean(gamma_field)) if np.asarray(gamma_field).size else 1.0
         SAFETY_FACTOR = 0.8  # more conservative to avoid over-damping dt squeeze
         dt_thermo = SAFETY_FACTOR / (gamma_curr + 1e-9)
+        # hard cap to avoid alpha sign flip: enforce dt*gamma < 2
+        if gamma_curr > 0:
+            dt_thermo = min(dt_thermo, 2.0 / gamma_curr)
         dt = min(self.config.max_dt, dt_geo, dt_thermo)
         dt = max(dt, self.config.min_dt)
         z_trial = state.z_uhp
