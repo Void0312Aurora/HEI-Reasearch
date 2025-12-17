@@ -9,6 +9,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from .diamond import aggregate_torque
+# [FIX] 引入新的几何力计算函数
 from .inertia import apply_inertia, invert_inertia, locked_inertia_uhp, compute_kinetic_energy_gradient
 from .lie import exp_sl2, mobius_action_matrix, matrix_to_vec, vec_to_matrix
 from .geometry import cayley_uhp_to_disk, cayley_disk_to_uhp, clamp_disk_radius, clamp_uhp
@@ -23,41 +24,36 @@ PotentialFn = Callable[[ArrayLike, float], float]
 @dataclasses.dataclass
 class IntegratorState:
     z_uhp: NDArray[np.complex128]
-    xi: NDArray[np.float64]  # (u, v, w)
-    I: NDArray[np.float64]  # 3x3 inertia
-    m: NDArray[np.float64] | None = None  # momentum m = I xi
-    action: float = 0.0  # discrete contact variable Z_k
+    xi: NDArray[np.float64]
+    I: NDArray[np.float64]
+    m: NDArray[np.float64] | None = None
+    action: float = 0.0
     dt_last: float = 0.0
     gamma_last: float = 0.0
 
 
 @dataclasses.dataclass
 class IntegratorConfig:
-    eps_disp: float = 1e-2  # max geometric displacement per step
+    eps_disp: float = 1e-2
     max_dt: float = 1e-3
     min_dt: float = 1e-6
     fixed_point_iters: int = 2
-    v_floor: float = 1e-6  # floor for |xi| to avoid exploding dt
-    torque_dt_scale: float = 1e-4  # weight on torque norm in adaptive dt denominator
-    xi_clip: float = 200.0  # cap on |xi| to avoid blow-up
-    step_clip: float = 5.0  # cap on |xi|*dt to avoid huge exp
-    relax_eta: float = 0.0  # structural relaxation on -∇V; 0 disables to avoid drift by default
-    dt_damping_safety: float = 1.5  # allow h*gamma up to ~dt_damping_safety for semi-implicit stability
+    v_floor: float = 1e-6
+    torque_dt_scale: float = 1e-4
+    xi_clip: float = 200.0
+    step_clip: float = 5.0
+    relax_eta: float = 0.0
+    dt_damping_safety: float = 1.5
+    # 是否包含动能梯度力（几何力）
+    # 在标准 Euler-Poincaré 框架中，变惯量效应已通过锁定惯量自动处理，
+    # 不需要额外的几何力。设为 False 以禁用（默认），设为 True 以启用。
+    include_kinetic_gradient: bool = False
+    # 是否动态更新惯性张量。设为 True 时使用锁定惯性（默认），
+    # 设为 False 时使用传入的固定惯性（用于调试/测试）。
+    update_inertia: bool = True
 
 
 class ContactSplittingIntegrator:
-    """
-    Discrete contact variational integrator (DCVI) with implicit fixed-point solve.
-
-    Implementation follows a semi-implicit update:
-        I(a_k) xi_k = alpha_{k-1} Ad^*_{exp(-h xi_{k-1})}(I(a_{k-1}) xi_{k-1}) + h * torque(a_k)
-        Z_{k+1} = alpha_k Z_k + h/(1 + h gamma_k / 2) * (T_k - V_k)
-        z_{k+1} = exp(h xi_k) ⋅ z_k  + h * (-eta ∇V)   # structural relaxation (non-rigid)
-
-    torques are geometric (diamond) forces; scaling is dt-linear and consistent
-    with the residual diagnostics.
-    """
-
     def __init__(
         self,
         force_fn: ForceFn,
@@ -72,26 +68,55 @@ class ContactSplittingIntegrator:
 
     def _coadjoint_transport(self, xi: ArrayLike, m: ArrayLike, dt: float) -> NDArray[np.float64]:
         """
-        Exact finite coadjoint transport Ad^*_{exp(-dt xi)} m via matrix conjugation.
+        计算动量的共伴随输运 Ad^*_{f^{-1}}(m)，其中 f = exp(dt * xi)。
+        
+        理论依据 (积分器.md)：
+        在离散 Euler-Poincaré 方程中，动量通过群元素的逆作用传播：
+            μ_k = Ad^*_{f_{k-1}^{-1}}(μ_{k-1}) + ...
+        
+        对于 SL(2,R) 使用 trace pairing <A,B> = Tr(AB)：
+            Ad^*_g(M) = g^{-1} M g
+        
+        所以 Ad^*_{f^{-1}}(M) = f M f^{-1} = g M g^{-1}
         """
-        g = exp_sl2(xi, dt)  # exp(dt xi)
+        g = exp_sl2(xi, dt)  # g = f = exp(dt * xi)
         g_inv = np.linalg.inv(g)
         M = vec_to_matrix(m)
-        M_new = g_inv @ M @ g  # Ad^*_{g} under trace pairing
+        # Ad^*_{f^{-1}}(M) = f M f^{-1} = g M g^{-1}
+        M_new = g @ M @ g_inv
         return matrix_to_vec(M_new)
 
     def coadjoint_transport(self, xi: ArrayLike, m: ArrayLike, dt: float) -> NDArray[np.float64]:
-        """
-        Public wrapper for coadjoint transport used by diagnostics to match integrator logic.
-        """
         return self._coadjoint_transport(xi, m, dt)
 
-    def _alpha(self, gamma_val: ArrayLike, dt: float) -> ArrayLike:
-        # Exponential decay for damping to improve stability under strong gamma
-        return np.exp(-dt * np.asarray(gamma_val, dtype=float))
+    def _alpha(self, gamma_val: ArrayLike, dt: float, use_cayley: bool = True) -> ArrayLike:
+        """
+        计算离散耗散因子 α。
+        
+        理论依据 (积分器.md)：
+        使用 Cayley 型离散化以保证几何精确性：
+            α = (1 - h*γ/2) / (1 + h*γ/2)
+        
+        这与文档中的离散接触演化方程一致，保证了耗散的几何精确性。
+        
+        当 use_cayley=False 时，使用指数离散化 α = exp(-h*γ)（向后兼容）。
+        """
+        gamma = np.asarray(gamma_val, dtype=float)
+        h = dt
+        
+        if use_cayley:
+            # Cayley 型离散化：α = (1 - hγ/2) / (1 + hγ/2)
+            # 这是 exp(-hγ) 的一阶 Padé 近似，保持接触结构
+            numerator = 1.0 - 0.5 * h * gamma
+            denominator = 1.0 + 0.5 * h * gamma
+            # 确保分母不为零
+            denominator = np.maximum(denominator, 1e-12)
+            return numerator / denominator
+        else:
+            # 指数离散化（向后兼容）
+            return np.exp(-h * gamma)
 
     def _max_hyperbolic_disp(self, z_old: NDArray[np.complex128], z_new: NDArray[np.complex128]) -> float:
-        """Maximum hyperbolic distance between two position sets (elementwise paired)."""
         disk_old = cayley_uhp_to_disk(z_old)
         disk_new = cayley_uhp_to_disk(z_new)
         max_d = 0.0
@@ -102,36 +127,23 @@ class ContactSplittingIntegrator:
         return max_d
 
     def _stabilize_uhp(self, z: NDArray[np.complex128]) -> NDArray[np.complex128]:
-        """
-        Project points to a safe region: disk clamp -> back to UHP -> clamp imag/real.
-        """
         disk = clamp_disk_radius(cayley_uhp_to_disk(z))
         z_safe = cayley_disk_to_uhp(disk)
         z_safe = clamp_uhp(z_safe)
         return np.nan_to_num(z_safe, nan=0.0)
 
     def _backtrack_dt(self, state: IntegratorState, torque: ArrayLike, xi: ArrayLike) -> tuple[float, NDArray[np.complex128]]:
-        """
-        Choose dt using strict First-Principles constraints:
-        1. Displacement limit (Kinematic constraint)
-        2. Damping stability (Thermodynamic constraint): h * gamma < safety
-        3. Spectral stability: account for inertia spectrum when strong torques push acceleration
-        """
         xi_norm = float(np.linalg.norm(xi))
         torque_norm = float(np.linalg.norm(torque))
-        # spectral leverage from inertia: ||I^{-1}|| ~ 1 / eig_min(I)
         vals = np.linalg.eigvalsh(state.I)
         eig_min = float(max(vals.min(), 1e-6))
         inv_spec = 1.0 / eig_min
-        # blend velocity and acceleration scales
         denom = max(1e-9, xi_norm + self.config.torque_dt_scale * inv_spec * torque_norm)
         dt_geo = self.config.eps_disp / denom
-        # use current geometry damping rather than last-step gamma
         gamma_field = self.gamma_fn(state.z_uhp)
         gamma_curr = float(np.mean(gamma_field)) if np.asarray(gamma_field).size else 1.0
-        SAFETY_FACTOR = 0.8  # more conservative to avoid over-damping dt squeeze
+        SAFETY_FACTOR = 0.8
         dt_thermo = SAFETY_FACTOR / (gamma_curr + 1e-9)
-        # hard cap to avoid alpha sign flip: enforce dt*gamma < 2
         if gamma_curr > 0:
             dt_thermo = min(dt_thermo, 2.0 / gamma_curr)
         dt = min(self.config.max_dt, dt_geo, dt_thermo)
@@ -142,14 +154,7 @@ class ContactSplittingIntegrator:
             z_trial = mobius_action_matrix(g_step, state.z_uhp)
             z_trial = self._stabilize_uhp(z_trial)
             disp = self._max_hyperbolic_disp(state.z_uhp, z_trial)
-            I_trial = locked_inertia_uhp(z_trial)
-            I_diff_norm = np.linalg.norm(I_trial - state.I) / (np.linalg.norm(state.I) + 1e-6)
-            if (
-                np.isnan(disp)
-                or np.isinf(disp)
-                or disp > self.config.eps_disp * 1.5
-                or I_diff_norm > 0.1
-            ):
+            if np.isnan(disp) or np.isinf(disp) or disp > self.config.eps_disp * 1.5:
                 dt *= 0.5
                 if dt < self.config.min_dt:
                     dt = self.config.min_dt
@@ -159,7 +164,6 @@ class ContactSplittingIntegrator:
         return dt, z_trial
 
     def step(self, state: IntegratorState) -> IntegratorState:
-        # emergency brake to avoid runaway velocities causing numerical blow-up
         xi_mag = float(np.linalg.norm(state.xi))
         if xi_mag > 1e4:
             state.xi = state.xi * 0.01
@@ -175,11 +179,21 @@ class ContactSplittingIntegrator:
         xi_new = xi_prev
         m_new = m_prev
 
-        # determine step size once per step using initial torque guess
+        # determine step size
         forces_pot = self.force_fn(z_guess, action_guess)
-        forces_kin = compute_kinetic_energy_gradient(z_guess, xi_prev)
-        forces0 = forces_pot + forces_kin
-        torque0 = aggregate_torque(z_guess, forces0)
+        
+        # 可选：几何力（动能梯度力）
+        # 注意：在标准 Euler-Poincaré 框架中，变惯量效应已通过锁定惯量的
+        # 动态更新自动处理。添加几何力可能导致能量不守恒。
+        # 默认禁用此项，除非有特殊物理需求。
+        if self.config.include_kinetic_gradient:
+            grad_K = compute_kinetic_energy_gradient(z_guess, xi_prev)
+            forces_kin = -grad_K  # 几何力 = -∇K
+            forces_total = forces_pot + forces_kin
+        else:
+            forces_total = forces_pot
+        
+        torque0 = aggregate_torque(z_guess, forces_total)
         dt, z_guess = self._backtrack_dt(state, torque0, xi_prev)
         alpha_prev = self._alpha(gamma_prev, dt)
 
@@ -189,54 +203,71 @@ class ContactSplittingIntegrator:
             alpha_prev = self._alpha(gamma_eff, dt)
 
             forces_pot = self.force_fn(z_guess, action_guess)
-            forces_kin = compute_kinetic_energy_gradient(z_guess, xi_prev)
-            forces = forces_pot + forces_kin
+            
+            # 可选几何力
+            if self.config.include_kinetic_gradient:
+                grad_K = compute_kinetic_energy_gradient(z_guess, xi_prev)
+                forces_kin = -grad_K
+                forces_total = forces_pot + forces_kin
+            else:
+                forces_total = forces_pot
+
             if np.ndim(gamma_field) > 0:
-                forces = forces / (1.0 + 0.5 * dt * gamma_field)
-            torque = aggregate_torque(z_guess, forces)
+                # 阻尼作用于总有效力
+                forces_total = forces_total / (1.0 + 0.5 * dt * gamma_field)
+            
+            torque = aggregate_torque(z_guess, forces_total)
             m_advected = self._coadjoint_transport(xi_prev, m_prev, dt)
             m_new = alpha_prev * m_advected + dt * torque
-            # refresh inertia and gamma with updated geometry
-            I_new = locked_inertia_uhp(z_guess)
-            state.I = I_new
+            
+            # 惯性更新：可配置是否使用锁定惯性
+            if self.config.update_inertia:
+                I_new = locked_inertia_uhp(z_guess)
+                state.I = I_new
+            else:
+                I_new = state.I  # 使用传入的惯性
+            
             gamma_curr = gamma_eff
             xi_new = invert_inertia(I_new, m_new)
-            # limit per-step speed based on current dt to avoid huge jumps
+            
+            # (Limiting logic ...)
             max_xi_norm = 10.0 / max(dt, 1e-8)
             xi_norm_val = float(np.linalg.norm(xi_new))
             if xi_norm_val > max_xi_norm:
                 xi_new = xi_new * (max_xi_norm / xi_norm_val)
                 m_new = apply_inertia(I_new, xi_new)
-            # hard velocity cap to keep exp_sl2 numerically stable
-            xi_norm_val = float(np.linalg.norm(xi_new))
+            
             if xi_norm_val > self.config.xi_clip:
                 xi_new = xi_new * (self.config.xi_clip / xi_norm_val)
                 m_new = apply_inertia(I_new, xi_new)
-            # clip step magnitude
+            
             step_norm = float(np.linalg.norm(xi_new)) * dt
             if step_norm > self.config.step_clip:
                 scale = self.config.step_clip / max(step_norm, 1e-8)
                 xi_new = xi_new * scale
                 m_new = apply_inertia(I_new, xi_new)
 
-            # Update positions via finite Möbius action exp(dt xi_new)
             g_step = exp_sl2(xi_new, dt)
             z_guess = mobius_action_matrix(g_step, state.z_uhp)
             z_guess = self._stabilize_uhp(z_guess)
-            # Structural relaxation: allow non-rigid drift along -∇V
+            
             if self.config.relax_eta > 0.0:
                 relax_force = self.force_fn(z_guess, action_guess)
-                # hyperbolic metric factor ~ 1 / y^2 to avoid overshoot near boundary
                 y = np.maximum(np.imag(z_guess), 1e-6)
                 relax_step = (self.config.relax_eta * dt) * (relax_force * (y * y))
                 z_relaxed = z_guess + relax_step
                 z_guess = self._stabilize_uhp(z_relaxed)
 
-            # Contact action update (using current guess)
+            # 接触作用量（惊奇 Z）更新
+            # 理论依据 (积分器.md)：
+            # Z_{k+1} = α_k * Z_k + h/(1 + hγ/2) * (T_k - V_k)
+            # 其中 α_k = (1 - hγ/2)/(1 + hγ/2) 是 Cayley 型离散耗散因子
             T = 0.5 * float(xi_new @ (state.I @ xi_new))
             V = float(self.potential_fn(z_guess, action_guess))
             denom = 1.0 + 0.5 * dt * gamma_curr
-            action_guess = alpha_prev * state.action + dt / denom * (T - V)
+            # 使用与 _alpha 一致的 Cayley 型离散化
+            alpha_action = self._alpha(gamma_curr, dt, use_cayley=True)
+            action_guess = alpha_action * state.action + dt / denom * (T - V)
 
         m_out = apply_inertia(state.I, xi_new)
         return IntegratorState(

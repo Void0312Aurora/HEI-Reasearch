@@ -104,12 +104,92 @@ def gamma_from_geometry(z_uhp: ArrayLike) -> float:
     return gamma_field
 
 
-def gamma_critical_inertia(z_uhp: ArrayLike, scale: float = 1.0) -> float:
+def gamma_critical_inertia(
+    z_uhp: ArrayLike,
+    I: ArrayLike | None = None,
+    scale: float = 2.0,
+    mode: str = "adaptive",
+) -> NDArray[np.float64] | float:
     """
-    Use a fixed, geometry-agnostic damping rate once inertia is well-conditioned.
+    几何临界阻尼：根据公理 4.2 实现 γ(q) ∝ √(λ_max(g(q)))
+    
+    理论依据 (理论基础-3.md 公理 4.2)：
+    - 在信息几何曲率大（信念确定）的地方，耗散大（快速锁定）
+    - 在曲率小（不确定）的地方，耗散小（允许惯性探索）
+    
+    参数：
+        z_uhp: 上半平面坐标
+        I: 惯性张量（可选），如果提供则使用谱方法
+        scale: 阻尼缩放系数（默认 2.0 对应临界阻尼）
+        mode: 阻尼模式
+            - "adaptive": 自适应阻尼（推荐，默认）
+            - "geometric": 基于度量张量（可能过大）
+            - "spectral": 基于惯性张量特征值
+            - "fixed": 返回固定值（向后兼容）
+    
+    返回：
+        标量或逐点阻尼场
     """
-    # 使用固定阻尼比，依赖锁定惯性良态化后的谱性质
-    return 2.0
+    if mode == "fixed":
+        return scale
+    
+    z_arr = np.asarray(z_uhp, dtype=np.complex128)
+    
+    if mode == "spectral" and I is not None:
+        # 基于惯性张量的谱方法：γ ∝ √(λ_max(I))
+        I_arr = np.asarray(I, dtype=float)
+        eigs = np.linalg.eigvalsh(I_arr)
+        lambda_max = float(np.max(eigs))
+        # 临界阻尼系数，但限制范围
+        gamma_spec = scale * np.sqrt(max(lambda_max, 1e-6))
+        return min(gamma_spec, 10.0)  # 限制最大值
+    
+    if mode == "adaptive":
+        # 自适应阻尼：使用温和的几何依赖
+        # 基于双曲盘上的位置，而不是 UHP 的 Im(z)
+        z_disk = cayley_uhp_to_disk(z_arr)
+        r = np.abs(z_disk)
+        
+        # 基础阻尼：使用较小的值以避免过度阻尼
+        # 临界阻尼 ≈ 2，我们使用 scale * (0.5 + 0.5*tanh) ∈ [scale/2, scale]
+        gamma_base = scale * (0.5 + 0.5 * np.tanh(r))
+        
+        # 边界粘性：只在非常接近边缘时才显著增加
+        viscosity = np.zeros_like(r, dtype=float)
+        mask = r > 0.95
+        if np.any(mask):
+            viscosity[mask] = 2.0 * np.exp((r[mask] - 0.95) * 8.0)
+        
+        gamma_field = gamma_base + viscosity
+        
+        # 限制范围 [0.3, 10]，保持更低的阻尼上界
+        gamma_field = np.clip(gamma_field, 0.3, 10.0)
+        return gamma_field
+    
+    # mode == "geometric": 原始几何阻尼（可能过大）
+    y = np.maximum(np.imag(z_arr), 1e-6)
+    
+    # 基础几何阻尼：γ_base = scale / y，但添加下界
+    # 限制 γ ∈ [scale/10, scale*5] 防止过大或过小
+    gamma_base = np.clip(scale / y, scale * 0.1, scale * 5.0)
+    
+    # 添加边界粘性以防止逃逸到边界
+    z_disk = cayley_uhp_to_disk(z_arr)
+    r = np.abs(z_disk)
+    
+    # 边界粘性：在 r > 0.95 时增加
+    viscosity = np.zeros_like(r, dtype=float)
+    mask = r > 0.95
+    if np.any(mask):
+        viscosity[mask] = 3.0 * np.exp((r[mask] - 0.95) * 10.0)
+    
+    gamma_field = gamma_base + viscosity
+    
+    # 限制最大阻尼
+    MAX_GAMMA = 20.0
+    gamma_field = np.minimum(gamma_field, MAX_GAMMA)
+    
+    return gamma_field
 
 
 def make_force_fn(potential: PotentialOracle) -> Callable[[ArrayLike, float], NDArray[np.complex128]]:
@@ -144,10 +224,17 @@ def run_simulation(
     else:
         force_fn = lambda z, action: np.zeros_like(z, dtype=np.complex128)  # Diamond off
 
+    # 创建闭包以在 gamma 计算中访问当前惯性张量
+    def gamma_fn_with_inertia(z_uhp: ArrayLike) -> NDArray[np.float64] | float:
+        if cfg.disable_dissipation:
+            return 0.0
+        # 使用自适应模式的临界阻尼（推荐，避免过度阻尼）
+        return gamma_critical_inertia(z_uhp, I=state.I, mode="adaptive")
+    
     integrator = ContactSplittingIntegrator(
         force_fn=force_fn,
         potential_fn=lambda z, action: pot.potential(z, action),
-        gamma_fn=lambda z_uhp: 0.0 if cfg.disable_dissipation else gamma_critical_inertia(z_uhp),
+        gamma_fn=gamma_fn_with_inertia,
         config=IntegratorConfig(eps_disp=cfg.eps_dt, max_dt=cfg.max_dt, min_dt=cfg.min_dt, v_floor=cfg.v_floor),
     )
 
