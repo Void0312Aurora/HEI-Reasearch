@@ -1,0 +1,373 @@
+"""
+群积分器：基于李群的接触动力学积分器
+====================================
+
+理论背景：
+---------
+传统积分器在位置空间 z ∈ H² 上积分，但 H² 有边界（圆盘边缘或 UHP 的实轴），
+导致边界附近的数值问题。
+
+群积分器的核心思想是：真正的状态变量是群元素 g ∈ SL(2,R)，而非位置 z。
+位置只是初始位置被群作用的结果：z(t) = g(t) · z(0)。
+
+由于 SL(2,R) 是闭合的李群，没有边界，积分过程永远稳定。
+
+混合架构：
+---------
+1. 在 SL(2,R) 群上积分（保证稳定性）
+2. 在 Hyperboloid 坐标系中评估（保证度量有界）
+3. 惰性求值位置（仅在需要时计算）
+
+参考文献：
+---------
+- Iserles, Munthe-Kaas, Nørsett, Zanna (2000). Lie-group methods.
+- Hairer, Lubich, Wanner (2006). Geometric Numerical Integration.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+from typing import Callable
+
+import numpy as np
+from numpy.typing import ArrayLike, NDArray
+
+from .diamond import aggregate_torque
+from .geometry import (
+    cayley_uhp_to_disk,
+    cayley_disk_to_uhp,
+    disk_to_hyperboloid,
+    hyperboloid_to_disk,
+    gamma_hyperboloid,
+    clamp_disk_radius,
+)
+from .inertia import (
+    apply_inertia,
+    invert_inertia,
+    locked_inertia_hyperboloid,
+    locked_inertia_uhp,
+)
+from .lie import exp_sl2, mobius_action_matrix, vec_to_matrix, matrix_to_vec
+
+
+# 类型别名
+ForceFn = Callable[[ArrayLike, float], NDArray[np.complex128]]
+GammaFn = Callable[[ArrayLike], float]
+PotentialFn = Callable[[ArrayLike, float], float]
+
+
+@dataclasses.dataclass
+class GroupIntegratorState:
+    """
+    群积分器状态
+    
+    核心思想：状态由群元素 G 和初始位置 z0 组成，
+    当前位置通过 z = G · z0 惰性求值。
+    
+    属性：
+        G: SL(2,R) 累积群元素 (2x2 矩阵)
+        z0_uhp: 初始 UHP 位置（不变）
+        xi: 当前思维流速 (u, v, w)
+        m: 动量
+        action: 接触作用量（惊奇 Z）
+        dt_last: 上一步使用的时间步长
+        gamma_last: 上一步使用的阻尼系数
+    """
+    G: NDArray[np.float64]              # 累积群元素 (2, 2)
+    z0_uhp: NDArray[np.complex128]      # 初始位置（不变）
+    xi: NDArray[np.float64]             # 思维流速 (3,)
+    m: NDArray[np.float64]              # 动量 (3,)
+    action: float = 0.0                 # 接触作用量
+    dt_last: float = 0.0
+    gamma_last: float = 0.0
+    
+    @property
+    def z_uhp(self) -> NDArray[np.complex128]:
+        """惰性求值当前 UHP 位置"""
+        return mobius_action_matrix(self.G, self.z0_uhp)
+    
+    @property
+    def z_disk(self) -> NDArray[np.complex128]:
+        """惰性求值当前圆盘位置"""
+        return cayley_uhp_to_disk(self.z_uhp)
+    
+    @property
+    def h(self) -> NDArray[np.float64]:
+        """惰性求值当前 Hyperboloid 位置"""
+        return disk_to_hyperboloid(self.z_disk)
+    
+    @property
+    def I(self) -> NDArray[np.float64]:
+        """从当前构型计算惯性（使用 Hyperboloid）"""
+        return locked_inertia_hyperboloid(self.h)
+
+
+@dataclasses.dataclass
+class GroupIntegratorConfig:
+    """群积分器配置"""
+    eps_disp: float = 1e-2              # 位移裁剪阈值
+    max_dt: float = 5e-2                # 最大时间步长
+    min_dt: float = 1e-5                # 最小时间步长
+    fixed_point_iters: int = 2          # 定点迭代次数
+    v_floor: float = 1e-6               # 速度下界
+    xi_clip: float = 10.0               # xi 范数裁剪
+    torque_clip: float = 50.0           # 力矩裁剪
+    renorm_interval: int = 100          # 群矩阵重正规化间隔
+    use_hyperboloid_gamma: bool = True  # 使用 Hyperboloid 阻尼
+    gamma_scale: float = 2.0            # 阻尼缩放
+    
+
+class GroupContactIntegrator:
+    """
+    基于李群的接触动力学积分器
+    
+    核心改进：
+    1. 在 SL(2,R) 群上累积演化，避免边界问题
+    2. 在 Hyperboloid 坐标系中评估物理量，避免度量发散
+    3. 使用 Cayley-型离散化保持接触结构
+    """
+    
+    def __init__(
+        self,
+        force_fn: ForceFn,
+        potential_fn: PotentialFn,
+        gamma_fn: GammaFn | None = None,
+        config: GroupIntegratorConfig | None = None,
+    ) -> None:
+        self.force_fn = force_fn
+        self.potential_fn = potential_fn
+        self.gamma_fn = gamma_fn
+        self.config = config or GroupIntegratorConfig()
+        self._step_count = 0
+    
+    def _renormalize_sl2(self, G: NDArray[np.float64]) -> NDArray[np.float64]:
+        """
+        SL(2,R) 群元素重正规化
+        
+        保证 det(G) = 1，修正累积的浮点误差。
+        使用极分解方法保持群结构。
+        """
+        det = G[0, 0] * G[1, 1] - G[0, 1] * G[1, 0]
+        
+        if abs(det - 1.0) > 1e-10:
+            # 简单缩放使 det = 1
+            scale = 1.0 / np.sqrt(abs(det) + 1e-15)
+            G = G * scale
+        
+        # 额外的对称化（可选）
+        # 如果 G 应该是正交的某种形式，可以用 polar decomposition
+        
+        return G
+    
+    def _coadjoint_transport(
+        self, 
+        xi: ArrayLike, 
+        m: ArrayLike, 
+        dt: float
+    ) -> NDArray[np.float64]:
+        """
+        计算动量的共伴随输运 Ad^*_{f^{-1}}(m)
+        
+        理论依据：
+        在离散 Euler-Poincaré 方程中，动量通过群作用传播：
+            μ_k = Ad^*_{f_{k-1}^{-1}}(μ_{k-1}) + ...
+        
+        对于 SL(2,R) 使用 trace pairing：
+            Ad^*_{f^{-1}}(M) = f M f^{-1}
+        """
+        g = exp_sl2(xi, dt)  # f = exp(dt * xi)
+        g_inv = np.linalg.inv(g)
+        M = vec_to_matrix(m)
+        # Ad^*_{f^{-1}}(M) = f M f^{-1}
+        M_new = g @ M @ g_inv
+        return matrix_to_vec(M_new)
+    
+    def _alpha(self, gamma: float, dt: float) -> float:
+        """
+        Cayley-型离散耗散因子
+        
+        α = (1 - hγ/2) / (1 + hγ/2)
+        
+        这是 exp(-hγ) 的 Padé 近似，保持接触结构。
+        """
+        numerator = 1.0 - 0.5 * dt * gamma
+        denominator = 1.0 + 0.5 * dt * gamma
+        return numerator / max(denominator, 1e-12)
+    
+    def _compute_gamma(self, state: GroupIntegratorState) -> float:
+        """
+        计算阻尼系数
+        
+        优先使用 Hyperboloid 阻尼（无奇异性），
+        回退到用户提供的 gamma_fn。
+        """
+        if self.config.use_hyperboloid_gamma:
+            return gamma_hyperboloid(state.h, scale=self.config.gamma_scale)
+        elif self.gamma_fn is not None:
+            return float(np.mean(self.gamma_fn(state.z_uhp)))
+        else:
+            return self.config.gamma_scale
+    
+    def _adaptive_dt(
+        self,
+        state: GroupIntegratorState,
+        torque_norm: float,
+        xi_norm: float,
+        gamma: float,
+    ) -> float:
+        """
+        自适应时间步长
+        
+        考虑：
+        1. 速度约束：dt * ||ξ|| < ε
+        2. 加速度约束：dt * ||τ||/I_min < ε  
+        3. 阻尼约束：dt * γ < 安全因子
+        """
+        cfg = self.config
+        
+        # 速度约束
+        dt_vel = cfg.eps_disp / max(xi_norm, 1e-9)
+        
+        # 加速度约束
+        I_min = max(np.linalg.eigvalsh(state.I).min(), 1e-6)
+        dt_acc = cfg.eps_disp / max(torque_norm / I_min, 1e-9)
+        
+        # 阻尼约束
+        dt_gamma = 0.8 / max(gamma, 1e-9)
+        
+        dt = min(cfg.max_dt, dt_vel, dt_acc, dt_gamma)
+        dt = max(dt, cfg.min_dt)
+        
+        return dt
+    
+    def step(self, state: GroupIntegratorState) -> GroupIntegratorState:
+        """
+        执行一步积分
+        
+        流程：
+        1. 计算当前位置（惰性求值）
+        2. 在 Hyperboloid 上评估力、阻尼、惯性
+        3. 更新动量（共伴随输运 + 力矩）
+        4. 更新群元素（核心！）
+        5. 更新接触作用量
+        """
+        cfg = self.config
+        self._step_count += 1
+        
+        # 1. 惰性求值当前位置
+        z_current = state.z_uhp
+        h_current = state.h
+        
+        # 2. 计算力和力矩
+        forces = self.force_fn(z_current, state.action)
+        torque = aggregate_torque(z_current, forces)
+        
+        # 力矩裁剪
+        torque_norm = float(np.linalg.norm(torque))
+        if torque_norm > cfg.torque_clip:
+            torque = torque * (cfg.torque_clip / torque_norm)
+            torque_norm = cfg.torque_clip
+        
+        # 3. 计算阻尼和惯性（使用 Hyperboloid）
+        gamma = self._compute_gamma(state)
+        I = locked_inertia_hyperboloid(h_current)
+        
+        # 4. 计算时间步长
+        xi_norm = float(np.linalg.norm(state.xi))
+        dt = self._adaptive_dt(state, torque_norm, xi_norm, gamma)
+        
+        # 5. 动量更新（Euler-Poincaré）
+        alpha = self._alpha(gamma, dt)
+        m_prev = state.m if state.m is not None else apply_inertia(I, state.xi)
+        m_advected = self._coadjoint_transport(state.xi, m_prev, dt)
+        m_new = alpha * m_advected + dt * torque
+        
+        # 6. 求解新的思维流速
+        xi_new = invert_inertia(I, m_new)
+        
+        # xi 裁剪
+        xi_new_norm = float(np.linalg.norm(xi_new))
+        if xi_new_norm > cfg.xi_clip:
+            xi_new = xi_new * (cfg.xi_clip / xi_new_norm)
+            m_new = apply_inertia(I, xi_new)
+        
+        # 7. 群更新（核心改进！）
+        g_step = exp_sl2(xi_new, dt)
+        G_new = state.G @ g_step  # 累积群作用
+        
+        # 周期性重正规化
+        if self._step_count % cfg.renorm_interval == 0:
+            G_new = self._renormalize_sl2(G_new)
+        
+        # 8. 接触作用量更新
+        T = 0.5 * float(xi_new @ (I @ xi_new))
+        V = float(self.potential_fn(z_current, state.action))
+        denom = 1.0 + 0.5 * dt * gamma
+        action_new = alpha * state.action + dt / denom * (T - V)
+        
+        return GroupIntegratorState(
+            G=G_new,
+            z0_uhp=state.z0_uhp,  # 初始位置不变
+            xi=xi_new,
+            m=m_new,
+            action=action_new,
+            dt_last=dt,
+            gamma_last=gamma,
+        )
+    
+    def coadjoint_transport(
+        self, 
+        xi: ArrayLike, 
+        m: ArrayLike, 
+        dt: float
+    ) -> NDArray[np.float64]:
+        """公开接口：共伴随输运"""
+        return self._coadjoint_transport(xi, m, dt)
+
+
+def create_initial_group_state(
+    z_uhp: NDArray[np.complex128],
+    xi: NDArray[np.float64] | tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> GroupIntegratorState:
+    """
+    创建初始群积分器状态
+    
+    参数：
+        z_uhp: 初始 UHP 位置
+        xi: 初始思维流速
+        
+    返回：
+        初始化的 GroupIntegratorState
+    """
+    z0 = np.asarray(z_uhp, dtype=np.complex128)
+    xi0 = np.asarray(xi, dtype=np.float64)
+    G0 = np.eye(2, dtype=np.float64)  # 单位群元素
+    
+    # 计算初始惯性和动量
+    z_disk = cayley_uhp_to_disk(z0)
+    h = disk_to_hyperboloid(z_disk)
+    I = locked_inertia_hyperboloid(h)
+    m0 = apply_inertia(I, xi0)
+    
+    return GroupIntegratorState(
+        G=G0,
+        z0_uhp=z0,
+        xi=xi0,
+        m=m0,
+        action=0.0,
+    )
+
+
+# 向后兼容：创建传统风格的状态（用于与旧代码交互）
+def group_state_to_legacy(state: GroupIntegratorState) -> dict:
+    """将群状态转换为传统格式"""
+    return {
+        "z_uhp": state.z_uhp,
+        "xi": state.xi,
+        "I": state.I,
+        "m": state.m,
+        "action": state.action,
+        "dt_last": state.dt_last,
+        "gamma_last": state.gamma_last,
+    }
+

@@ -2,10 +2,12 @@
 
 __all__ = [
     "geometry",
+    "hyperboloid",
     "lie",
     "diamond",
     "inertia",
     "potential",
     "integrator",
+    "group_integrator",
     "simulation",
 ]

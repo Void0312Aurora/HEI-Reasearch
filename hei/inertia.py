@@ -263,3 +263,211 @@ def moment_map_covariance(z_uhp: ArrayLike, weights: ArrayLike | None = None, al
     """Placeholder or helper for covariance."""
     # (保留原有的实现或简化)
     return np.zeros(3)
+
+
+# ============================================================================
+# Hyperboloid 版本的惯性计算（无边界奇异性）
+# ============================================================================
+
+def _compute_hyperboloid_generators(h: NDArray[np.float64]) -> tuple[NDArray, NDArray, NDArray]:
+    """
+    计算 Hyperboloid 上点的李代数 so(2,1) 生成元
+    
+    理论依据：
+    ---------
+    SO(2,1) 的李代数 so(2,1) 有三个生成元：
+    - J: 空间旋转 (xy 平面)
+    - K_x: x 方向 boost (xt 平面)
+    - K_y: y 方向 boost (yt 平面)
+    
+    这些与 sl(2,R) 的生成元 (u, v, w) 通过同构对应。
+    
+    对于 Hyperboloid 上的点 h = (X, Y, T)，各生成元作用产生的切向量：
+    - J·h = (-Y, X, 0)      # 旋转
+    - K_x·h = (T, 0, X)     # x-boost
+    - K_y·h = (0, T, Y)     # y-boost
+    
+    这些切向量在 Minkowski 度量下的内积给出惯性张量。
+    
+    优势：
+    -----
+    在 Hyperboloid 上，X, Y, T 都是有界的（只要点在 H² 内部），
+    因此生成元永远不会发散！这与 UHP 中 Im(z) → 0 导致的发散形成对比。
+    """
+    X, Y, T = h[..., 0], h[..., 1], h[..., 2]
+    
+    # 生成元作用产生的切向量
+    # 形状与输入相同
+    a_J = np.stack([-Y, X, np.zeros_like(X)], axis=-1)      # 旋转
+    a_Kx = np.stack([T, np.zeros_like(T), X], axis=-1)      # x-boost
+    a_Ky = np.stack([np.zeros_like(T), T, Y], axis=-1)      # y-boost
+    
+    return a_J, a_Kx, a_Ky
+
+
+def _minkowski_metric_inner(v1: NDArray, v2: NDArray) -> NDArray:
+    """
+    切向量的 Minkowski 内积
+    
+    对于 Hyperboloid 的切向量，使用 Minkowski 度量：
+    <v1, v2>_M = v1_x * v2_x + v1_y * v2_y - v1_t * v2_t
+    
+    注意：这与环境 Minkowski 空间的度量一致，
+    诱导到 Hyperboloid 上给出正定的双曲度量。
+    """
+    return v1[..., 0] * v2[..., 0] + v1[..., 1] * v2[..., 1] - v1[..., 2] * v2[..., 2]
+
+
+def locked_inertia_hyperboloid(
+    h: NDArray[np.float64], 
+    weights: NDArray[np.float64] | None = None
+) -> NDArray[np.float64]:
+    """
+    Hyperboloid 上的锁定惯性张量（无边界奇异性！）
+    
+    理论依据：
+    ---------
+    锁定惯性的定义与 UHP 版本相同，但在 Hyperboloid 坐标下计算：
+        I_ij = Σ_k m_k * <a_i(h_k), a_j(h_k)>_M
+    
+    其中 a_i 是李代数生成元在点 h_k 产生的切向量，
+    内积使用 Minkowski 度量（限制到切空间）。
+    
+    优势：
+    -----
+    1. 无边界奇异性：Hyperboloid 没有边界
+    2. 度量有界：切向量的范数不会发散
+    3. 物理一致性：与 UHP 版本通过坐标变换等价
+    
+    参数：
+        h: Hyperboloid 坐标 (..., 3)
+        weights: 质量权重（默认为 1）
+        
+    返回：
+        3x3 对称正定惯性矩阵
+    """
+    h_arr = np.asarray(h, dtype=np.float64)
+    if h_arr.ndim == 1:
+        h_arr = h_arr.reshape(1, 3)
+    
+    n = h_arr.shape[0]
+    
+    # 绝对真空惯性
+    I_base = np.eye(3, dtype=float) * 1e-6
+    
+    if n == 0:
+        return I_base
+    
+    if weights is None:
+        w_arr = np.ones(n, dtype=float)
+    else:
+        w_arr = np.asarray(weights, dtype=float).ravel()
+    
+    # 计算所有点的生成元
+    a_J, a_Kx, a_Ky = _compute_hyperboloid_generators(h_arr)
+    
+    # 生成元列表，对应 sl(2,R) 的 (u, v, w) 基
+    # 映射关系：J ↔ u (缩放)，K_x ↔ v (平移)，K_y ↔ w (反演)
+    generators = [a_J, a_Kx, a_Ky]
+    
+    I_matter = np.zeros((3, 3), dtype=float)
+    
+    for i, a_i in enumerate(generators):
+        for j, a_j in enumerate(generators):
+            # I_ij = Σ_k m_k * <a_i(h_k), a_j(h_k)>_M
+            inner = _minkowski_metric_inner(a_i, a_j)  # 形状 (n,)
+            I_matter[i, j] = np.sum(w_arr * inner)
+    
+    # 相对真空正则化
+    trace_val = np.trace(I_matter)
+    avg_mass = trace_val / 3.0
+    if avg_mass < 1e-9:
+        avg_mass = 1.0
+    
+    REL_EPS = 1e-2
+    I_vac_rel = np.eye(3, dtype=float) * (avg_mass * REL_EPS)
+    
+    return I_matter + I_vac_rel + I_base
+
+
+def compute_kinetic_energy_gradient_hyperboloid(
+    h: NDArray[np.float64],
+    xi: NDArray[np.float64],
+    weights: NDArray[np.float64] | None = None
+) -> NDArray[np.float64]:
+    """
+    Hyperboloid 上的动能梯度（几何力）
+    
+    计算 ∇_h K = ∇_h (0.5 * ξ^T I(h) ξ)
+    
+    返回：
+        形状 (..., 3) 的 Hyperboloid 切向量（力）
+    """
+    h_arr = np.asarray(h, dtype=np.float64)
+    if h_arr.ndim == 1:
+        h_arr = h_arr.reshape(1, 3)
+    
+    n = h_arr.shape[0]
+    xi_vec = np.asarray(xi, dtype=float)
+    
+    if weights is None:
+        w_arr = np.ones(n, dtype=float)
+    else:
+        w_arr = np.asarray(weights, dtype=float).ravel()
+    
+    # 数值微分（使用中心差分）
+    eps = 1e-5
+    forces = np.zeros_like(h_arr)
+    
+    for k in range(n):
+        for coord in range(3):  # X, Y, T
+            h_plus = h_arr.copy()
+            h_minus = h_arr.copy()
+            h_plus[k, coord] += eps
+            h_minus[k, coord] -= eps
+            
+            I_plus = locked_inertia_hyperboloid(h_plus, w_arr)
+            I_minus = locked_inertia_hyperboloid(h_minus, w_arr)
+            
+            K_plus = 0.5 * xi_vec @ I_plus @ xi_vec
+            K_minus = 0.5 * xi_vec @ I_minus @ xi_vec
+            
+            forces[k, coord] = (K_plus - K_minus) / (2 * eps)
+    
+    return forces
+
+
+def locked_inertia_from_group(
+    G: NDArray[np.float64],
+    z0_uhp: NDArray[np.complex128],
+    use_hyperboloid: bool = True
+) -> NDArray[np.float64]:
+    """
+    从群元素和初始位置计算当前惯性
+    
+    这是群积分器使用的接口：
+    1. 计算当前位置 z = G · z0
+    2. 在 Hyperboloid 上计算惯性
+    
+    参数：
+        G: SL(2,R) 群元素
+        z0_uhp: 初始 UHP 位置
+        use_hyperboloid: 是否使用 Hyperboloid 计算（推荐 True）
+        
+    返回：
+        3x3 惯性矩阵
+    """
+    from .lie import mobius_action_matrix
+    from .geometry import cayley_uhp_to_disk, disk_to_hyperboloid
+    
+    # 计算当前位置
+    z_current = mobius_action_matrix(G, z0_uhp)
+    
+    if use_hyperboloid:
+        # 转换到 Hyperboloid
+        z_disk = cayley_uhp_to_disk(z_current)
+        h = disk_to_hyperboloid(z_disk)
+        return locked_inertia_hyperboloid(h)
+    else:
+        # 使用原有 UHP 方法
+        return locked_inertia_uhp(z_current)

@@ -1,9 +1,63 @@
-"""Hyperbolic geometry utilities for Poincaré disk and upper half-plane."""
+"""Hyperbolic geometry utilities for Poincaré disk, upper half-plane, and Hyperboloid."""
 
 from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+
+# 导入 Hyperboloid 模块的核心函数
+from .hyperboloid import (
+    disk_to_hyperboloid,
+    hyperboloid_to_disk,
+    hyperbolic_distance_hyperboloid,
+    hyperbolic_distance_grad_hyperboloid,
+    project_to_hyperboloid,
+    gamma_hyperboloid,
+    compute_centroid_hyperboloid,
+    sl2_to_so21,
+    lorentz_action,
+    minkowski_inner,
+)
+
+# 重新导出以保持 API 兼容性
+__all__ = [
+    # 原有函数
+    "clamp_disk_radius",
+    "clamp_uhp",
+    "cayley_disk_to_uhp",
+    "cayley_uhp_to_disk",
+    "uhp_distance_and_grad",
+    "poincare_metric_factor_disk",
+    "sample_disk_hyperbolic",
+    "sample_uhp_from_disk",
+    "hyperbolic_karcher_mean_disk",
+    # Hyperboloid 函数
+    "disk_to_hyperboloid",
+    "hyperboloid_to_disk",
+    "hyperbolic_distance_hyperboloid",
+    "hyperbolic_distance_grad_hyperboloid",
+    "project_to_hyperboloid",
+    "gamma_hyperboloid",
+    "compute_centroid_hyperboloid",
+    "sl2_to_so21",
+    "lorentz_action",
+    "minkowski_inner",
+    # 便捷函数
+    "uhp_to_hyperboloid",
+    "hyperboloid_to_uhp",
+]
+
+
+def uhp_to_hyperboloid(z_uhp: ArrayLike) -> NDArray[np.float64]:
+    """上半平面 → Hyperboloid（通过圆盘中转）"""
+    z_disk = cayley_uhp_to_disk(z_uhp)
+    return disk_to_hyperboloid(z_disk)
+
+
+def hyperboloid_to_uhp(h: ArrayLike) -> NDArray[np.complex128]:
+    """Hyperboloid → 上半平面（通过圆盘中转）"""
+    z_disk = hyperboloid_to_disk(h)
+    return cayley_disk_to_uhp(z_disk)
 
 
 def clamp_disk_radius(z_disk: ArrayLike, eps: float = 1e-6) -> NDArray[np.complex128]:
