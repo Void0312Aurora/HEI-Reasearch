@@ -21,13 +21,13 @@ python test_group_integrator.py
 
 ```bash
 # 快速测试 (1000步)
-python run_comparison.py --steps 1000
+python -m hei.archive.run_comparison --steps 1000
 
 # 长周期测试 (4000步)
-python run_comparison.py --steps 4000
+python -m hei.archive.run_comparison --steps 4000
 
 # 自定义配置
-python run_comparison.py --steps 2000 --n-points 100 --depth 3
+python -m hei.archive.run_comparison --steps 2000 --n-points 100 --depth 3
 ```
 
 **生成的文件**（保存在 `outputs/` 目录）：
@@ -45,7 +45,7 @@ python run_comparison.py --steps 2000 --n-points 100 --depth 3
 ### 3. 只测试群积分器
 
 ```bash
-python run_comparison.py --group-only --steps 2000
+python -m hei.archive.run_comparison --group-only --steps 2000
 ```
 
 ---
@@ -58,6 +58,7 @@ python run_comparison.py --group-only --steps 2000
 import numpy as np
 from hei.simulation import run_simulation_group, SimulationConfig
 from hei.potential import build_hierarchical_potential
+from hei.plot_group import plot_group_log
 
 # 创建势能
 rng = np.random.default_rng(42)
@@ -70,12 +71,23 @@ log = run_simulation_group(potential=pot, config=cfg, rng=rng)
 # 访问结果
 print(f"最终能量: {log.energy[-1]}")
 print(f"最终梯度: {log.grad_norm[-1]}")
+
+# 可视化
+plot_group_log(
+    energy=log.energy,
+    xi_norm=log.xi_norm,
+    potential=log.potential,
+    kinetic=log.kinetic,
+    z_series=log.z_series,
+    grad_norm=log.grad_norm,
+    positions_disk=log.positions_disk,
+)
 ```
 
 #### 使用传统积分器（向后兼容）
 
 ```python
-from hei.simulation import run_simulation
+from hei.archive.legacy_simulation import run_simulation
 
 # 完全相同的接口
 log = run_simulation(potential=pot, config=cfg, rng=rng)
@@ -192,7 +204,7 @@ Hyperboloid 评估 → 度量有界
 sudo apt install fonts-noto-cjk
 
 # 或者在代码中禁用中文
-# 编辑 run_comparison.py，将中文标题改为英文
+# 编辑 hei/archive/run_comparison.py，将中文标题改为英文
 ```
 
 ### 内存不足
@@ -213,6 +225,9 @@ cfg = SimulationConfig(
 ```
 HEI/src/
 ├── hei/
+│   ├── archive/               # 传统积分器与对比脚本（已归档）
+│   │   ├── run_comparison.py  # 对比测试脚本
+│   │   └── ...
 │   ├── hyperboloid.py          # Hyperboloid 几何
 │   ├── group_integrator.py     # 群积分器实现
 │   ├── simulation.py           # run_simulation_group()
@@ -220,7 +235,6 @@ HEI/src/
 │   ├── inertia.py              # 惯性计算
 │   └── ...
 ├── test_group_integrator.py    # 单元测试
-├── run_comparison.py           # 对比测试脚本
 └── outputs/                    # 可视化结果
 ```
 
@@ -244,4 +258,3 @@ HEI/src/
 ## 许可
 
 请查看项目根目录的 LICENSE 文件。
-

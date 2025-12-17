@@ -1,4 +1,4 @@
-"""Contact splitting integrator for CCD on the upper half-plane."""
+"""Legacy contact splitting integrator for CCD on the upper half-plane."""
 
 from __future__ import annotations
 
@@ -8,12 +8,11 @@ from typing import Callable
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from .diamond import aggregate_torque
-# [FIX] 引入新的几何力计算函数
-from .inertia import apply_inertia, invert_inertia, locked_inertia_uhp, compute_kinetic_energy_gradient
-from .lie import exp_sl2, mobius_action_matrix, matrix_to_vec, vec_to_matrix
-from .geometry import cayley_uhp_to_disk, cayley_disk_to_uhp, clamp_disk_radius, clamp_uhp
-from .metrics import poincare_distance_disk
+from ..diamond import aggregate_torque
+from ..inertia import apply_inertia, invert_inertia, locked_inertia_uhp, compute_kinetic_energy_gradient
+from ..lie import exp_sl2, mobius_action_matrix, matrix_to_vec, vec_to_matrix
+from ..geometry import cayley_uhp_to_disk, cayley_disk_to_uhp, clamp_disk_radius, clamp_uhp
+from ..metrics import poincare_distance_disk
 
 
 ForceFn = Callable[[ArrayLike, float], NDArray[np.complex128]]

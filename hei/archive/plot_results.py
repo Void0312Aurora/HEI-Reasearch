@@ -9,14 +9,15 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .simulation import SimulationConfig, run_simulation
-from .metrics import (
+from ..simulation import SimulationConfig
+from .legacy_simulation import run_simulation
+from ..metrics import (
     compute_hierarchical_metrics,
     compute_label_timeseries,
     silhouette_timeseries,
     cluster_summary_kmeans,
 )
-from .potential import HierarchicalSoftminPotential
+from ..potential import HierarchicalSoftminPotential
 
 
 def plot_log(

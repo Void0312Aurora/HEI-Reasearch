@@ -7,7 +7,8 @@ __all__ = [
     "diamond",
     "inertia",
     "potential",
-    "integrator",
     "group_integrator",
+    "metrics",
     "simulation",
+    "plot_group",
 ]

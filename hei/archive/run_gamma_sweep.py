@@ -8,7 +8,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .simulation import SimulationConfig, run_simulation
+from ..simulation import SimulationConfig
+from .legacy_simulation import run_simulation
 
 
 def main() -> None:

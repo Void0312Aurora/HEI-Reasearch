@@ -5,18 +5,18 @@
 
 运行群积分器和传统积分器的模拟，生成可视化对比结果。
 
-用法：
+用法（从 HEI/src 目录）：
     # 快速测试（500步）
-    python run_comparison.py
+    python -m hei.archive.run_comparison
     
     # 长周期测试（4000步）
-    python run_comparison.py --steps 4000
+    python -m hei.archive.run_comparison --steps 4000
     
     # 只运行群积分器
-    python run_comparison.py --group-only
+    python -m hei.archive.run_comparison --group-only
     
     # 只运行传统积分器
-    python run_comparison.py --legacy-only
+    python -m hei.archive.run_comparison --legacy-only
 """
 
 import argparse
@@ -24,10 +24,11 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
-from hei.simulation import run_simulation, run_simulation_group, SimulationConfig
-from hei.potential import build_hierarchical_potential
-from hei.plot_results import plot_log
-from hei.metrics import cluster_summary_kmeans
+from ..simulation import run_simulation_group, SimulationConfig
+from ..potential import build_hierarchical_potential
+from ..metrics import cluster_summary_kmeans
+from .legacy_simulation import run_simulation
+from .plot_results import plot_log
 
 
 def plot_comparison(log_group, log_legacy, out_path: Path):
@@ -293,4 +294,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

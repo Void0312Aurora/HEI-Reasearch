@@ -20,13 +20,13 @@
 - 能量守恒测试
 - 长周期稳定性测试
 
-✅ **对比测试** (`run_comparison.py`)
+✅ **对比测试** (`hei/archive/run_comparison.py`)
 - 群积分器 vs 传统积分器
 - 自动生成可视化对比图
 
 ### 3. 生成的可视化文件
 
-运行 `python run_comparison.py --steps 1000` 后，在 `outputs/` 目录生成：
+运行 `python -m hei.archive.run_comparison --steps 1000` 后，在 `outputs/` 目录生成：
 
 #### 群积分器结果
 - `group_integrator.png` - 主图（能量、动量、轨迹等）
@@ -58,7 +58,7 @@ cd /home/void0312/HEI-Research/HEI/src
 python test_group_integrator.py
 
 # 2. 运行对比测试（生成可视化）
-python run_comparison.py --steps 1000
+python -m hei.archive.run_comparison --steps 1000
 
 # 3. 查看结果
 ls outputs/
@@ -67,8 +67,10 @@ ls outputs/
 ### 在代码中使用
 
 ```python
+from pathlib import Path
 from hei.simulation import run_simulation_group, SimulationConfig
 from hei.potential import build_hierarchical_potential
+from hei.plot_group import plot_group_log
 import numpy as np
 
 # 创建势能和配置
@@ -78,6 +80,18 @@ cfg = SimulationConfig(n_points=50, steps=4000)
 
 # 运行群积分器（推荐）
 log = run_simulation_group(potential=pot, config=cfg, rng=rng)
+
+# 可视化
+plot_group_log(
+    energy=log.energy,
+    xi_norm=log.xi_norm,
+    potential=log.potential,
+    kinetic=log.kinetic,
+    z_series=log.z_series,
+    grad_norm=log.grad_norm,
+    positions_disk=log.positions_disk,
+    out_path=Path("outputs/group_integrator.png"),
+)
 
 # 结果分析
 print(f"能量变化: {log.energy[0]:.2f} → {log.energy[-1]:.2f}")
@@ -230,11 +244,10 @@ print(f"数值稳定: {all(np.isfinite(log.energy))}")
 
 **使用建议**：
 - 对于所有新的模拟，使用 `run_simulation_group()`
-- 保留 `run_simulation()` 用于向后兼容和对比测试
+- 传统积分器已移入 `hei.archive.legacy_simulation.run_simulation()`，仅用于向后兼容/对比
 - 长周期模拟（>2000 步）强烈推荐群积分器
 
 **代码质量**：
 - 无 linter 错误
 - 通过所有单元测试
 - 生产就绪 (production-ready)
-

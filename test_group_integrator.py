@@ -320,7 +320,8 @@ def test_5_long_term_stability():
     print("Test 5: 长周期稳定性测试 (群积分器 vs 传统积分器)")
     print("=" * 60)
     
-    from hei.simulation import run_simulation, run_simulation_group, SimulationConfig
+    from hei.simulation import run_simulation_group, SimulationConfig
+    from hei.archive.legacy_simulation import run_simulation
     from hei.potential import build_hierarchical_potential
     
     rng = np.random.default_rng(42)
@@ -430,4 +431,3 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
-
