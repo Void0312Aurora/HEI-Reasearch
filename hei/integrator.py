@@ -40,10 +40,12 @@ class IntegratorConfig:
     fixed_point_iters: int = 2
     v_floor: float = 1e-6
     torque_dt_scale: float = 1e-4
-    xi_clip: float = 200.0
-    step_clip: float = 5.0
+    xi_clip: float = 10.0  # 降低默认值以防止爆炸
+    step_clip: float = 2.0  # 降低默认值
     relax_eta: float = 0.0
     dt_damping_safety: float = 1.5
+    # 力矩裁剪：限制力矩范数以防止加速度爆炸
+    torque_clip: float = 50.0
     # 是否包含动能梯度力（几何力）
     # 在标准 Euler-Poincaré 框架中，变惯量效应已通过锁定惯量自动处理，
     # 不需要额外的几何力。设为 False 以禁用（默认），设为 True 以启用。
@@ -217,6 +219,12 @@ class ContactSplittingIntegrator:
                 forces_total = forces_total / (1.0 + 0.5 * dt * gamma_field)
             
             torque = aggregate_torque(z_guess, forces_total)
+            
+            # 力矩裁剪：防止加速度爆炸
+            torque_norm = float(np.linalg.norm(torque))
+            if torque_norm > self.config.torque_clip:
+                torque = torque * (self.config.torque_clip / torque_norm)
+            
             m_advected = self._coadjoint_transport(xi_prev, m_prev, dt)
             m_new = alpha_prev * m_advected + dt * torque
             
