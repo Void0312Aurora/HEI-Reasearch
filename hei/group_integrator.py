@@ -104,7 +104,23 @@ class GroupIntegratorState:
 
 @dataclasses.dataclass
 class GroupIntegratorConfig:
-    """群积分器配置"""
+    """
+    群积分器配置
+    
+    阻尼配置说明：
+    -------------
+    use_hyperboloid_gamma: 是否使用 Hyperboloid 上的几何阻尼
+    gamma_mode: 阻尼计算模式（仅当 use_hyperboloid_gamma=True 时生效）
+        - "metric": 基于度量张量（符合公理 4.2）✅ 推荐
+        - "constant": 常数阻尼
+        - "adaptive": 基于 T 坐标的启发式（旧版本）
+    gamma_scale: 阻尼缩放因子
+    
+    理论依据：
+    ---------
+    公理 4.2（理论基础-3.md）要求：γ(q) ∝ sqrt(λ_max(g(q)))
+    "metric" 模式实现了这一要求，提供几何自适应的临界阻尼。
+    """
     eps_disp: float = 1e-2              # 位移裁剪阈值
     max_dt: float = 5e-2                # 最大时间步长
     min_dt: float = 1e-5                # 最小时间步长
@@ -114,6 +130,7 @@ class GroupIntegratorConfig:
     torque_clip: float = 50.0           # 力矩裁剪
     renorm_interval: int = 100          # 群矩阵重正规化间隔
     use_hyperboloid_gamma: bool = True  # 使用 Hyperboloid 阻尼
+    gamma_mode: str = "metric"          # 阻尼模式（"metric", "constant", "adaptive"）
     gamma_scale: float = 2.0            # 阻尼缩放
     
 
@@ -198,11 +215,30 @@ class GroupContactIntegrator:
         """
         计算阻尼系数
         
-        优先使用 Hyperboloid 阻尼（无奇异性），
-        回退到用户提供的 gamma_fn。
+        理论依据：
+        ---------
+        公理 4.2（理论基础-3.md）要求几何临界阻尼：
+            γ(q) ∝ sqrt(λ_max(g(q)))
+        
+        实现策略：
+        ---------
+        1. 优先使用 Hyperboloid 上的几何阻尼（无奇异性）
+        2. 根据 gamma_mode 选择具体实现：
+           - "metric": 基于度量张量特征值（符合公理 4.2）
+           - "constant": 常数阻尼
+           - "adaptive": 基于 T 坐标的启发式
+        3. 回退到用户提供的 gamma_fn
+        4. 最后使用常数 gamma_scale
+        
+        返回：
+            阻尼系数（标量）
         """
         if self.config.use_hyperboloid_gamma:
-            return gamma_hyperboloid(state.h, scale=self.config.gamma_scale)
+            return gamma_hyperboloid(
+                state.h,
+                scale=self.config.gamma_scale,
+                mode=self.config.gamma_mode
+            )
         elif self.gamma_fn is not None:
             return float(np.mean(self.gamma_fn(state.z_uhp)))
         else:

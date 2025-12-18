@@ -259,10 +259,72 @@ def hyperboloid_metric_tensor(h: ArrayLike) -> NDArray[np.float64]:
     return np.eye(2, dtype=np.float64)
 
 
-def gamma_hyperboloid(
-    h: ArrayLike, 
+def gamma_hyperboloid_metric_based(
+    h: ArrayLike,
     scale: float = 2.0,
-    mode: str = "adaptive"
+    per_point: bool = False
+) -> NDArray[np.float64] | float:
+    """
+    基于度量张量的几何临界阻尼（符合公理 4.2）
+    
+    理论依据：
+    ---------
+    公理 4.2（理论基础-3.md）要求：
+        γ(q) ∝ sqrt(λ_max(g(q)))
+    
+    其中 g(q) 是度量张量，λ_max 是其最大特征值。
+    
+    对于 Hyperboloid 模型：
+    ----------------------
+    在切空间中，诱导度量的特征值为：
+        λ = 1 / T²
+    
+    其中 T 是 Hyperboloid 坐标的第三分量（时间坐标）。
+    
+    物理意义：
+    ---------
+    - T ≈ 1（圆盘中心）：曲率大 → λ 大 → 阻尼大 → 快速锁定
+    - T 增大（远离中心）：曲率小 → λ 小 → 阻尼小 → 允许探索
+    
+    这符合"高曲率→高阻尼"的物理直觉：
+    在信念确定的区域（高曲率），系统应快速收敛；
+    在不确定的区域（低曲率），系统应保持探索性。
+    
+    参数：
+        h: Hyperboloid 坐标 (..., 3)
+        scale: 基础阻尼缩放因子
+        per_point: 是否返回逐点阻尼（True）或平均阻尼（False）
+    
+    返回：
+        阻尼系数（标量或逐点数组）
+    
+    参考文献：
+        - 理论基础-3.md 公理 4.2
+        - Ratcliffe (2006). Foundations of Hyperbolic Manifolds, Ch. 3
+    """
+    h_arr = np.asarray(h, dtype=np.float64)
+    if h_arr.ndim == 1:
+        h_arr = h_arr.reshape(1, 3)
+    
+    T = h_arr[..., 2]
+    
+    # 度量张量的特征值（Hyperboloid 上为 1/T²）
+    # 添加小量防止除零
+    lambda_metric = 1.0 / (T * T + 1e-12)
+    
+    # 按理论公式：γ ∝ sqrt(λ_max)
+    gamma_local = scale * np.sqrt(lambda_metric)
+    
+    if per_point:
+        return gamma_local  # 逐点阻尼
+    else:
+        return float(np.mean(gamma_local))  # 平均阻尼
+
+
+def gamma_hyperboloid(
+    h: ArrayLike,
+    scale: float = 2.0,
+    mode: str = "metric"
 ) -> NDArray[np.float64] | float:
     """
     Hyperboloid 上的几何阻尼
@@ -273,28 +335,46 @@ def gamma_hyperboloid(
         h: Hyperboloid 坐标 (..., 3)
         scale: 基础阻尼缩放
         mode: 阻尼模式
+            - "metric": 基于度量张量（符合公理 4.2）✅ 推荐
             - "constant": 常数阻尼（双曲空间曲率恒定）
-            - "adaptive": 根据 T 坐标轻微调整
+            - "adaptive": 基于 T 坐标的启发式（旧版本，用于兼容）
             
     返回：
         阻尼系数（标量或逐点）
+        
+    理论说明：
+        默认的 "metric" 模式实现了公理 4.2 的几何临界阻尼：
+        γ ∝ sqrt(λ_max(g))，其中 λ = 1/T²
+        
+        这保证了阻尼随几何曲率自适应调整：
+        - 高曲率区域（中心）→ 高阻尼 → 快速收敛
+        - 低曲率区域（边界）→ 低阻尼 → 保持探索
+    
+    参考：
+        理论基础-3.md 公理 4.2
     """
     h_arr = np.asarray(h, dtype=np.float64)
     
-    if mode == "constant":
+    if mode == "metric":
+        # 新的度量基阻尼（符合理论）
+        return gamma_hyperboloid_metric_based(h_arr, scale, per_point=False)
+    elif mode == "constant":
         # 双曲空间曲率 K = -1（常数），所以临界阻尼也应该是常数
         return scale
-    
-    # adaptive 模式：根据 T 坐标（对应于"接近边界程度"）调整
-    T = h_arr[..., 2]
-    T_mean = float(np.mean(T)) if np.ndim(T) > 0 else float(T)
-    
-    # T = 1 对应圆盘中心，T → ∞ 对应边界
-    # 使用 log(T) 增长，非常温和
-    gamma = scale * (1.0 + 0.1 * np.log(max(T_mean, 1.0)))
-    
-    # 硬上界，但这个上界很少会触及
-    return min(gamma, 10.0)
+    elif mode == "adaptive":
+        # 保留旧实现用于兼容性
+        # adaptive 模式：根据 T 坐标（对应于"接近边界程度"）调整
+        T = h_arr[..., 2]
+        T_mean = float(np.mean(T)) if np.ndim(T) > 0 else float(T)
+        
+        # T = 1 对应圆盘中心，T → ∞ 对应边界
+        # 使用 log(T) 增长，非常温和
+        gamma = scale * (1.0 + 0.1 * np.log(max(T_mean, 1.0)))
+        
+        # 硬上界，但这个上界很少会触及
+        return min(gamma, 10.0)
+    else:
+        raise ValueError(f"Unknown mode: {mode}. Valid modes: 'metric', 'constant', 'adaptive'")
 
 
 def compute_centroid_hyperboloid(h: ArrayLike, max_iter: int = 20) -> NDArray[np.float64]:

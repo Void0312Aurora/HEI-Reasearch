@@ -17,7 +17,12 @@ from .geometry import (
 from .lie import moebius_flow
 from .metrics import assign_nearest, pairwise_poincare
 from .diamond import aggregate_torque
-from .inertia import apply_inertia
+from .inertia import apply_inertia, compute_kinetic_energy_gradient_hyperboloid
+from .geometry import (
+    cayley_uhp_to_disk,
+    cayley_disk_to_uhp,
+    uhp_to_hyperboloid,
+)
 from .group_integrator import (
     GroupContactIntegrator, 
     GroupIntegratorConfig, 
@@ -89,6 +94,72 @@ def make_force_fn(potential: PotentialOracle) -> Callable[[ArrayLike, float], ND
         return -potential.dV_dz(z_uhp, action)
 
     return force
+
+
+def _hyperboloid_tangent_to_uhp_force(
+    F_h: NDArray[np.float64],
+    h: NDArray[np.float64],
+    z_uhp: NDArray[np.complex128],
+) -> NDArray[np.complex128]:
+    """
+    将Hyperboloid切向量转换为UHP复数力
+    
+    方法：使用数值微分推导坐标变换的Jacobian
+    
+    对于坐标映射 z = z(h)，力变换为：
+        F_z = (∂z/∂h)^T · F_h
+    
+    参数：
+        F_h: Hyperboloid切向量 (..., 3)
+        h: Hyperboloid坐标 (..., 3)
+        z_uhp: 对应的UHP坐标 (...)
+        
+    返回：
+        UHP复数力 (...)
+    """
+    from .hyperboloid import hyperboloid_to_disk
+    
+    F_h_arr = np.asarray(F_h, dtype=np.float64)
+    h_arr = np.asarray(h, dtype=np.float64)
+    
+    if h_arr.ndim == 1:
+        h_arr = h_arr.reshape(1, 3)
+        F_h_arr = F_h_arr.reshape(1, 3)
+    
+    n = h_arr.shape[0]
+    F_uhp = np.zeros(n, dtype=np.complex128)
+    
+    eps = 1e-6
+    
+    for i in range(n):
+        # 数值计算Jacobian: dz/dh
+        # 对h的每个分量进行有限差分
+        Jac_re = np.zeros(3, dtype=float)
+        Jac_im = np.zeros(3, dtype=float)
+        
+        for coord in range(3):  # X, Y, T
+            h_plus = h_arr[i].copy()
+            h_minus = h_arr[i].copy()
+            h_plus[coord] += eps
+            h_minus[coord] -= eps
+            
+            # 转换到UHP
+            z_disk_plus = hyperboloid_to_disk(h_plus.reshape(1, 3))
+            z_disk_minus = hyperboloid_to_disk(h_minus.reshape(1, 3))
+            z_plus = cayley_disk_to_uhp(z_disk_plus)[0]
+            z_minus = cayley_disk_to_uhp(z_disk_minus)[0]
+            
+            # 中心差分
+            dz_dh = (z_plus - z_minus) / (2 * eps)
+            Jac_re[coord] = np.real(dz_dh)
+            Jac_im[coord] = np.imag(dz_dh)
+        
+        # 力变换: F_z = J^T · F_h
+        F_re = np.dot(Jac_re, F_h_arr[i])
+        F_im = np.dot(Jac_im, F_h_arr[i])
+        F_uhp[i] = complex(F_re, F_im)
+    
+    return F_uhp.reshape(z_uhp.shape)
 
 def run_simulation_group(
     potential: PotentialOracle | None = None,
@@ -190,13 +261,34 @@ def run_simulation_group(
         if isinstance(pot, HierarchicalSoftminPotential) and hasattr(pot, "update_lambda"):
             pot.update_lambda(z_current, state.action)
 
-        # 计算力和梯度
-        grad = pot.dV_dz(z_current, state.action)
+        # ============================================================
+        # 计算总有效力 = 势能力 + 几何力
+        # 理论依据：理论基础-3.md 引理 3.1.1 和定理 3.2
+        # F_total = -∇V_FEP + F_geom
+        # 其中 F_geom = -∇_z K(z,ξ) 是动能对位置的梯度
+        # ============================================================
+        
+        # 1. 计算势能力（原有实现）
+        grad_V = pot.dV_dz(z_current, state.action)
         if cfg.force_clip is not None:
-            mag = np.abs(grad)
+            mag = np.abs(grad_V)
             scale = np.maximum(1.0, mag / cfg.force_clip)
-            grad = grad / scale
-        forces = -grad
+            grad_V = grad_V / scale
+        F_potential = -grad_V
+        
+        # 2. 计算几何力（Hyperboloid坐标系，避免边界奇异）
+        # 在Hyperboloid上计算动能梯度，然后转换为UHP复数力
+        F_geom_h = -compute_kinetic_energy_gradient_hyperboloid(
+            h_current, state.xi, weights=None
+        )
+        
+        # 将Hyperboloid切向量转换为UHP复数力
+        F_geom_uhp = _hyperboloid_tangent_to_uhp_force(
+            F_geom_h, h_current, z_current
+        )
+        
+        # 3. 总力 = 势能力 + 几何力
+        forces = F_potential + F_geom_uhp
         
         # 速度诊断
         y = np.maximum(np.imag(z_current), 1e-9)
@@ -215,7 +307,7 @@ def run_simulation_group(
         potential_energy_mean = potential_energy / max(n_pts, 1)
         kinetic_energy = 0.5 * float(state.xi @ (I_current @ state.xi))
         kinetic_energy_mean = kinetic_energy / max(n_pts, 1)
-        grad_norm = float(np.linalg.norm(grad))
+        grad_norm = float(np.linalg.norm(grad_V))
         eigs = np.linalg.eigvalsh(I_current)
 
         # 记录日志
