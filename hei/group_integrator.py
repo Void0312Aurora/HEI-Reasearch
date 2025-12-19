@@ -182,9 +182,14 @@ class GroupContactIntegrator:
         """
         det = G[0, 0] * G[1, 1] - G[0, 1] * G[1, 0]
         
+        # 1. Ensure positive determinant (fix connected component)
+        if det < 0:
+            G[:, 0] *= -1.0
+            det = -det
+            
+        # 2. Scale to det = 1
         if abs(det - 1.0) > 1e-10:
-            # 简单缩放使 det = 1
-            scale = 1.0 / np.sqrt(abs(det) + 1e-15)
+            scale = 1.0 / np.sqrt(det + 1e-15)
             G = G * scale
         
         # 额外的对称化（可选）

@@ -132,36 +132,70 @@ def _hyperboloid_tangent_to_uhp_force(
         h_arr = h_arr.reshape(1, 3)
         F_h_arr = F_h_arr.reshape(1, 3)
     
-    # Vectorized Jacobian calculation: F_z = J^T · F_h (Vector pushforward)
-    # F_uhp = F_h[0] * dz/dX + F_h[1] * dz/dY + F_h[2] * dz/dT
+    # Analytic Jacobian calculation (Chain Rule: z -> disk -> h)
+    # F_z = (dh/dz)^H * F_h
+    # 1. z -> u (disk): u = (z-i)/(z+i)
+    # 2. u -> h (hyperboloid)
     
-    eps = 1e-6
+    # 1. dz/du part
+    # f(z) = (z-i)/(z+i), f'(z) = 2i / (z+i)^2
+    zi = z_uhp + 1j
+    zi2 = zi * zi
+    df_dz = 2j / zi2 # (N,) complex derivative
+    alpha = np.real(df_dz)
+    beta = np.imag(df_dz)
     
-    # Helper to map batch of h to z_uhp
-    def map_h_to_z(h_batch):
-        z_d = hyperboloid_to_disk(h_batch)
-        return cayley_disk_to_uhp(z_d)
-
-    # Compute partial derivatives via central difference
-    # X component
-    h_plus = h_arr.copy(); h_plus[:, 0] += eps
-    h_minus = h_arr.copy(); h_minus[:, 0] -= eps
-    dz_dX = (map_h_to_z(h_plus) - map_h_to_z(h_minus)) / (2 * eps)
+    # 2. du/dh part (actually dh/du needed for transpose)
+    # u = (z-i)/(z+i)
+    u = (z_uhp - 1j) / (z_uhp + 1j)
+    u1 = np.real(u)
+    u2 = np.imag(u)
+    r2 = u1*u1 + u2*u2
+    # Safe denom
+    denom = np.maximum(1 - r2, 1e-12)
+    denom2 = denom * denom
     
-    # Y component
-    h_plus = h_arr.copy(); h_plus[:, 1] += eps
-    h_minus = h_arr.copy(); h_minus[:, 1] -= eps
-    dz_dY = (map_h_to_z(h_plus) - map_h_to_z(h_minus)) / (2 * eps)
+    # Jacobian elements dh_i / du_j
+    # X = 2u1/D, Y = 2u2/D, T = (1+r2)/D
+    dX_du1 = 2 * (1 + u1*u1 - u2*u2) / denom2
+    dX_du2 = 4 * u1 * u2 / denom2
     
-    # T component
-    h_plus = h_arr.copy(); h_plus[:, 2] += eps
-    h_minus = h_arr.copy(); h_minus[:, 2] -= eps
-    dz_dT = (map_h_to_z(h_plus) - map_h_to_z(h_minus)) / (2 * eps)
+    dY_du1 = 4 * u1 * u2 / denom2
+    dY_du2 = 2 * (1 - u1*u1 + u2*u2) / denom2
     
-    # Linear combination
-    F_uhp = (F_h_arr[:, 0] * dz_dX + 
-             F_h_arr[:, 1] * dz_dY + 
-             F_h_arr[:, 2] * dz_dT)
+    dT_du1 = 4 * u1 / denom2
+    dT_du2 = 4 * u2 / denom2
+    
+    # 3. Pullback Force F_h -> F_u
+    # F_u1 = F_X * dX_du1 + F_Y * dY_du1 + F_T * dT_du1
+    # F_u2 = F_X * dX_du2 + F_Y * dY_du2 + F_T * dT_du2
+    
+    F_X = F_h_arr[:, 0]
+    F_Y = F_h_arr[:, 1]
+    F_T = F_h_arr[:, 2]
+    
+    F_u1 = F_X * dX_du1 + F_Y * dY_du1 + F_T * dT_du1
+    F_u2 = F_X * dX_du2 + F_Y * dY_du2 + F_T * dT_du2
+    
+    # 4. Pullback Force F_u -> F_z
+    # Jacobian z->u transpose map:
+    # F_x = alpha * F_u1 + beta * F_u2
+    # F_y = -beta * F_u1 + alpha * F_u2
+    
+    F_z_real = alpha * F_u1 + beta * F_u2
+    F_z_imag = -beta * F_u1 + alpha * F_u2
+    
+    F_uhp = F_z_real + 1j * F_z_imag
+    
+    # Theoretical Fix: Clip geometric force to prevent instability at boundary
+    # This force (repulsion from infinity) can grow to 1e15 near boundary.
+    # Clipping it allows the particle to approach boundary without exploding.
+    # The adaptive DT should handle it, but limiting force magnitude is safer.
+    
+    geom_clip = 1000.0 # Allow strong force but prevent Infinity
+    f_mag = np.abs(F_uhp)
+    scale = np.maximum(1.0, f_mag / geom_clip)
+    F_uhp = F_uhp / scale
             
     return F_uhp.reshape(z_uhp.shape)
 
@@ -288,10 +322,48 @@ def run_simulation_group(
             h_current = state.h
             I_current = state.I
             
-            # --- Periodic Updates (Lambda/Bridge) ---
-            # Update lambda potential params periodically if needed (can be every step or decimated, usually every step for accuracy)
+            # --- Periodic Updates ---
+            # 1. Lambda potential update (every step or decimated)
             if isinstance(pot, HierarchicalSoftminPotential) and hasattr(pot, "update_lambda"):
-                pot.update_lambda(z_current, state.action)
+                pot.update_lambda(state.z_uhp, state.action)
+
+            # 2. Beta annealing / Bridge ratio update (Frequency: every 50 steps, independent of logging)
+            if step % 50 == 0:
+                if isinstance(pot, HierarchicalSoftminPotential):
+                     # Calculate ratio_break (entropy vs total force)
+                    if hasattr(pot, "forces_decomposed"):
+                        fdec = pot.forces_decomposed(state.z_uhp, state.action)
+                        grad_tot = fdec.get("grad_total", np.zeros_like(state.z_uhp))
+                        grad_ent = fdec.get("grad_entropy", np.zeros_like(state.z_uhp))
+                        norm_tot = float(np.linalg.norm(grad_tot))
+                        norm_ent = float(np.linalg.norm(grad_ent))
+                        pot.last_ratio_break = norm_ent / (norm_tot + 1e-12) # Store in pot for logging
+                    else:
+                        pot.last_ratio_break = 0.0
+
+                    # Calculate bridge ratio
+                    z_disk_bridge = cayley_uhp_to_disk(state.z_uhp)
+                    centers_disk = cayley_uhp_to_disk(pot.centers)
+                    labels_anchor = assign_nearest(z_disk_bridge, centers_disk)
+                    D_full = pairwise_poincare(z_disk_bridge)
+                    n = D_full.shape[0]
+                    edge_total = edge_cross = 0
+                    k = 3
+                    nn = np.argsort(D_full, axis=1)[:, 1 : k + 1]
+                    for i_idx in range(n):
+                        for j_idx in nn[i_idx]:
+                            edge_total += 1
+                            if labels_anchor[i_idx] != labels_anchor[j_idx]:
+                                edge_cross += 1
+                    
+                    bridge_val = edge_cross / edge_total if edge_total else 0.0
+                    pot.last_bridge_ratio = bridge_val # Store for logging
+
+                    pot.bridge_ema = (1 - cfg.beta_eta) * pot.bridge_ema + cfg.beta_eta * bridge_val
+                    pot.beta = float(np.clip(pot.beta + cfg.beta_eta * (pot.bridge_ema - cfg.beta_target_bridge), cfg.beta_min, cfg.beta_max))
+                else:
+                    if not hasattr(pot, "last_bridge_ratio"): pot.last_bridge_ratio = 0.0
+                    if not hasattr(pot, "last_ratio_break"): pot.last_ratio_break = 0.0
 
             # --- Core Physics Step ---
             # 计算总有效力 = 势能力 + 几何力
@@ -406,37 +478,10 @@ def run_simulation_group(
                     log.V_ent.append(0.0)
                 
                 # Bridge ratio - Expensive, decimate further (every 5 * log_interval)
+                # Bridge ratio - Log stored values
                 if isinstance(pot, HierarchicalSoftminPotential):
-                    if hasattr(pot, "forces_decomposed"):
-                        fdec = pot.forces_decomposed(z_current, state.action)
-                        grad_tot = fdec.get("grad_total", np.zeros_like(z_current))
-                        grad_ent = fdec.get("grad_entropy", np.zeros_like(z_current))
-                        norm_tot = float(np.linalg.norm(grad_tot))
-                        norm_ent = float(np.linalg.norm(grad_ent))
-                        ratio_break = norm_ent / (norm_tot + 1e-12)
-                        log.ratio_break.append(ratio_break)
-                    else:
-                        log.ratio_break.append(0.0)
-                    
-                    z_disk_bridge = cayley_uhp_to_disk(z_current)
-                    centers_disk = cayley_uhp_to_disk(pot.centers)
-                    labels_anchor = assign_nearest(z_disk_bridge, centers_disk)
-                    D_full = pairwise_poincare(z_disk_bridge)
-                    n = D_full.shape[0]
-                    edge_total = edge_cross = 0
-                    k = 3
-                    # Only check top-k neighbors
-                    nn = np.argsort(D_full, axis=1)[:, 1 : k + 1]
-                    for i_idx in range(n):
-                        for j_idx in nn[i_idx]:
-                            edge_total += 1
-                            if labels_anchor[i_idx] != labels_anchor[j_idx]:
-                                edge_cross += 1
-                                
-                    log.bridge_ratio.append(edge_cross / edge_total if edge_total else 0.0)
-                    bridge_val = edge_cross / edge_total if edge_total else 0.0
-                    pot.bridge_ema = (1 - cfg.beta_eta) * pot.bridge_ema + cfg.beta_eta * bridge_val
-                    pot.beta = float(np.clip(pot.beta + cfg.beta_eta * (pot.bridge_ema - cfg.beta_target_bridge), cfg.beta_min, cfg.beta_max))
+                    log.ratio_break.append(getattr(pot, "last_ratio_break", 0.0))
+                    log.bridge_ratio.append(getattr(pot, "last_bridge_ratio", 0.0))
                     log.beta_series.append(pot.beta)
                 else:
                     log.bridge_ratio.append(0.0)

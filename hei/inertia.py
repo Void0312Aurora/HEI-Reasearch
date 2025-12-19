@@ -269,69 +269,98 @@ def moment_map_covariance(z_uhp: ArrayLike, weights: ArrayLike | None = None, al
 # Hyperboloid 版本的惯性计算（无边界奇异性）
 # ============================================================================
 
-def _compute_hyperboloid_generators(h: NDArray[np.float64]) -> tuple[NDArray, NDArray, NDArray]:
+
+def _compute_lie_generators_on_hyperboloid(h: NDArray[np.float64]) -> tuple[NDArray, NDArray, NDArray]:
     """
-    计算 Hyperboloid 上点的李代数 so(2,1) 生成元（带裁剪）
+    Compute Lie Algebra generators (u, v, w) projected onto Hyperboloid tangent space.
     
-    理论依据：
-    ---------
-    SO(2,1) 的李代数 so(2,1) 有三个生成元：
-    - J: 空间旋转 (xy 平面)
-    - K_x: x 方向 boost (xt 平面)
-    - K_y: y 方向 boost (yt 平面)
+    This replaces the geometric generators (J, Kx, Ky) which are misaligned with the
+    Lie algebra basis used in the integrator's coadjoint flow.
     
-    这些与 sl(2,R) 的生成元 (u, v, w) 通过同构对应。
-    
-    对于 Hyperboloid 上的点 h = (X, Y, T)，各生成元作用产生的切向量：
-    - J·h = (-Y, X, 0)      # 旋转
-    - K_x·h = (T, 0, X)     # x-boost
-    - K_y·h = (0, T, Y)     # y-boost
-    
-    这些切向量在 Minkowski 度量下的内积给出惯性张量。
-    
-    优势：
-    -----
-    在 Hyperboloid 上，X, Y, T 都是有界的（只要点在 H² 内部），
-    因此生成元永远不会发散！这与 UHP 中 Im(z) → 0 导致的发散形成对比。
-    
-    数值稳定性：
-    -----------
-    尽管理论上生成元有界，但在点集接近双曲边界时（大双曲半径），
-    生成元的范数仍可能很大，导致惯性张量特征值爆炸。
-    
-    **裁剪策略**（CRITICAL FIX for Phase 1）：
-    - 硬截断模式：限制生成元范数 ≤ GENERATOR_CLIP
-    - 物理意义：防止远离中心的点产生过大的惯性贡献
-    - 理论依据：对应 UHP 版本的裁剪（保持两种坐标系的数值一致性）
+    Method:
+    1. Map h -> z_uhp (Analytic)
+    2. Compute Lie flow vectors at z:
+       V_u = 2z (scaling)
+       V_v = 1  (translation)
+       V_w = -z^2 (conformal)
+    3. Pushforward V_z -> V_h using Analytic Jacobian J_{z->h}
+       V_h = J * V_z (Matrix-Vector product)
+       
+    This ensures Inertia I_ab = <V_a, V_b> is exactly the metric in the Lie basis.
     """
-    # Phase 1 紧急修复：生成元裁剪常量（与 UHP 版本一致）
-    GENERATOR_CLIP = 5.0  # 限制特征值爆炸（理论预期 λ_max ~ O(N)）
+    from .geometry import hyperboloid_to_uhp
     
-    X, Y, T = h[..., 0], h[..., 1], h[..., 2]
+    # 1. Map to UHP
+    z = hyperboloid_to_uhp(h)
     
-    # 生成元作用产生的切向量（原始未裁剪）
-    a_J_raw = np.stack([-Y, X, np.zeros_like(X)], axis=-1)      # 旋转
-    a_Kx_raw = np.stack([T, np.zeros_like(T), X], axis=-1)      # x-boost
-    a_Ky_raw = np.stack([np.zeros_like(T), T, Y], axis=-1)      # y-boost
+    # 2. Jacobian J_{z->h}
+    # Chain rule: z -> u (disk) -> h (hyp)
+    # J_{z->h} = J_{u->h} * J_{z->u}
     
-    # 裁剪函数：限制切向量的 Minkowski 范数
-    def clip_generator(a_vec):
-        """
-        裁剪生成元切向量到最大范数
+    # Part A: z -> u
+    # u = (z-i)/(z+i), du/dz = 2i / (z+i)^2
+    zi = z + 1j
+    zi2 = zi * zi
+    du_dz = 2j / zi2 # Complex derivative scalar
+    
+    # Part B: u -> h
+    # u = u1 + i u2
+    u_disk = (z - 1j) / (z + 1j)
+    u1 = np.real(u_disk)
+    u2 = np.imag(u_disk)
+    r2 = u1*u1 + u2*u2
+    denom = np.maximum(1 - r2, 1e-12)
+    
+    # Partial derivatives dh/du1, dh/du2
+    # X = 2u1/D, Y = 2u2/D, T = (1+r2)/D
+    denom2 = denom * denom
+    
+    dX_du1 = 2 * (1 + u1*u1 - u2*u2) / denom2
+    dX_du2 = 4 * u1 * u2 / denom2
+    
+    dY_du1 = 4 * u1 * u2 / denom2
+    dY_du2 = 2 * (1 - u1*u1 + u2*u2) / denom2
+    
+    dT_du1 = 4 * u1 / denom2
+    dT_du2 = 4 * u2 / denom2
+    
+    def pushforward(V_z_complex):
+        # V_z = a + ib
+        # du = du/dz * V_z
+        d_u_complex = du_dz * V_z_complex
+        du1 = np.real(d_u_complex)
+        du2 = np.imag(d_u_complex)
         
-        注意：使用欧几里得范数（而非 Minkowski 范数）进行裁剪，
-        因为我们关心的是数值大小，而不是几何意义。
-        """
-        norm = np.linalg.norm(a_vec, axis=-1, keepdims=True)
+        # d_h = (dh/du1)*du1 + (dh/du2)*du2
+        VX = dX_du1 * du1 + dX_du2 * du2
+        VY = dY_du1 * du1 + dY_du2 * du2
+        VT = dT_du1 * du1 + dT_du2 * du2
+        return np.stack([VX, VY, VT], axis=-1)
+
+    # 3. Lie Vectors in UHP
+    # Basis u (Scaling): z' = 2z - (Actually Lie bracket [u, z] depends on rep definition)
+    # hei.lie.moebius_flow(xi, z) = v + 2uz - wz^2
+    # Basis u=(1,0,0) -> 2z
+    # Basis v=(0,1,0) -> 1
+    # Basis w=(0,0,1) -> -z^2
+    
+    V_u_z = 2.0 * z
+    V_v_z = np.ones_like(z)
+    V_w_z = - (z * z)
+    
+    # Push to Hyperboloid
+    a_u = pushforward(V_u_z)
+    a_v = pushforward(V_v_z)
+    a_w = pushforward(V_w_z)
+    
+    # Clip for safety (Numerical Explosion Fix Phase 2)
+    GENERATOR_CLIP = 1000.0
+    def clip(v):
+        norm = np.linalg.norm(v, axis=-1, keepdims=True)
         scale = np.minimum(1.0, GENERATOR_CLIP / (norm + 1e-12))
-        return a_vec * scale
-    
-    # 应用裁剪
-    a_J = clip_generator(a_J_raw)
-    a_Kx = clip_generator(a_Kx_raw)
-    a_Ky = clip_generator(a_Ky_raw)
-    
-    return a_J, a_Kx, a_Ky
+        return v * scale
+        
+    return clip(a_u), clip(a_v), clip(a_w)
 
 
 def _minkowski_metric_inner(v1: NDArray, v2: NDArray) -> NDArray:
@@ -392,12 +421,11 @@ def locked_inertia_hyperboloid(
     else:
         w_arr = np.asarray(weights, dtype=float).ravel()
     
-    # 计算所有点的生成元
-    a_J, a_Kx, a_Ky = _compute_hyperboloid_generators(h_arr)
+    # 计算所有点的生成元 (Lie Basis Aligned)
+    a_u, a_v, a_w = _compute_lie_generators_on_hyperboloid(h_arr)
     
     # 生成元列表，对应 sl(2,R) 的 (u, v, w) 基
-    # 映射关系：J ↔ u (缩放)，K_x ↔ v (平移)，K_y ↔ w (反演)
-    generators = [a_J, a_Kx, a_Ky]
+    generators = [a_u, a_v, a_w]
     
     I_matter = np.zeros((3, 3), dtype=float)
     
@@ -484,8 +512,8 @@ def compute_kinetic_energy_gradient_hyperboloid(
         # _compute_hyperboloid_generators is defined in inertia.py? 
         # Yes, viewed in lines 396.
         
-        gen_J, gen_Kx, gen_Ky = _compute_hyperboloid_generators(h_batch)
-        gens = [gen_J, gen_Kx, gen_Ky]
+        gen_u, gen_v, gen_w = _compute_lie_generators_on_hyperboloid(h_batch)
+        gens = [gen_u, gen_v, gen_w]
         
         # 2. Build local Inertia tensor I_local (N, 3, 3)
         # I_ab = <gen_a, gen_b>_Minkowski
@@ -509,34 +537,54 @@ def compute_kinetic_energy_gradient_hyperboloid(
         return local_K * w_arr
 
     # Vectorized Finite Difference
-    h_norm = np.linalg.norm(h_arr, axis=1)
-    eps_vec = np.maximum(1e-7, 1e-4 * h_norm) # (N,)
+    # Vectorized Finite Difference with Projection (Critique Fix B)
+    # 1. Perturb
+    # 2. Project back to manifold (h_plus/minus must satisfy <h,h>=-1)
+    # 3. Compute gradient in ambient space
+    # 4. Project ambient gradient to tangent space
     
-    forces = np.zeros_like(h_arr)
+    # Import locally to avoid circular imports if any (though these look like they are in geometry/hyperboloid)
+    from .hyperboloid import project_to_hyperboloid, minkowski_inner
     
-    # X component
-    h_plus = h_arr.copy(); h_plus[:, 0] += eps_vec
-    h_minus = h_arr.copy(); h_minus[:, 0] -= eps_vec
-    dK_dX = (compute_local_energy(h_plus) - compute_local_energy(h_minus)) / (2 * eps_vec)
+    h_norm = np.linalg.norm(h_arr, axis=1) # Should be ~infinity but in Euclidean3D it varies. Actually on hyperboloid, Euclidean norm varies.
+    # eps scaling:
+    # eps scaling: Constant is safer than scaling with h_norm which grows exponentially
+    # At h=1e6, eps=1e-4 is relative 1e-10 (>> 1e-15 machine eps), so it is numerically safe.
+    # Previous 1e-6*h_norm gave eps=1.0 at h=1e6, which is geometrically huge.
+    eps_vec = 1e-4 # Constant small perturbation
+
+    def get_diff_grad(dim_idx):
+        # Forward
+        h_fwd = h_arr.copy()
+        h_fwd[:, dim_idx] += eps_vec
+        h_fwd = project_to_hyperboloid(h_fwd) # CRITICAL: Project back to manifold
+        E_fwd = compute_local_energy(h_fwd)
+        
+        # Backward
+        h_bwd = h_arr.copy()
+        h_bwd[:, dim_idx] -= eps_vec
+        h_bwd = project_to_hyperboloid(h_bwd) # CRITICAL: Project back to manifold
+        E_bwd = compute_local_energy(h_bwd)
+        
+        # Distance in ambient space for denominator?
+        # Standard central diff: f(x+e) - f(x-e) / 2e 
+        # Here perturbation is roughly eps_vec along axis, then projected.
+        # This is "good enough" approximation of covariant derivative if eps is small.
+        return (E_fwd - E_bwd) / (2 * eps_vec)
+
+    grad_ambient = np.zeros_like(h_arr)
+    grad_ambient[:, 0] = get_diff_grad(0)
+    grad_ambient[:, 1] = get_diff_grad(1)
+    grad_ambient[:, 2] = get_diff_grad(2)
     
-    # Y component
-    h_plus = h_arr.copy(); h_plus[:, 1] += eps_vec
-    h_minus = h_arr.copy(); h_minus[:, 1] -= eps_vec
-    dK_dY = (compute_local_energy(h_plus) - compute_local_energy(h_minus)) / (2 * eps_vec)
+    # 4. Project ambient gradient to tangent space
+    # Tangent vector v at h must satisfy <v, h>_L = 0.
+    # Reform: v_tan = v - <v, h>_L * h / <h, h>_L
+    # Since <h, h>_L = -1, v_tan = v + <v, h>_L * h
+    inner = minkowski_inner(grad_ambient, h_arr) # (N,)
+    grad_tan = grad_ambient + inner[:, np.newaxis] * h_arr
     
-    # T component
-    h_plus = h_arr.copy(); h_plus[:, 2] += eps_vec
-    h_minus = h_arr.copy(); h_minus[:, 2] -= eps_vec
-    dK_dT = (compute_local_energy(h_plus) - compute_local_energy(h_minus)) / (2 * eps_vec)
-    
-    forces[:, 0] = dK_dX
-    forces[:, 1] = dK_dY
-    forces[:, 2] = dK_dT
-    
-    # Return gradient (Force is often -gradient, but verify usage. 
-    # Docstring says "Returns gradient ∇_h K".
-    # Simulation adds F_geom = -compute_kinetic_energy_gradient... so the sign here should be gradient +)
-    return forces
+    return grad_tan
 
 
 def locked_inertia_from_group(

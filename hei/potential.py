@@ -311,7 +311,8 @@ class HierarchicalSoftminPotential:
         
         # Let's keep the (1+d) scaling for now as it's likely a global/local feature interaction choice,
         # but strictly remove the 'y' dependency.
-        width_eff = width * (1.0 + d_hyp) # (K, N)
+        # width_eff = width * (1.0 + d_hyp) # (K, N) - REMOVED per critique
+        width_eff = width
         denom_width = np.maximum(width_eff, 1e-8)
         
         energy = -self.softmin_scale * d_hyp / denom_width
@@ -332,8 +333,9 @@ class HierarchicalSoftminPotential:
              # point_logit_bias is (K, N)
              logit = logit + self.signal_scale * self.point_logit_bias
              
-        # dE/dd = -softmin_scale * (1 + d_hyp)^{-2} / width
-        grad_coeff = -self.softmin_scale / (width * np.maximum((1.0 + d_hyp) ** 2, 1e-8))
+        # dE/dd = -softmin_scale / width (constant force for linear potential)
+        # OLD: grad_coeff = -self.softmin_scale / (width * np.maximum((1.0 + d_hyp) ** 2, 1e-8))
+        grad_coeff = -self.softmin_scale / np.maximum(width, 1e-8)
         grads = self.beta * (grad_coeff * grad_hyp)
         
         # Clip logits
