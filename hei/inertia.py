@@ -459,27 +459,83 @@ def compute_kinetic_energy_gradient_hyperboloid(
     else:
         w_arr = np.asarray(weights, dtype=float).ravel()
     
+    # Optimized Vectorized Implementation (O(N))
+    # Kinetic Energy K = sum(K_i), where K_i depends only on h_i.
+    # So dK/dh_i = dK_i/dh_i. We don't need to recompute the full global sum!
+    
+    n = h_arr.shape[0]
+    xi_vec = np.asarray(xi, dtype=float)
+    if weights is None:
+        w_arr = np.ones(n, dtype=float)
+    else:
+        w_arr = np.asarray(weights, dtype=float).ravel()
+
+    # Helper to compute local energy K_i for a batch of h vectors
+    def compute_local_energy(h_batch):
+        # h_batch: (N, 3)
+        # Returns: (N,) energy array
+        
+        # 1. Compute generators (N, 3, 3) where last dim is vector component in ambient space
+        # But _compute_hyperboloid_generators returns tuple of (N, 3) arrays
+        # corresponding to the 3 algebra generators J, Kx, Ky evaluated at h.
+        # Actually _compute_hyperboloid_generators returns a list of vectors?
+        # Let's check typical usage or re-implement locally for clarity/speed.
+        # Using existing helper from this file might be safer if visible.
+        # _compute_hyperboloid_generators is defined in inertia.py? 
+        # Yes, viewed in lines 396.
+        
+        gen_J, gen_Kx, gen_Ky = _compute_hyperboloid_generators(h_batch)
+        gens = [gen_J, gen_Kx, gen_Ky]
+        
+        # 2. Build local Inertia tensor I_local (N, 3, 3)
+        # I_ab = <gen_a, gen_b>_Minkowski
+        I_local = np.zeros((n, 3, 3), dtype=float)
+        
+        for i, g_i in enumerate(gens):
+            for j, g_j in enumerate(gens):
+                # Inner product per point
+                val = _minkowski_metric_inner(g_i, g_j) # (N,)
+                I_local[:, i, j] = val
+
+        # 3. Compute energy: 0.5 * xi^T * I_local * xi
+        # Einsum: (3) @ (N, 3, 3) @ (3) -> (N)
+        # K = 0.5 * sum_ab (xi_a * I_ab * xi_b)
+        # I_local is (N, 3, 3). Xi is (3,)
+        # temp = I_local @ xi  -> (N, 3)
+        # result = dot(xi, temp) -> (N)
+        mv = np.einsum('nij,j->ni', I_local, xi_vec)
+        local_K = 0.5 * np.einsum('i,ni->n', xi_vec, mv)
+        
+        return local_K * w_arr
+
+    # Vectorized Finite Difference
+    h_norm = np.linalg.norm(h_arr, axis=1)
+    eps_vec = np.maximum(1e-7, 1e-4 * h_norm) # (N,)
+    
     forces = np.zeros_like(h_arr)
     
-    for k in range(n):
-        # Phase 1 改进：自适应步长（相对于点的位置）
-        h_norm = np.linalg.norm(h_arr[k])
-        eps = max(1e-7, 1e-4 * h_norm)
-        
-        for coord in range(3):  # X, Y, T
-            h_plus = h_arr.copy()
-            h_minus = h_arr.copy()
-            h_plus[k, coord] += eps
-            h_minus[k, coord] -= eps
-            
-            I_plus = locked_inertia_hyperboloid(h_plus, w_arr)
-            I_minus = locked_inertia_hyperboloid(h_minus, w_arr)
-            
-            K_plus = 0.5 * xi_vec @ I_plus @ xi_vec
-            K_minus = 0.5 * xi_vec @ I_minus @ xi_vec
-            
-            forces[k, coord] = (K_plus - K_minus) / (2 * eps)
+    # X component
+    h_plus = h_arr.copy(); h_plus[:, 0] += eps_vec
+    h_minus = h_arr.copy(); h_minus[:, 0] -= eps_vec
+    dK_dX = (compute_local_energy(h_plus) - compute_local_energy(h_minus)) / (2 * eps_vec)
     
+    # Y component
+    h_plus = h_arr.copy(); h_plus[:, 1] += eps_vec
+    h_minus = h_arr.copy(); h_minus[:, 1] -= eps_vec
+    dK_dY = (compute_local_energy(h_plus) - compute_local_energy(h_minus)) / (2 * eps_vec)
+    
+    # T component
+    h_plus = h_arr.copy(); h_plus[:, 2] += eps_vec
+    h_minus = h_arr.copy(); h_minus[:, 2] -= eps_vec
+    dK_dT = (compute_local_energy(h_plus) - compute_local_energy(h_minus)) / (2 * eps_vec)
+    
+    forces[:, 0] = dK_dX
+    forces[:, 1] = dK_dY
+    forces[:, 2] = dK_dT
+    
+    # Return gradient (Force is often -gradient, but verify usage. 
+    # Docstring says "Returns gradient ∇_h K".
+    # Simulation adds F_geom = -compute_kinetic_energy_gradient... so the sign here should be gradient +)
     return forces
 
 

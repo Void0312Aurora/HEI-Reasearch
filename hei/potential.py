@@ -134,14 +134,15 @@ class GaussianWellsPotential:
             return float(V_prior)
 
         weight = self._annealed_weight(z_action)
-        # Theoretical Fix: intrinsic width
         width_eff = self.width
         
-        V_wells_sum = 0.0
-        for c in c_flat:
-            dists = np.array([uhp_distance_and_grad(zi, c)[0] for zi in z_flat], dtype=float)
-            wells = np.exp(-(dists**2) / (2 * width_eff**2))
-            V_wells_sum += wells.sum()
+        # Vectorized pair calculation (N, K)
+        z_grid = z_flat[:, np.newaxis]
+        c_grid = c_flat[np.newaxis, :]
+        dists, _ = uhp_distance_and_grad(z_grid, c_grid)
+        
+        wells = np.exp(-(dists**2) / (2 * width_eff**2))
+        V_wells_sum = np.sum(wells)
 
         V_wells = -weight * V_wells_sum
         V_prior, _ = self._global_confinement(z)
@@ -152,18 +153,21 @@ class GaussianWellsPotential:
         z_flat = z.ravel()
         c_flat = self.centers.ravel()
         weight = self._annealed_weight(z_action)
-        # Theoretical Fix: intrinsic width
         width_eff = self.width
         
-        grad_flat = np.zeros_like(z_flat, dtype=np.complex128)
-
-        for i, zi in enumerate(z_flat):
-            accum = 0.0 + 0.0j
-            for c in c_flat:
-                d, grad_d = uhp_distance_and_grad(zi, c)
-                coeff = (d / (width_eff**2)) * np.exp(-(d**2) / (2 * width_eff**2))
-                accum += weight * coeff * grad_d
-            grad_flat[i] = accum
+        # Vectorized pair calculation (N, K)
+        z_grid = z_flat[:, np.newaxis]
+        c_grid = c_flat[np.newaxis, :]
+        
+        # grad_d is d(dist)/dz of shape (N, K)
+        dists, grad_d = uhp_distance_and_grad(z_grid, c_grid)
+        
+        # coeff broadcasted
+        coeff = (dists / (width_eff**2)) * np.exp(-(dists**2) / (2 * width_eff**2))
+        
+        # Sum over centers (axis=1) to get total gradient per particle
+        # shape: (N,)
+        grad_flat = np.sum(weight * coeff * grad_d, axis=1)
 
         grad = grad_flat.reshape(z.shape)
         _, grad_prior = self._global_confinement(z)

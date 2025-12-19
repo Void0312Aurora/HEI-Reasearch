@@ -24,15 +24,34 @@ def poincare_distance_disk(z1: ArrayLike, z2: ArrayLike) -> float:
 
 
 def pairwise_poincare(z: ArrayLike) -> NDArray[np.float64]:
-    """Pairwise Poincaré distances for a 1D array of disk points."""
+    """Pairwise Poincaré distances for a 1D array of disk points (Vectorized)."""
     z_arr = np.asarray(z, dtype=np.complex128).ravel()
-    n = z_arr.shape[0]
-    dist = np.zeros((n, n), dtype=float)
-    for i in range(n):
-        for j in range(i + 1, n):
-            d = poincare_distance_disk(z_arr[i], z_arr[j])
-            dist[i, j] = dist[j, i] = d
-    return dist
+    
+    # Vectorized computation using broadcasting
+    # z_col: (N, 1), z_row: (1, N)
+    z_col = z_arr[:, np.newaxis]
+    z_row = z_arr[np.newaxis, :]
+    
+    # Helper for distance
+    # d = arccosh(1 + 2 * |u-v|^2 / ((1-|u|^2)(1-|v|^2)))
+    
+    # |u - v|^2
+    num = np.abs(z_col - z_row)**2
+    
+    # (1 - |u|^2)
+    # This term depends only on the point itself.
+    # one_minus_sq: (N,)
+    one_minus_sq = 1.0 - np.abs(z_arr)**2
+    # Denom: (N, N) via broadcast
+    # den = (1-|u|^2) * (1-|v|^2)
+    den = np.maximum(one_minus_sq[:, np.newaxis] * one_minus_sq[np.newaxis, :], 1e-12)
+    
+    arg = 1.0 + 2.0 * num / den
+    
+    # Handle floating point inaccuracies
+    arg = np.maximum(arg, 1.0)
+    
+    return np.arccosh(arg)
 
 
 def assign_nearest(z_disk: ArrayLike, anchors_disk: ArrayLike) -> NDArray[np.int_]:

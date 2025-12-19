@@ -43,6 +43,7 @@ def _plot_disk_trajectories(ax: plt.Axes, positions_disk: Iterable[np.ndarray], 
 
 def plot_group_log(
     *,
+    steps: list[int] | None = None,
     energy: list[float],
     xi_norm: list[float],
     potential: list[float],
@@ -69,19 +70,21 @@ def plot_group_log(
     """Plot core diagnostics for the group integrator."""
     fig, axes = plt.subplots(2, 3, figsize=(16, 8))
 
-    axes[0, 0].plot(energy, label="Energy")
+    x_axis = steps if steps is not None else np.arange(len(energy))
+
+    axes[0, 0].plot(x_axis, energy, label="Energy")
     axes[0, 0].set_title("Total energy (per point)")
     axes[0, 0].set_xlabel("Step")
     axes[0, 0].set_ylabel("Energy")
     axes[0, 0].grid(True, alpha=0.3)
 
-    axes[0, 1].plot(xi_norm, color="tab:orange", label="||xi||")
+    axes[0, 1].plot(x_axis, xi_norm, color="tab:orange", label="||xi||")
     axes[0, 1].set_title("xi norm")
     axes[0, 1].set_xlabel("Step")
     axes[0, 1].set_ylabel("Norm")
     axes[0, 1].grid(True, alpha=0.3)
 
-    axes[0, 2].plot(grad_norm, color="tab:green", label="||grad||")
+    axes[0, 2].plot(x_axis, grad_norm, color="tab:green", label="||grad||")
     axes[0, 2].set_title("Gradient norm")
     axes[0, 2].set_xlabel("Step")
     axes[0, 2].set_ylabel("Norm")
@@ -89,7 +92,7 @@ def plot_group_log(
 
     # 绘制势能（左侧y轴）
     ax_left = axes[1, 0]
-    ax_left.plot(potential, label="Potential", color="tab:blue")
+    ax_left.plot(x_axis, potential, label="Potential", color="tab:blue")
     ax_left.set_xlabel("Step")
     ax_left.set_ylabel("Potential energy", color="tab:blue")
     ax_left.tick_params(axis='y', labelcolor="tab:blue")
@@ -97,7 +100,7 @@ def plot_group_log(
     
     # 创建右侧y轴绘制动能
     ax_right = ax_left.twinx()
-    ax_right.plot(kinetic, label="Kinetic", color="tab:orange")
+    ax_right.plot(x_axis, kinetic, label="Kinetic", color="tab:orange")
     ax_right.set_ylabel("Kinetic energy", color="tab:orange")
     ax_right.tick_params(axis='y', labelcolor="tab:orange")
     
@@ -107,7 +110,7 @@ def plot_group_log(
     ax_left.legend(lines_left + lines_right, labels_left + labels_right, loc='upper right')
     ax_left.set_title("Energy components (per point)")
 
-    axes[1, 1].plot(z_series, label="Cumulative z", color="tab:red")
+    axes[1, 1].plot(x_axis, z_series, label="Cumulative z", color="tab:red")
     axes[1, 1].set_title("Contact action Z")
     axes[1, 1].set_xlabel("Step")
     axes[1, 1].set_ylabel("Z")
@@ -125,19 +128,23 @@ def plot_group_log(
     if dt_series or gamma_series or residual_contact or residual_momentum:
         fig_diag, ax_diag = plt.subplots(2, 2, figsize=(10, 6))
         if dt_series:
-            ax_diag[0, 0].plot(dt_series, label="dt")
+            x_diag = steps if (steps is not None and len(steps) == len(dt_series)) else np.arange(len(dt_series))
+            ax_diag[0, 0].plot(x_diag, dt_series, label="dt")
             ax_diag[0, 0].set_title("Step size dt")
             ax_diag[0, 0].grid(True, alpha=0.3)
         if gamma_series:
-            ax_diag[0, 1].plot(gamma_series, label="gamma", color="tab:purple")
+            x_diag = steps if (steps is not None and len(steps) == len(gamma_series)) else np.arange(len(gamma_series))
+            ax_diag[0, 1].plot(x_diag, gamma_series, label="gamma", color="tab:purple")
             ax_diag[0, 1].set_title("Gamma")
             ax_diag[0, 1].grid(True, alpha=0.3)
         if residual_contact:
-            ax_diag[1, 0].plot(residual_contact, label="contact residual", color="tab:red")
+            x_diag = steps if (steps is not None and len(steps) == len(residual_contact)) else np.arange(len(residual_contact))
+            ax_diag[1, 0].plot(x_diag, residual_contact, label="contact residual", color="tab:red")
             ax_diag[1, 0].set_title("Contact residual")
             ax_diag[1, 0].grid(True, alpha=0.3)
         if residual_momentum:
-            ax_diag[1, 1].plot(residual_momentum, label="momentum residual", color="tab:brown")
+            x_diag = steps if (steps is not None and len(steps) == len(residual_momentum)) else np.arange(len(residual_momentum))
+            ax_diag[1, 1].plot(x_diag, residual_momentum, label="momentum residual", color="tab:brown")
             ax_diag[1, 1].set_title("Momentum residual")
             ax_diag[1, 1].grid(True, alpha=0.3)
         fig_diag.tight_layout()
@@ -194,6 +201,7 @@ def main() -> None:
     log = run_simulation_group(potential=pot, config=cfg, rng=rng)
 
     plot_group_log(
+        steps=log.steps,
         energy=log.energy,
         xi_norm=log.xi_norm,
         potential=log.potential,
