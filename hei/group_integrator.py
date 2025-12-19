@@ -32,7 +32,7 @@ from typing import Callable
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from .diamond import aggregate_torque
+from .diamond import aggregate_torque, aggregate_torque_hyperboloid
 from .geometry import (
     cayley_uhp_to_disk,
     cayley_disk_to_uhp,
@@ -46,6 +46,7 @@ from .inertia import (
     invert_inertia,
     locked_inertia_hyperboloid,
     locked_inertia_uhp,
+    compute_kinetic_energy_gradient_hyperboloid,
 )
 from .lie import exp_sl2, mobius_action_matrix, vec_to_matrix, matrix_to_vec
 
@@ -120,18 +121,30 @@ class GroupIntegratorConfig:
     ---------
     公理 4.2（理论基础-3.md）要求：γ(q) ∝ sqrt(λ_max(g(q)))
     "metric" 模式实现了这一要求，提供几何自适应的临界阻尼。
+    
+    诊断配置（Phase 1 新增）：
+    -----------------------
+    verbose: 启用详细诊断输出
+    diagnostic_interval: 诊断输出频率（每N步输出一次）
+    
+    Phase 1 参数调优依据：
+    --------------------
+    max_dt: 0.02 (从0.05降低) - 减小时间步长提高稳定性
+    torque_clip: 30.0 (从50.0降低) - 限制力矩尖峰，防止能量突变
     """
     eps_disp: float = 1e-2              # 位移裁剪阈值
-    max_dt: float = 5e-2                # 最大时间步长
+    max_dt: float = 2e-2                # 最大时间步长（Phase 1: 从5e-2降至2e-2）
     min_dt: float = 1e-5                # 最小时间步长
     fixed_point_iters: int = 2          # 定点迭代次数
     v_floor: float = 1e-6               # 速度下界
     xi_clip: float = 10.0               # xi 范数裁剪
-    torque_clip: float = 50.0           # 力矩裁剪
+    torque_clip: float = 30.0           # 力矩裁剪（Phase 1: 从50.0降至30.0）
     renorm_interval: int = 100          # 群矩阵重正规化间隔
     use_hyperboloid_gamma: bool = True  # 使用 Hyperboloid 阻尼
     gamma_mode: str = "metric"          # 阻尼模式（"metric", "constant", "adaptive"）
     gamma_scale: float = 2.0            # 阻尼缩放
+    verbose: bool = False               # 诊断输出开关（Phase 1）
+    diagnostic_interval: int = 100      # 诊断输出间隔
     
 
 class GroupContactIntegrator:
@@ -196,6 +209,10 @@ class GroupContactIntegrator:
         g_inv = np.linalg.inv(g)
         M = vec_to_matrix(m)
         # Ad^*_{f^{-1}}(M) = f M f^{-1}
+        # Derivation with trace pairing <A, B> = tr(AB):
+        # <Ad_g X, Y> = <gXg^{-1}, Y> = tr(gXg^{-1}Y) = tr(X g^{-1}Yg) = <X, Ad_{g^{-1}}Y>
+        # So Ad^*_g = Ad_{g^{-1}}.
+        # Thus Ad^*_{f^{-1}}(M) = Ad_{(f^{-1})^{-1}}(M) = Ad_f(M) = f M f^{-1}.
         M_new = g @ M @ g_inv
         return matrix_to_vec(M_new)
     
@@ -282,10 +299,19 @@ class GroupContactIntegrator:
         
         流程：
         1. 计算当前位置（惰性求值）
-        2. 在 Hyperboloid 上评估力、阻尼、惯性
-        3. 更新动量（共伴随输运 + 力矩）
+        2. 在 Hyperboloid 上评估势能力、几何力、阻尼、惯性
+        3. 更新动量（共伴随输运 + 总力矩）
         4. 更新群元素（核心！）
         5. 更新接触作用量
+        
+        关键改进：
+        ---------
+        现在包含几何力 F_geom = -∇_h K，这是变惯量系统必需的力。
+        总力矩 = 势能力矩 + 几何力矩
+        
+        Phase 1 诊断增强：
+        ----------------
+        可选的详细诊断输出，用于追踪数值稳定性问题
         """
         cfg = self.config
         self._step_count += 1
@@ -294,9 +320,65 @@ class GroupContactIntegrator:
         z_current = state.z_uhp
         h_current = state.h
         
-        # 2. 计算力和力矩
-        forces = self.force_fn(z_current, state.action)
-        torque = aggregate_torque(z_current, forces)
+        # ============================================================
+        # Phase 1 诊断输出：追踪数值稳定性关键指标
+        # ============================================================
+        if cfg.verbose or (self._step_count % cfg.diagnostic_interval == 0):
+            # 计算惯性特征值（检测λ_max爆炸）
+            I_current = locked_inertia_hyperboloid(h_current)
+            eigvals = np.linalg.eigvalsh(I_current)
+            lambda_min = eigvals[0]
+            lambda_max = eigvals[-1]
+            condition_number = lambda_max / max(lambda_min, 1e-12)
+            
+            # 能量分解
+            T = 0.5 * float(state.xi @ (I_current @ state.xi))
+            V = float(self.potential_fn(z_current, state.action))
+            H_total = T + V
+            
+            # 点集位置统计（Hyperboloid T坐标）
+            if h_current.ndim == 1:
+                T_coords = h_current[2]
+                T_max = T_coords
+                T_mean = T_coords
+                T_min = T_coords
+            else:
+                T_coords = h_current[:, 2]
+                T_max = np.max(T_coords)
+                T_mean = np.mean(T_coords)
+                T_min = np.min(T_coords)
+            
+            # 思维流速范数
+            xi_norm = np.linalg.norm(state.xi)
+            
+            print(f"[Step {self._step_count:5d}] Phase 1 诊断:")
+            print(f"  惯性: λ_min={lambda_min:.2e}, λ_max={lambda_max:.2e}, κ(I)={condition_number:.1f}")
+            print(f"  能量: T={T:.3f}, V={V:.3f}, H={H_total:.3f}")
+            print(f"  位置: T_min={T_min:.3f}, T_mean={T_mean:.3f}, T_max={T_max:.3f}")
+            print(f"  速度: ||ξ||={xi_norm:.3f}, Z={state.action:.3f}")
+            
+            # 警告：检测异常情况
+            if lambda_max > 500:
+                print(f"  ⚠️  警告: λ_max={lambda_max:.1f} 超出正常范围 (预期<200)")
+            if condition_number > 1000:
+                print(f"  ⚠️  警告: 条件数κ(I)={condition_number:.1f} 过大 (预期<100)")
+            if np.isnan(H_total) or np.isinf(H_total):
+                print(f"  ❌ 错误: 能量出现NaN/Inf!")
+        
+        # 2a. 计算势能力和力矩（UHP 坐标系）
+        forces_potential = self.force_fn(z_current, state.action)  # 复数力 (N,)
+        torque_potential = aggregate_torque(z_current, forces_potential)  # (3,)
+        
+        # 2b. 计算几何力和力矩（Hyperboloid 坐标系）✅ 新增
+        # 几何力来自动能对位置的梯度：F_geom = -∇_h K
+        # 这对于变惯量系统是必需的，确保拉格朗日方程完整
+        F_geom_h = -compute_kinetic_energy_gradient_hyperboloid(
+            h_current, state.xi, weights=None
+        )  # (N, 3) 或 (3,)
+        torque_geom = aggregate_torque_hyperboloid(h_current, F_geom_h)  # (3,)
+        
+        # 2c. 总力矩 = 势能力矩 + 几何力矩 ✅ 修改
+        torque = torque_potential + torque_geom
         
         # 力矩裁剪
         torque_norm = float(np.linalg.norm(torque))
@@ -318,14 +400,54 @@ class GroupContactIntegrator:
         m_advected = self._coadjoint_transport(state.xi, m_prev, dt)
         m_new = alpha * m_advected + dt * torque
         
-        # 6. 求解新的思维流速
+        # 6.Fixed-point iteration for implicit solver (Feature Fix)
+        # Initial guess from Explicit Step (already done above sort of)
+        # We start with the 'explicit' guess which uses torque calculated from OLD xi
+        
+        # Initial guess: xi_k^(0) = xi_prev (or better, the result of explicit step?)
+        # The equation is: I(a_k) xi_k = ... + h * Torque(a_k, xi_k)
+        # Note: Torque depends on xi_k via F_geom!    
+        
+        # let's calculate the initial guess explicitly
         xi_new = invert_inertia(I, m_new)
         
-        # xi 裁剪
-        xi_new_norm = float(np.linalg.norm(xi_new))
-        if xi_new_norm > cfg.xi_clip:
-            xi_new = xi_new * (cfg.xi_clip / xi_new_norm)
-            m_new = apply_inertia(I, xi_new)
+        # Let's refine xi_new using fixed point iteration
+        xi_iter = xi_new.copy()
+
+        for _ in range(cfg.fixed_point_iters):
+             # Re-calculate geometric torque using NEW xi estimate
+             F_geom_h = -compute_kinetic_energy_gradient_hyperboloid(
+                h_current, xi_iter, weights=None
+             )
+             torque_geom = aggregate_torque_hyperboloid(h_current, F_geom_h)
+             
+             # Total torque update
+             torque_loop = torque_potential + torque_geom
+             
+             # Clip torque
+             t_norm = float(np.linalg.norm(torque_loop))
+             if t_norm > cfg.torque_clip:
+                 torque_loop = torque_loop * (cfg.torque_clip / t_norm)
+                 
+             # Update momentum (RHS)
+             # m_new = alpha * m_advected + dt * torque_loop
+             # Note: m_advected is constant in this loop? 
+             # Yes, it depends on prev state. rigid.
+             m_loop = alpha * m_advected + dt * torque_loop
+             
+             # Solve for xi
+             xi_next = invert_inertia(I, m_loop)
+             
+             # Clip xi
+             xi_norm = float(np.linalg.norm(xi_next))
+             if xi_norm > cfg.xi_clip:
+                 xi_next = xi_next * (cfg.xi_clip / xi_norm)
+            
+             xi_iter = xi_next
+             
+        # Final result
+        xi_new = xi_iter
+        m_new = apply_inertia(I, xi_new)
         
         # 7. 群更新（核心改进！）
         g_step = exp_sl2(xi_new, dt)

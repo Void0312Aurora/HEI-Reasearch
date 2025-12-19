@@ -306,6 +306,8 @@ def run_simulation_group(
         n_pts = z_current.size
         potential_energy_mean = potential_energy / max(n_pts, 1)
         kinetic_energy = 0.5 * float(state.xi @ (I_current @ state.xi))
+        # 调试：打印动能计算
+        print(f"Step {_}: xi={state.xi}, I_diag={np.diag(I_current)}, K={kinetic_energy}")
         kinetic_energy_mean = kinetic_energy / max(n_pts, 1)
         grad_norm = float(np.linalg.norm(grad_V))
         eigs = np.linalg.eigvalsh(I_current)

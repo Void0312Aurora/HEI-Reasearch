@@ -87,13 +87,25 @@ def plot_group_log(
     axes[0, 2].set_ylabel("Norm")
     axes[0, 2].grid(True, alpha=0.3)
 
-    axes[1, 0].plot(potential, label="Potential", color="tab:blue")
-    axes[1, 0].plot(kinetic, label="Kinetic", color="tab:orange")
-    axes[1, 0].set_title("Energy components (per point)")
-    axes[1, 0].set_xlabel("Step")
-    axes[1, 0].set_ylabel("Energy")
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
+    # 绘制势能（左侧y轴）
+    ax_left = axes[1, 0]
+    ax_left.plot(potential, label="Potential", color="tab:blue")
+    ax_left.set_xlabel("Step")
+    ax_left.set_ylabel("Potential energy", color="tab:blue")
+    ax_left.tick_params(axis='y', labelcolor="tab:blue")
+    ax_left.grid(True, alpha=0.3)
+    
+    # 创建右侧y轴绘制动能
+    ax_right = ax_left.twinx()
+    ax_right.plot(kinetic, label="Kinetic", color="tab:orange")
+    ax_right.set_ylabel("Kinetic energy", color="tab:orange")
+    ax_right.tick_params(axis='y', labelcolor="tab:orange")
+    
+    # 合并图例
+    lines_left, labels_left = ax_left.get_legend_handles_labels()
+    lines_right, labels_right = ax_right.get_legend_handles_labels()
+    ax_left.legend(lines_left + lines_right, labels_left + labels_right, loc='upper right')
+    ax_left.set_title("Energy components (per point)")
 
     axes[1, 1].plot(z_series, label="Cumulative z", color="tab:red")
     axes[1, 1].set_title("Contact action Z")

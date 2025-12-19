@@ -271,7 +271,7 @@ def moment_map_covariance(z_uhp: ArrayLike, weights: ArrayLike | None = None, al
 
 def _compute_hyperboloid_generators(h: NDArray[np.float64]) -> tuple[NDArray, NDArray, NDArray]:
     """
-    计算 Hyperboloid 上点的李代数 so(2,1) 生成元
+    计算 Hyperboloid 上点的李代数 so(2,1) 生成元（带裁剪）
     
     理论依据：
     ---------
@@ -293,14 +293,43 @@ def _compute_hyperboloid_generators(h: NDArray[np.float64]) -> tuple[NDArray, ND
     -----
     在 Hyperboloid 上，X, Y, T 都是有界的（只要点在 H² 内部），
     因此生成元永远不会发散！这与 UHP 中 Im(z) → 0 导致的发散形成对比。
+    
+    数值稳定性：
+    -----------
+    尽管理论上生成元有界，但在点集接近双曲边界时（大双曲半径），
+    生成元的范数仍可能很大，导致惯性张量特征值爆炸。
+    
+    **裁剪策略**（CRITICAL FIX for Phase 1）：
+    - 硬截断模式：限制生成元范数 ≤ GENERATOR_CLIP
+    - 物理意义：防止远离中心的点产生过大的惯性贡献
+    - 理论依据：对应 UHP 版本的裁剪（保持两种坐标系的数值一致性）
     """
+    # Phase 1 紧急修复：生成元裁剪常量（与 UHP 版本一致）
+    GENERATOR_CLIP = 5.0  # 限制特征值爆炸（理论预期 λ_max ~ O(N)）
+    
     X, Y, T = h[..., 0], h[..., 1], h[..., 2]
     
-    # 生成元作用产生的切向量
-    # 形状与输入相同
-    a_J = np.stack([-Y, X, np.zeros_like(X)], axis=-1)      # 旋转
-    a_Kx = np.stack([T, np.zeros_like(T), X], axis=-1)      # x-boost
-    a_Ky = np.stack([np.zeros_like(T), T, Y], axis=-1)      # y-boost
+    # 生成元作用产生的切向量（原始未裁剪）
+    a_J_raw = np.stack([-Y, X, np.zeros_like(X)], axis=-1)      # 旋转
+    a_Kx_raw = np.stack([T, np.zeros_like(T), X], axis=-1)      # x-boost
+    a_Ky_raw = np.stack([np.zeros_like(T), T, Y], axis=-1)      # y-boost
+    
+    # 裁剪函数：限制切向量的 Minkowski 范数
+    def clip_generator(a_vec):
+        """
+        裁剪生成元切向量到最大范数
+        
+        注意：使用欧几里得范数（而非 Minkowski 范数）进行裁剪，
+        因为我们关心的是数值大小，而不是几何意义。
+        """
+        norm = np.linalg.norm(a_vec, axis=-1, keepdims=True)
+        scale = np.minimum(1.0, GENERATOR_CLIP / (norm + 1e-12))
+        return a_vec * scale
+    
+    # 应用裁剪
+    a_J = clip_generator(a_J_raw)
+    a_Kx = clip_generator(a_Kx_raw)
+    a_Ky = clip_generator(a_Ky_raw)
     
     return a_J, a_Kx, a_Ky
 
@@ -400,6 +429,21 @@ def compute_kinetic_energy_gradient_hyperboloid(
     
     计算 ∇_h K = ∇_h (0.5 * ξ^T I(h) ξ)
     
+    数值精度改进（Phase 1 Fix）：
+    ----------------------------
+    使用自适应有限差分步长，而非固定 eps=1e-5
+    
+    理由：
+    1. 精度不足问题：固定步长在大坐标值时相对误差较大
+    2. 自适应步长：eps ∝ ||h|| 提供更好的相对精度
+    3. 能量守恒：更精确的几何力减少数值耗散
+    
+    步长选择策略：
+    - 基础：eps = max(1e-7, 1e-4 * ||h||)
+    - 下界 1e-7：防止步长过小导致舍入误差
+    - 比例因子 1e-4：平衡截断误差和舍入误差
+    - 对每个点独立计算：适应局部几何
+    
     返回：
         形状 (..., 3) 的 Hyperboloid 切向量（力）
     """
@@ -415,11 +459,13 @@ def compute_kinetic_energy_gradient_hyperboloid(
     else:
         w_arr = np.asarray(weights, dtype=float).ravel()
     
-    # 数值微分（使用中心差分）
-    eps = 1e-5
     forces = np.zeros_like(h_arr)
     
     for k in range(n):
+        # Phase 1 改进：自适应步长（相对于点的位置）
+        h_norm = np.linalg.norm(h_arr[k])
+        eps = max(1e-7, 1e-4 * h_norm)
+        
         for coord in range(3):  # X, Y, T
             h_plus = h_arr.copy()
             h_minus = h_arr.copy()
