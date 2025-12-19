@@ -141,7 +141,7 @@ class GroupIntegratorConfig:
     torque_clip: float = 30.0           # 力矩裁剪（Phase 1: 从50.0降至30.0）
     renorm_interval: int = 100          # 群矩阵重正规化间隔
     use_hyperboloid_gamma: bool = True  # 使用 Hyperboloid 阻尼
-    gamma_mode: str = "metric"          # 阻尼模式（"metric", "constant", "adaptive"）
+    gamma_mode: str = "constant"        # Phase 4 fix: "constant" for stability. "metric" caused vanishing gamma at boundary.
     gamma_scale: float = 2.0            # 阻尼缩放
     verbose: bool = False               # 诊断输出开关（Phase 1）
     diagnostic_interval: int = 100      # 诊断输出间隔
@@ -384,7 +384,8 @@ class GroupContactIntegrator:
         torque = torque_potential + torque_geom
         
         # 力矩裁剪
-        torque_norm = float(np.linalg.norm(torque))
+        raw_torque_norm = float(np.linalg.norm(torque))
+        torque_norm = raw_torque_norm
         if torque_norm > cfg.torque_clip:
             torque = torque * (cfg.torque_clip / torque_norm)
             torque_norm = cfg.torque_clip
@@ -395,7 +396,9 @@ class GroupContactIntegrator:
         
         # 4. 计算时间步长
         xi_norm = float(np.linalg.norm(state.xi))
-        dt = self._adaptive_dt(state, torque_norm, xi_norm, gamma)
+        # Fundamental Fix: Adapt dt to the RAW torque, not the clipped torque.
+        # If torque is huge, we must slow down to resolve the dynamics, even if we clip the force applied.
+        dt = self._adaptive_dt(state, raw_torque_norm, xi_norm, gamma)
         
         # 5. 动量更新（Euler-Poincaré）
         alpha = self._alpha(gamma, dt)

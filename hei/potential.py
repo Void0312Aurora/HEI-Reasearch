@@ -111,7 +111,8 @@ class GaussianWellsPotential:
         Harmonic confinement to UHP origin: V = 0.5 * k * d(z, i)^2.
         Returns (potential_sum, gradient array).
         """
-        k_eff = self.prior_stiffness * _curvature_scale(z)
+        # Theoretical Fix: No curvature scaling
+        k_eff = self.prior_stiffness
         origin = 1.0j
         z_flat = z.ravel()
         pot_sum = 0.0
@@ -133,8 +134,9 @@ class GaussianWellsPotential:
             return float(V_prior)
 
         weight = self._annealed_weight(z_action)
-        curv_scale = _curvature_scale(z)
-        width_eff = self.width / max(np.sqrt(curv_scale), 1e-6)
+        # Theoretical Fix: intrinsic width
+        width_eff = self.width
+        
         V_wells_sum = 0.0
         for c in c_flat:
             dists = np.array([uhp_distance_and_grad(zi, c)[0] for zi in z_flat], dtype=float)
@@ -150,8 +152,9 @@ class GaussianWellsPotential:
         z_flat = z.ravel()
         c_flat = self.centers.ravel()
         weight = self._annealed_weight(z_action)
-        curv_scale = _curvature_scale(z)
-        width_eff = self.width / max(np.sqrt(curv_scale), 1e-6)
+        # Theoretical Fix: intrinsic width
+        width_eff = self.width
+        
         grad_flat = np.zeros_like(z_flat, dtype=np.complex128)
 
         for i, zi in enumerate(z_flat):
@@ -273,14 +276,16 @@ class HierarchicalSoftminPotential:
         centers = self.centers # (K,)
         depths = self.depths   # (K,)
         
-        # Broadcasting: z is (1, N), c is (K, 1) -> output (K, N)
-        # However, uhp_distance_and_grad expects inputs that broadcast against each other.
-        # z_flat: (N,), centers: (K,)
-        # We need z_flat[None, :] and centers[:, None]
         
+        # Broadcasting: z is (1, N), c is (K, 1) -> output (K, N)
         d_hyp, grad_hyp = uhp_distance_and_grad(z_flat[None, :], centers[:, None]) # (K, N)
         
         weight_scale = self._anneal_scale(z_action)
+        
+        # Theoretical Fix: Use intrinsic hyperbolic width.
+        # Do NOT scale by curvature/y-coord.
+        # The Hyperbolic distance 'd_hyp' already handles the geometry.
+        # Making width depend on 'z' creates a feedback loop and boundary singularity.
         
         # Vectorized parameters (K, 1)
         width_base = self.base_width / (1.0 + depths) # (K,)
@@ -289,7 +294,19 @@ class HierarchicalSoftminPotential:
         width = width_base[:, None] # (K, 1)
         weight = weight_base[:, None] * weight_scale # (K, 1)
         
-        # distance-adaptive width
+        # Constant intrinsic width
+        # width_eff = width
+        # energy = -self.softmin_scale * d_hyp / np.maximum(width, 1e-8)
+        
+        # BUT: The original code had: energy = -softmin_scale * d / width_eff
+        # And wells used exp(-d^2 / width^2) structure?
+        # Let's check original logic: "width -> width*(1+d_hyp)" for far-field.
+        # The adaptive width (1+d_hyp) is a heuristic for "soft-min" reach, not singularity.
+        # We can keep (1+d_hyp) if desired, or remove it for pure Gaussian.
+        # The *critical* fix is removing '1/sqrt(curv_scale)' from width_base.
+        
+        # Let's keep the (1+d) scaling for now as it's likely a global/local feature interaction choice,
+        # but strictly remove the 'y' dependency.
         width_eff = width * (1.0 + d_hyp) # (K, N)
         denom_width = np.maximum(width_eff, 1e-8)
         
@@ -322,9 +339,12 @@ class HierarchicalSoftminPotential:
         return logits_arr, grads_arr
 
     def _prior_strength(self, z: np.ndarray) -> float:
-        """Scale prior by tree depth and current curvature (via metric factor)."""
+        """Scale prior by tree depth. Remvoe curvature scaling to avoid boundary singularity."""
         depth_scale = max(1.0, float(self.max_depth)) if self.max_depth else 1.0
-        return self.prior_weight * depth_scale * _curvature_scale(z)
+        # Theoretical Fix: Prior should be regular harmonic potential in Hyperbolic space
+        # V = 0.5 * k * d^2.
+        # No need to scale k by 1/y^2.
+        return self.prior_weight * depth_scale
 
     def _compute_gaps(
         self, z_uhp: np.ndarray, soft: np.ndarray
