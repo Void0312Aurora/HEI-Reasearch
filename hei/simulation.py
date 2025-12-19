@@ -41,8 +41,9 @@ class SimulationConfig:
     initial_xi: tuple[float, float, float] = (0.1, 0.0, 0.0)
     force_clip: float | None = None  # clip magnitude of forces/gradients
     use_hyperbolic_centroid: bool = True
-    eps_dt: float = 1e-1  # interpreted as displacement cap in integrator
-    max_dt: float = 5e-2
+    use_hyperbolic_centroid: bool = True
+    eps_dt: float = 0.02  # reduced from 0.1 for stability
+    max_dt: float = 0.02  # reduced from 0.05 for stability
     min_dt: float = 1e-5
     disable_dissipation: bool = False
     v_floor: float = 5e-2
@@ -51,6 +52,7 @@ class SimulationConfig:
     beta_target_bridge: float = 0.25
     beta_min: float = 0.5
     beta_max: float = 3.0
+    use_parent_bias: bool = True
 
 
 @dataclasses.dataclass
@@ -185,7 +187,18 @@ def run_simulation_group(
     cfg = config or SimulationConfig()
     rng = np.random.default_rng() if rng is None else rng
 
-    pot = potential or build_baseline_potential(rng=rng)
+    pot = potential
+    if pot is None:
+        # Check if we should build a hierarchical one or baseline
+        # Default fallback is baseline, but if we want to test hierarchy emergence:
+        # Actually build_baseline_potential returns GaussianWellsPotential which is simpler.
+        # Let's check if the user intended hierarchy.
+        # For compatibility with existing tests, we stick to baseline unless specified?
+        # But wait, run_simulation_group is generic.
+        # Let's update `build_baseline_potential` calls in *tests* primarily.
+        # Here we just use the provided potential.
+        pot = build_baseline_potential(rng=rng)
+    
     if hasattr(pot, "anneal_beta"):
         pot.anneal_beta = 0.0
     

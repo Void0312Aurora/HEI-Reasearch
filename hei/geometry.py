@@ -107,30 +107,47 @@ def cayley_uhp_to_disk(z_uhp: ArrayLike) -> NDArray[np.complex128]:
     return clamp_disk_radius(disk)
 
 
-def uhp_distance_and_grad(z: complex, c: complex, eps: float = 1e-9) -> tuple[float, complex]:
+def uhp_distance_and_grad(z: ArrayLike, c: ArrayLike, eps: float = 1e-9) -> tuple[NDArray[np.float64], NDArray[np.complex128]]:
     """
     Hyperbolic distance on UHP and its gradient w.r.t z (real + i imag).
-
+    Vectorized version supporting broadcasting.
+    
     d = arcosh(1 + |z-c|^2 / (2 Im z Im c)).
     Returns (distance, grad_z) where grad_z = dd/dx + i dd/dy.
     """
-    x, y = float(np.real(z)), float(np.imag(z))
-    u, v = float(np.real(c)), float(np.imag(c))
-    y = max(y, eps)
-    v = max(v, eps)
+    z_arr = np.asarray(z, dtype=np.complex128)
+    c_arr = np.asarray(c, dtype=np.complex128)
+    
+    x, y = np.real(z_arr), np.imag(z_arr)
+    u, v = np.real(c_arr), np.imag(c_arr)
+    
+    y = np.maximum(y, eps)
+    v = np.maximum(v, eps)
 
     dx = x - u
     dy = y - v
-    denom = max(2.0 * y * v, eps)
+    
+    denom = np.maximum(2.0 * y * v, eps)
     num = dx * dx + dy * dy
     A = num / denom
-    uval = max(1.0 + A, 1.0 + eps)
-    d = float(np.arccosh(uval))
+    
+    uval = np.maximum(1.0 + A, 1.0 + eps)
+    d = np.arccosh(uval)
+    
     # derivative of acosh(u) = 1/sqrt(u^2 - 1) = 1/sqrt(A(A+2))
-    common = 1.0 / np.sqrt(max(A * (A + 2.0), eps))
-    dA_dx = dx / (y * v)
-    dA_dy = dy / (y * v) - num / (2.0 * y * y * v)
-    grad = complex(common * dA_dx, common * dA_dy)
+    term = np.sqrt(np.maximum(A * (A + 2.0), eps))
+    common = 1.0 / term
+    
+    # dA/dx = 2*dx / denom
+    # dA/dy = 2*dy / denom - num / (denom * y) = 2*dy/denom - A/y
+    
+    dA_dx = (2.0 * dx) / denom
+    dA_dy = (2.0 * dy) / denom - A / y
+    
+    grad_real = common * dA_dx
+    grad_imag = common * dA_dy
+    
+    grad = grad_real + 1j * grad_imag
     return d, grad
 
 

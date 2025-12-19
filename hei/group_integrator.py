@@ -145,6 +145,9 @@ class GroupIntegratorConfig:
     gamma_scale: float = 2.0            # 阻尼缩放
     verbose: bool = False               # 诊断输出开关（Phase 1）
     diagnostic_interval: int = 100      # 诊断输出间隔
+    implicit_potential: bool = True     # Phase 2: semi-implicit potential evaluation
+    solver_mixing: float = 0.5          # Phase 3: Fixed-point relaxation (0.1-0.5 recommended for stiff)
+
     
 
 class GroupContactIntegrator:
@@ -398,7 +401,23 @@ class GroupContactIntegrator:
         alpha = self._alpha(gamma, dt)
         m_prev = state.m if state.m is not None else apply_inertia(I, state.xi)
         m_advected = self._coadjoint_transport(state.xi, m_prev, dt)
-        m_new = alpha * m_advected + dt * torque
+        
+        # 理论修正：力矩项需乘以 (1 + h*gamma/2) 因子
+        # Eq 67: mu_k = (1 - h*gamma/2) Ad* + h * (1 + h*gamma/2) * J
+        # alpha = (1 - h*gamma/2) / (1 + h*gamma/2)
+        # 所以 m_new = alpha * (1 + h*gamma/2) * Ad* + h * (1 + h*gamma/2) * J
+        #           = (1 - h*gamma/2) * Ad* + ...
+        # 但代码中 alpha 是与 Ad* 相乘的，我们保留 alpha 的定义，手动给力矩项加因子
+        # 注意：这里我们让 alpha 保持原样，那么我们需要给整个式子乘以 denom 吗？
+        # 不，最好的方式是重写这一行以完全匹配理论
+        
+        # 修正逻辑：
+        # denom = 1.0 + 0.5 * dt * gamma
+        # m_new = (1.0 - 0.5 * dt * gamma) * m_advected + dt * denom * torque
+        
+        # 兼容现有 alpha 写法：
+        denom = 1.0 + 0.5 * dt * gamma
+        m_new = alpha * denom * m_advected + dt * denom * torque
         
         # 6.Fixed-point iteration for implicit solver (Feature Fix)
         # Initial guess from Explicit Step (already done above sort of)
@@ -421,8 +440,22 @@ class GroupContactIntegrator:
              )
              torque_geom = aggregate_torque_hyperboloid(h_current, F_geom_h)
              
+             # Phase 2 Fundamental Fix: Implicit Potential
+             # 对于刚性势场，必须隐式求解势能梯度，否则显式积分会爆炸
+             # 我们使用中点规则：在 z_mid = exp(xi * dt/2) * z_current 处评估力
+             t_pot = torque_potential  # default to explicit
+             if cfg.implicit_potential:
+                 # Midpoint approximation
+                 g_mid = exp_sl2(xi_iter, 0.5 * dt)
+                 # Note: applying group action is relatively cheap compared to potential grad?
+                 # Actually potential grad is expensive. But for stability we must pay.
+                 # Optimization: only re-eval every other iter? For now, full rigorous implicit.
+                 z_mid = mobius_action_matrix(g_mid, z_current)
+                 f_pot_mid = self.force_fn(z_mid, state.action)
+                 t_pot = aggregate_torque(z_mid, f_pot_mid)
+             
              # Total torque update
-             torque_loop = torque_potential + torque_geom
+             torque_loop = t_pot + torque_geom
              
              # Clip torque
              t_norm = float(np.linalg.norm(torque_loop))
@@ -430,10 +463,9 @@ class GroupContactIntegrator:
                  torque_loop = torque_loop * (cfg.torque_clip / t_norm)
                  
              # Update momentum (RHS)
-             # m_new = alpha * m_advected + dt * torque_loop
-             # Note: m_advected is constant in this loop? 
-             # Yes, it depends on prev state. rigid.
-             m_loop = alpha * m_advected + dt * torque_loop
+             # m_new = alpha * denom * m_advected + dt * denom * torque_loop
+             denom = 1.0 + 0.5 * dt * gamma
+             m_loop = alpha * denom * m_advected + dt * denom * torque_loop
              
              # Solve for xi
              xi_next = invert_inertia(I, m_loop)
@@ -443,7 +475,11 @@ class GroupContactIntegrator:
              if xi_norm > cfg.xi_clip:
                  xi_next = xi_next * (cfg.xi_clip / xi_norm)
             
-             xi_iter = xi_next
+             # Relaxed update (Under-relaxation)
+             # 对于刚性系统，直接迭代 xi_{k+1} = G(xi_k) 容易发散
+             # 使用混合更新: xi = (1-beta)*old + beta*new
+             beta = cfg.solver_mixing
+             xi_iter = (1.0 - beta) * xi_iter + beta * xi_next
              
         # Final result
         xi_new = xi_iter

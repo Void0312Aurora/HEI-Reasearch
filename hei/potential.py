@@ -45,6 +45,50 @@ class PotentialOracle(Protocol):
 
 
 @dataclasses.dataclass
+class SimpleHarmonicPotential:
+    """
+    简单双曲调和势：用于验证积分器动力学
+    
+    理论预期：
+    ---------
+    1. 能量单调下降（接触耗散）
+    2. 点集收敛到势阱中心（勒让德子流形）
+    3. 动量趋于零
+    
+    势能形式：
+        V(z) = 0.5 * k * Σ_i d(z_i, center)²
+    
+    其中 d 是双曲距离。这是最简单的势场，便于与解析解对比。
+    
+    参数：
+        center: 势阱中心（UHP 坐标，默认 1j = 原点）
+        stiffness: 弹性系数 k
+    """
+    center: complex = 1.0j
+    stiffness: float = 1.0
+    
+    def potential(self, z_uhp: ArrayLike, z_action: float | None = None) -> float:
+        z = np.asarray(z_uhp, dtype=np.complex128).ravel()
+        total = 0.0
+        for zi in z:
+            d, _ = uhp_distance_and_grad(zi, self.center)
+            total += 0.5 * self.stiffness * (d ** 2)
+        return float(total)
+    
+    def dV_dz(self, z_uhp: ArrayLike, z_action: float | None = None) -> NDArray[np.complex128]:
+        z = np.asarray(z_uhp, dtype=np.complex128)
+        z_flat = z.ravel()
+        grad = np.zeros_like(z_flat, dtype=np.complex128)
+        for i, zi in enumerate(z_flat):
+            d, g_d = uhp_distance_and_grad(zi, self.center)
+            grad[i] = self.stiffness * d * g_d
+        return grad.reshape(z.shape)
+    
+    def gradient(self, z_uhp: ArrayLike, z_action: float | None = None) -> NDArray[np.complex128]:
+        return self.dV_dz(z_uhp, z_action)
+
+
+@dataclasses.dataclass
 class GaussianWellsPotential:
     """
     Gaussian wells + global hyperbolic confinement to keep points from escaping.
@@ -180,9 +224,12 @@ class HierarchicalSoftminPotential:
     signal_scale: float = 1.0
     use_signal: bool = False  # default to pure self-organization (no point-level bias)
     prior_weight: float = 0.1  # global confining harmonic prior base weight (milder confinement)
+    use_parent_bias: bool = True  # whether to use "cheating" parent overlap bias
 
     def _path_overlap_bias(self, idx: int, ref: int = 0) -> float:
         """Bias favoring anchors sharing ancestor with ref anchor."""
+        if not self.use_parent_bias:
+            return 0.0
         if self.parents is None:
             return 0.0
         if idx >= len(self.parents) or ref >= len(self.parents):
@@ -221,36 +268,57 @@ class HierarchicalSoftminPotential:
         return weights / (weights.sum(axis=0, keepdims=True) + 1e-12)
 
     def _well_scores(self, z: np.ndarray, z_action: float | None) -> tuple[np.ndarray, np.ndarray]:
-        """Compute soft-min logits and their gradients for each point."""
-        logits = []
-        grads = []
+        """Compute soft-min logits and their gradients for each point. Vectorized version."""
+        z_flat = z.ravel()  # (N,)
+        centers = self.centers # (K,)
+        depths = self.depths   # (K,)
+        
+        # Broadcasting: z is (1, N), c is (K, 1) -> output (K, N)
+        # However, uhp_distance_and_grad expects inputs that broadcast against each other.
+        # z_flat: (N,), centers: (K,)
+        # We need z_flat[None, :] and centers[:, None]
+        
+        d_hyp, grad_hyp = uhp_distance_and_grad(z_flat[None, :], centers[:, None]) # (K, N)
+        
         weight_scale = self._anneal_scale(z_action)
-        for idx, (c, d) in enumerate(zip(self.centers, self.depths)):
-            width = self.base_width / (1 + d)
-            weight = self.base_weight * (1 + d) * weight_scale
-            d_hyp = np.zeros_like(z, dtype=float)
-            grad_hyp = np.zeros_like(z, dtype=np.complex128)
-            it = np.nditer(z, flags=["multi_index"])
-            while not it.finished:
-                val = complex(it[0])
-                dist, grad = uhp_distance_and_grad(val, c)
-                d_hyp[it.multi_index] = dist
-                grad_hyp[it.multi_index] = grad
-                it.iternext()
-            # distance-adaptive width to reduce far-field pulling: width -> width*(1 + d_hyp)
-            width_eff = width * (1.0 + d_hyp)
-            energy = -self.softmin_scale * d_hyp / np.maximum(width_eff, 1e-8)
-            bias = self._path_overlap_bias(idx, 0)
-            logit = np.log(weight + 1e-12) + self.beta * (energy + bias)
-            if self.use_signal and self.point_logit_bias is not None:
-                logit = logit + self.signal_scale * self.point_logit_bias[idx]
-            logits.append(logit)
-            # dE/dd = -softmin_scale * (1 + d_hyp)^{-2} / width
-            grad_coeff = -self.softmin_scale / (width * np.maximum((1.0 + d_hyp) ** 2, 1e-8))
-            grads.append(self.beta * (grad_coeff * grad_hyp))
-        logits_arr = np.stack(logits)  # (K, ...)
-        logits_arr = np.clip(logits_arr, -50, 50)  # avoid overflow
-        grads_arr = np.stack(grads)  # (K, ...)
+        
+        # Vectorized parameters (K, 1)
+        width_base = self.base_width / (1.0 + depths) # (K,)
+        weight_base = self.base_weight * (1.0 + depths) # (K,)
+        
+        width = width_base[:, None] # (K, 1)
+        weight = weight_base[:, None] * weight_scale # (K, 1)
+        
+        # distance-adaptive width
+        width_eff = width * (1.0 + d_hyp) # (K, N)
+        denom_width = np.maximum(width_eff, 1e-8)
+        
+        energy = -self.softmin_scale * d_hyp / denom_width
+        
+        # Vectorized bias
+        # _path_overlap_bias(idx, 0) depends only on idx (centers index)
+        # We can precompute this or compute it vectorially? 
+        # Since _path_overlap_bias is simple, let's map it.
+        # But wait, it's (idx vs ref=0). It's constant for each center.
+        # We can implement a vectorized helper or list comp is fine for K (K is usually small, N is large).
+        # We assume K is not huge.
+        bias_vals = np.array([self._path_overlap_bias(i, 0) for i in range(len(centers))]) # (K,)
+        bias = bias_vals[:, None]
+        
+        logit = np.log(weight + 1e-12) + self.beta * (energy + bias)
+        
+        if self.use_signal and self.point_logit_bias is not None:
+             # point_logit_bias is (K, N)
+             logit = logit + self.signal_scale * self.point_logit_bias
+             
+        # dE/dd = -softmin_scale * (1 + d_hyp)^{-2} / width
+        grad_coeff = -self.softmin_scale / (width * np.maximum((1.0 + d_hyp) ** 2, 1e-8))
+        grads = self.beta * (grad_coeff * grad_hyp)
+        
+        # Clip logits
+        logits_arr = np.clip(logit, -50, 50)
+        grads_arr = grads
+        
         return logits_arr, grads_arr
 
     def _prior_strength(self, z: np.ndarray) -> float:
@@ -355,13 +423,21 @@ class HierarchicalSoftminPotential:
         V_rep = 0.0
         if self.repulsion_weight > 0:
             z_flat = z.ravel()
-            n = z_flat.shape[0]
-            for i in range(n):
-                for j in range(i + 1, n):
-                    d, _ = uhp_distance_and_grad(z_flat[i], z_flat[j])
-                    eps2 = self.repulsion_eps * self.repulsion_eps
-                    V_rep += 1.0 / np.power(d * d + eps2, 0.5 * self.repulsion_p)
-            V_rep *= self.repulsion_weight
+            # Vectorized Repulsion (N, N)
+            # This computes d_ij for all i, j.
+            # We only want sum_{i<j} V(d_ij).
+            # The full matrix has d_ij and d_ji (symmetric).
+            # We can sum whole matrix (excluding diag) and divide by 2?
+            # V(d) is symmetric.
+            dist_mat, _ = uhp_distance_and_grad(z_flat[:, None], z_flat[None, :])
+            eps2 = self.repulsion_eps * self.repulsion_eps
+            # V_ij = 1 / (d^2 + eps^2)^(p/2)
+            energies = 1.0 / np.power(dist_mat * dist_mat + eps2, 0.5 * self.repulsion_p)
+            
+            # Mask diagonal
+            np.fill_diagonal(energies, 0.0)
+            
+            V_rep = float(0.5 * np.sum(energies)) * self.repulsion_weight
 
         # entropy hardening over sibling groups (using path min gap)
         soft = self._soft_assign(logits)
@@ -380,14 +456,9 @@ class HierarchicalSoftminPotential:
         V_prior = 0.0
         if self.prior_weight > 0:
             center_uhp = 1.0j
-            dists_origin = []
-            it = np.nditer(z, flags=["multi_index"])
-            while not it.finished:
-                val = complex(it[0])
-                d, _ = uhp_distance_and_grad(val, center_uhp)
-                dists_origin.append(d * d)
-                it.iternext()
-            V_prior = 0.5 * self._prior_strength(z) * sum(dists_origin)
+            d, _ = uhp_distance_and_grad(z, center_uhp)
+            dists_origin = d * d
+            V_prior = 0.5 * self._prior_strength(z) * np.sum(dists_origin)
 
         return float(V_wells + V_rep + lam * H_sib + V_prior)
 
@@ -399,18 +470,24 @@ class HierarchicalSoftminPotential:
 
         if self.repulsion_weight > 0:
             z_flat = z.ravel()
-            n = z_flat.shape[0]
-            rep_grad = np.zeros_like(z_flat, dtype=np.complex128)
-            for i in range(n):
-                for j in range(i + 1, n):
-                    d, grad_ij = uhp_distance_and_grad(z_flat[i], z_flat[j])
-                    eps2 = self.repulsion_eps * self.repulsion_eps
-                    base = np.power(d * d + eps2, 0.5 * self.repulsion_p + 1)
-                    coeff = -self.repulsion_p * d / base
-                    rep_grad[i] += coeff * grad_ij
-                    rep_grad[j] -= coeff * grad_ij
-            rep_grad = rep_grad.reshape(z.shape)
-            grad_wells += self.repulsion_weight * rep_grad
+            # Vectorized Repulsion (N, N)
+            dist_mat, grad_mat = uhp_distance_and_grad(z_flat[:, None], z_flat[None, :])
+            
+            eps2 = self.repulsion_eps * self.repulsion_eps
+            base = np.power(dist_mat * dist_mat + eps2, 0.5 * self.repulsion_p + 1)
+            coeff = -self.repulsion_p * dist_mat / base # (N, N)
+            
+            # The force on i depends on sum_j (coeff_ij * grad_ij)
+            # For i != j. For i=j, dist=0, coeff=0 (if properly handled).
+            # grad_ij is grad of d(z_i, z_j) wrt z_i.
+            
+            # Check for i=j
+            np.fill_diagonal(coeff, 0.0) 
+            
+            rep_force = np.sum(coeff * grad_mat, axis=1) # (N,)
+            
+            # Reshape adds explicitly
+            grad_wells += self.repulsion_weight * rep_force.reshape(z.shape)
 
         # entropy hardening gradient
         lam = self.current_lambda
@@ -434,12 +511,9 @@ class HierarchicalSoftminPotential:
         grad_prior = np.zeros_like(z, dtype=np.complex128)
         if self.prior_weight > 0:
             center_uhp = 1.0j
-            it = np.nditer(z, flags=["multi_index"])
-            while not it.finished:
-                val = complex(it[0])
-                d, g_d = uhp_distance_and_grad(val, center_uhp)
-                grad_prior[it.multi_index] = self._prior_strength(z) * d * g_d
-                it.iternext()
+            d, g_d = uhp_distance_and_grad(z, center_uhp)
+            grad_prior = self._prior_strength(z) * d * g_d
+            grad_prior = grad_prior.reshape(z.shape)
 
         return grad_wells + grad_prior
 
@@ -461,17 +535,14 @@ class HierarchicalSoftminPotential:
         rep_grad = 0.0
         if self.repulsion_weight > 0:
             z_flat = z.ravel()
-            n = z_flat.shape[0]
-            rep_grad = np.zeros_like(z_flat, dtype=np.complex128)
-            for i in range(n):
-                for j in range(i + 1, n):
-                    d, grad_ij = uhp_distance_and_grad(z_flat[i], z_flat[j])
-                    eps2 = self.repulsion_eps * self.repulsion_eps
-                    base = np.power(d * d + eps2, 0.5 * self.repulsion_p + 1)
-                    coeff = -self.repulsion_p * d / base
-                    rep_grad[i] += coeff * grad_ij
-                    rep_grad[j] -= coeff * grad_ij
-            rep_grad = rep_grad.reshape(z.shape)
+            dist_mat, grad_mat = uhp_distance_and_grad(z_flat[:, None], z_flat[None, :])
+            eps2 = self.repulsion_eps * self.repulsion_eps
+            base = np.power(dist_mat * dist_mat + eps2, 0.5 * self.repulsion_p + 1)
+            coeff = -self.repulsion_p * dist_mat / base
+            np.fill_diagonal(coeff, 0.0)
+            rep_force = np.sum(coeff * grad_mat, axis=1)
+            
+            rep_grad = rep_force.reshape(z.shape)
             grad_align = grad_align + self.repulsion_weight * rep_grad
 
         gaps = self._compute_gaps(z, soft)
@@ -492,12 +563,8 @@ class HierarchicalSoftminPotential:
                 grad_entropy = np.sum(dV_dlogits * grads, axis=0)
         if self.prior_weight > 0:
             center_uhp = 1.0j
-            it = np.nditer(z, flags=["multi_index"])
-            while not it.finished:
-                val = complex(it[0])
-                d, g_d = uhp_distance_and_grad(val, center_uhp)
-                grad_prior[it.multi_index] = self._prior_strength(z) * d * g_d
-                it.iternext()
+            d, g_d = uhp_distance_and_grad(z, center_uhp)
+            grad_prior = self._prior_strength(z) * d * g_d
 
         grad_total = grad_align + grad_entropy + grad_prior
         return {
@@ -662,6 +729,7 @@ def build_hierarchical_potential(
     obs_noise: float = 0.3,
     rng: np.random.Generator | None = None,
     use_signal: bool = False,
+    use_parent_bias: bool = True,
 ) -> HierarchicalSoftminPotential:
     """
     Build a hierarchical V_FEP(a,S) oracle.
@@ -732,6 +800,7 @@ def build_hierarchical_potential(
         point_logit_bias=point_logit_bias,
         point_leaf_ids=point_leaf_ids,
         use_signal=use_signal,
+        use_parent_bias=use_parent_bias,
     )
 
 
