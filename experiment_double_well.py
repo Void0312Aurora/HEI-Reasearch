@@ -217,63 +217,74 @@ def run_double_well():
     print("Running Adam...")
     adam_energies, _ = run_adam_baseline(pot, z_init, steps=steps, lr=0.05)
     
-    # 5. Momentum SGD (Euclidean)
-    print("Running Momentum SGD...")
+    # 5. Nesterov Accelerated Gradient (NAG)
+    print("Running NAG...")
     z_curr = z_init.copy().ravel()
-    mom_energies = []
+    nag_energies = []
     v = np.zeros_like(z_curr)
-    mu = 0.9 # High momentum
+    mu = 0.9 
     lr = 0.05
     
     for i in range(steps):
-        grad = pot.gradient(z_curr).ravel()
+        # Lookahead gradient
+        z_lookahead = z_curr + mu * v
+        grad = pot.gradient(z_lookahead).ravel()
         v = mu * v - lr * grad
         z_curr = z_curr + v
         if z_curr.imag < 1e-4: z_curr = z_curr.real + 1e-4j
         if i % 10 == 0:
-            mom_energies.append(pot.potential(z_curr))
+            nag_energies.append(pot.potential(z_curr))
             
-    # 6. Riemannian SGD (Natural Gradient)
-    # Update: z = z - lr * (y^2) * grad
-    print("Running Riemannian SGD...")
+    # 6. Euclidean Hamiltonian Dynamics (EHD) - The "Fair" Competitor
+    # Solves z'' = -grad V - gamma * z' in Euclidean space.
+    # Same dt and gamma as HEI.
+    print("Running Euclidean Dynamics (Gamma=0.01)...")
     z_curr = z_init.copy().ravel()
-    rsgd_energies = []
-    lr = 0.01 # Smaller LR needed due to y^2 scaling
+    vel = np.zeros_like(z_curr) # Start at rest
+    ehd_energies = []
+    
+    dt = 0.01 # Matching HEI max_dt
+    gamma = 0.01 # Matching HEI
     
     for i in range(steps):
-        grad = pot.gradient(z_curr).ravel()
-        # Metric inverse factor y^2
-        y = z_curr.imag
-        grad_riem = (y**2) * grad
+        # Semi-implicit Euler or Velocity Verlet
+        # v += (-grad - gamma*v) * dt
+        # z += v * dt
         
-        z_curr = z_curr - lr * grad_riem
-        if z_curr.imag < 1e-4: z_curr = z_curr.real + 1e-4j
+        grad = pot.gradient(z_curr).ravel()
+        acc = -grad - gamma * vel
+        vel = vel + acc * dt
+        z_curr = z_curr + vel * dt
+        
+        if z_curr.imag < 1e-4: 
+            z_curr = z_curr.real + 1e-4j
+            vel.imag = 0 # Bounce/Stick? Stick for safety.
+            
         if i % 10 == 0:
-            rsgd_energies.append(pot.potential(z_curr))
+            ehd_energies.append(pot.potential(z_curr))
 
     # Plot results
     plt.figure(figsize=(12, 5))
     
     # Subplot 1: Energies
     plt.subplot(1, 2, 1)
-    plt.plot(hei_energies, label='HEI', linewidth=2)
-    plt.plot(sgd_energies, label='SGD', alpha=0.5)
-    plt.plot(adam_energies, label='Adam', alpha=0.5)
-    plt.plot(mom_energies, label='Momentum SGD', linestyle='--')
-    plt.plot(rsgd_energies, label='Riemannian SGD', linestyle=':')
+    plt.plot(hei_energies, label='HEI (Hyp+Inertia)', linewidth=2, color='blue')
+    plt.plot(nag_energies, label='NAG', linestyle='--', color='orange')
+    plt.plot(ehd_energies, label='EHD (Euc+Inertia)', linestyle='-', color='purple')
+    plt.plot(sgd_energies, label='SGD', alpha=0.3, color='grey')
+    plt.plot(adam_energies, label='Adam', alpha=0.3, color='brown')
     
-    plt.axhline(-pot.A_l, color='r', linestyle='--', label='Local Min Level')
-    plt.axhline(-pot.A_g, color='g', linestyle='--', label='Global Min Level')
+    plt.axhline(-pot.A_l, color='r', linestyle=':', label='Local Min')
+    plt.axhline(-pot.A_g, color='g', linestyle=':', label='Global Min')
     plt.legend()
-    plt.title('Fairness Check: HEI vs Baselines')
+    plt.title('Rigorous Fairness Check (Low Damping)')
     plt.xlabel('Steps/10')
     plt.grid(True, alpha=0.3)
     
     # Subplot 2: Trajectories
     plt.subplot(1, 2, 2)
     hei_p = np.array(hei_path)
-    # Re-run baselines to get paths? simplified just plotting HEI vs traps
-    # actually let's skip paths for baselines to avoid clutter, focus on ENERGY.
+    
     plt.plot(hei_p.real, hei_p.imag, label='HEI', alpha=0.7)
     
     plt.scatter([pot.mu_g.real], [pot.mu_g.imag], c='g', marker='*', s=200, label='Global')
@@ -285,13 +296,13 @@ def run_double_well():
     plt.xlim(-2, 2)
     plt.ylim(0, 11)
     
-    plt.savefig('double_well_fairness.png')
+    plt.savefig('double_well_fairness_v2.png')
     
     print(f"Final E - HEI: {hei_energies[-1]:.4f}")
+    print(f"Final E - NAG: {nag_energies[-1]:.4f}")
+    print(f"Final E - EHD: {ehd_energies[-1]:.4f}")
     print(f"Final E - SGD: {sgd_energies[-1]:.4f}")
     print(f"Final E - Adam: {adam_energies[-1]:.4f}")
-    print(f"Final E - MomSGD: {mom_energies[-1]:.4f}")
-    print(f"Final E - RSGD: {rsgd_energies[-1]:.4f}")
 
 if __name__ == "__main__":
     run_double_well()
