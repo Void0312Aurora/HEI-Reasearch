@@ -47,6 +47,7 @@ from .inertia import (
     locked_inertia_hyperboloid,
     locked_inertia_uhp,
     compute_kinetic_energy_gradient_hyperboloid,
+    riemannian_inertia,
 )
 from .lie import exp_sl2, mobius_action_matrix, vec_to_matrix, matrix_to_vec
 
@@ -147,6 +148,7 @@ class GroupIntegratorConfig:
     diagnostic_interval: int = 100      # 诊断输出间隔
     implicit_potential: bool = True     # Phase 2: semi-implicit potential evaluation
     solver_mixing: float = 0.5          # Phase 3: Fixed-point relaxation (0.1-0.5 recommended for stiff)
+    use_riemannian_inertia: bool = True # Phase 6: Use Riemannian Point Mass (Constant Identity)
 
     
 
@@ -284,6 +286,7 @@ class GroupContactIntegrator:
         torque_norm: float,
         xi_norm: float,
         gamma: float,
+        I_min: float, # [NEW] Pass I_min explicitly
     ) -> float:
         """
         自适应时间步长
@@ -299,7 +302,7 @@ class GroupContactIntegrator:
         dt_vel = cfg.eps_disp / max(xi_norm, 1e-9)
         
         # 加速度约束
-        I_min = max(np.linalg.eigvalsh(state.I).min(), 1e-6)
+        # I_min passed from outside to ensure consistency with Riemannian mode
         dt_acc = cfg.eps_disp / max(torque_norm / I_min, 1e-9)
         
         # 阻尼约束
@@ -342,7 +345,12 @@ class GroupContactIntegrator:
         # ============================================================
         if cfg.verbose or (self._step_count % cfg.diagnostic_interval == 0):
             # 计算惯性特征值（检测λ_max爆炸）
-            I_current = locked_inertia_hyperboloid(h_current)
+            if getattr(cfg, 'use_riemannian_inertia', True):
+                # Riemannian mode: I is constant
+                I_current = riemannian_inertia(h_current, mass=1.0)
+            else:
+                I_current = locked_inertia_hyperboloid(h_current)
+                
             eigvals = np.linalg.eigvalsh(I_current)
             lambda_min = np.min(eigvals)
             lambda_max = np.max(eigvals)
@@ -360,19 +368,32 @@ class GroupContactIntegrator:
             # 点集位置统计（Hyperboloid T坐标）
             if h_current.ndim == 1:
                 T_coords = h_current[2]
-                T_max = T_coords
-                T_mean = T_coords
-                T_min = T_coords
             else:
                 T_coords = h_current[:, 2]
-                T_max = np.max(T_coords)
-                T_mean = np.mean(T_coords)
-                T_min = np.min(T_coords)
+                
+            T_max = np.max(T_coords)
+            T_mean = np.mean(T_coords)
+            T_min = np.min(T_coords)
             
             # 思维流速范数
             xi_norm = np.linalg.norm(state.xi)
             
             print(f"[Step {self._step_count:5d}] Phase 1 诊断:")
+            # Use the dt from the previous step or approximate?
+            # compute_adaptive_step is called at start of step.
+            # We can't easily access the exact dt used *this* step inside this block
+            # because dt is computed *after* this diagnosis block in the current verify implementation?
+            # Wait, let's check step implementation.
+            # step() calls:
+            #   1. Diagnosis (Current z, h)
+            #   2. Force/Torque calc
+            #   3. Adaptive dt calc
+            #   4. Integrate
+            # So we can't print current dt. behavior.
+            # We can only guess based on force?
+            # Or assume it's similar to previous?
+            pass
+            
             print(f"  惯性: λ_min={lambda_min:.2e}, λ_max={lambda_max:.2e}, κ(I)={condition_number:.1f}")
             print(f"  能量: T={T:.3f}, V={V:.3f}, H={H_total:.3f}")
             print(f"  位置: T_min={T_min:.3f}, T_mean={T_mean:.3f}, T_max={T_max:.3f}")
@@ -394,8 +415,10 @@ class GroupContactIntegrator:
         # 2b. 计算几何力和力矩（Hyperboloid 坐标系）✅ 新增
         # 几何力来自动能对位置的梯度：F_geom = -∇_h K
         # 这对于变惯量系统是必需的，确保拉格朗日方程完整
+        use_riemannian = getattr(cfg, 'use_riemannian_inertia', True)
+        
         F_geom_h = -compute_kinetic_energy_gradient_hyperboloid(
-            h_current, state.xi, weights=None
+            h_current, state.xi, weights=None, is_riemannian=use_riemannian
         )  # (N, 3) 或 (3,)
         torque_geom = aggregate_torque_hyperboloid(h_current, F_geom_h, sum_torque=not use_batch)
         
@@ -411,13 +434,27 @@ class GroupContactIntegrator:
         
         # 3. 计算阻尼和惯性（使用 Hyperboloid）
         gamma = self._compute_gamma(state)
-        I = locked_inertia_hyperboloid(h_current)
+        if getattr(cfg, 'use_riemannian_inertia', True):
+            I = riemannian_inertia(h_current, mass=1.0)
+        else:
+            I = locked_inertia_hyperboloid(h_current)
+        
+        # Calculate I_min for adaptive step
+        # Note: I might be (N, 3, 3). eigvalsh works on last two dims.
+        I_vals = np.linalg.eigvalsh(I)
+        I_min_val = float(np.min(I_vals))
         
         # 4. 计算时间步长
         xi_norm = float(np.linalg.norm(state.xi))
         # Fundamental Fix: Adapt dt to the RAW torque, not the clipped torque.
         # If torque is huge, we must slow down to resolve the dynamics, even if we clip the force applied.
-        dt = self._adaptive_dt(state, raw_torque_norm, xi_norm, gamma)
+        dt = self._adaptive_dt(state, raw_torque_norm, xi_norm, gamma, I_min_val)
+        
+        # Debug DT
+        if cfg.verbose or (self._step_count % cfg.diagnostic_interval == 0):
+             print(f"  时间步长: dt={dt:.2e}, Raw Torque={raw_torque_norm:.2e}")
+        
+        # 5. 动量更新（Euler-Poincaré）
         
         # 5. 动量更新（Euler-Poincaré）
         alpha = self._alpha(gamma, dt)

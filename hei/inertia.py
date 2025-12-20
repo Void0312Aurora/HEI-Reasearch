@@ -481,13 +481,42 @@ def locked_inertia_hyperboloid(
     I_vac_rel = np.einsum('n,ij->nij', avg_mass * REL_EPS, np.eye(3))
     
     # Broadcast I_base (3, 3) -> (N, 3, 3)
+    # Broadcast I_base (3, 3) -> (N, 3, 3)
     return I_matter + I_vac_rel + I_base[np.newaxis, :, :]
+
+
+def riemannian_inertia(h: ArrayLike, mass: float = 1.0) -> NDArray[np.float64]:
+    """
+    Riemannian Point Particle Inertia (Decoupled).
+    
+    Assigns a constant diagonal inertia tensor to each particle in the Lie Algebra frame.
+    This corresponds to a Riemannian metric mass on the manifold.
+    
+    Condition Number = 1.0 (Perfect Conditioning).
+    Null Directions = None.
+    
+    Args:
+        h: (N, 3) Hyperboloid coordinates
+        mass: Mass scaling factor (default 1.0)
+        
+    Returns:
+        (N, 3, 3) Inertia tensors
+    """
+    h_arr = np.asarray(h, dtype=np.float64)
+    if h_arr.ndim == 1:
+        n = 1
+    else:
+        n = h_arr.shape[0]
+        
+    I_base = np.eye(3, dtype=np.float64) * mass
+    return np.tile(I_base[np.newaxis, :, :], (n, 1, 1))
 
 
 def compute_kinetic_energy_gradient_hyperboloid(
     h: NDArray[np.float64],
     xi: NDArray[np.float64],
-    weights: NDArray[np.float64] | None = None
+    weights: NDArray[np.float64] | None = None,
+    is_riemannian: bool = False
 ) -> NDArray[np.float64]:
     """
     Hyperboloid 上的动能梯度（几何力）
@@ -517,6 +546,13 @@ def compute_kinetic_energy_gradient_hyperboloid(
         h_arr = h_arr.reshape(1, 3)
     
     n = h_arr.shape[0]
+    
+    # [NEW] Short-circuit for Riemannian Inertia
+    # If inertia is constant in the frame (Riemannian), gradient is zero by Lie group symmetry.
+    # This avoids expensive O(N) calculation and eliminates boundary artifacts.
+    if is_riemannian:
+        return np.zeros((n, 3), dtype=np.float64)
+        
     xi_vec = np.asarray(xi, dtype=float)
     
     if weights is None:

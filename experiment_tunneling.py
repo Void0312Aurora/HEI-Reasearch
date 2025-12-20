@@ -125,8 +125,8 @@ def run_sgd_baseline(pot, z_init, steps=2000, lr=1e-3):
 def run_hei_experiment():
     # 1. Setup
     dists = build_tree_distances()
-    # Increase stiffness to drive faster acceleration against inertia
-    pot = DataDrivenStressPotential(target_dists=dists, stiffness=20.0)
+    # Use softer potential to allow larger time steps (Schem A)
+    pot = DataDrivenStressPotential(target_dists=dists, stiffness=1.0)
     z_init = initialize_twisted_trap()
     
     energy_start = pot.potential(z_init)
@@ -147,9 +147,11 @@ def run_hei_experiment():
     
     int_cfg = GroupIntegratorConfig(
         max_dt=cfg.max_dt,
-        gamma_scale=0.5, # Moderate damping
+        min_dt=1e-6,         # [FIX] Allow smaller steps for stability
+        gamma_scale=5.0,     # [FIX] Stable Overdamped Regime
         gamma_mode="constant",
-        torque_clip=100.0
+        torque_clip=10000.0,
+        xi_clip=1000.0,
     )
     
     # Initialize simulation with z_init
@@ -189,14 +191,97 @@ def run_hei_experiment():
             e = pot.potential(state.z_uhp)
             hei_energies.append(e)
             
+    def run_adam_baseline(pot, z0, steps=1000, lr=0.005, b1=0.9, b2=0.999, eps=1e-8):
+        z = z0.copy().ravel()
+        energies = []
+        
+        m = np.zeros_like(z)
+        v = np.zeros_like(z)
+        
+        print("Running Adam Baseline...")
+        for i in range(1, steps + 1):
+            grad = pot.gradient(z.reshape(z0.shape)).ravel()
+            
+            # Adam Update
+            m = b1 * m + (1 - b1) * grad
+            v = b2 * v + (1 - b2) * (np.abs(grad) ** 2) # Use abs for complex? No, |grad|^2
+            # For complex numbers, Adam usually treats real/imag separately or uses conformal derivatives.
+            # Here z is complex. dV/dz is Wirtinger derivative scalar * conjugate?
+            # DataDrivenStressPotential.gradient returns (N,) complex.
+            # Let's assume naive independent update for Real/Imag components or treat as 2N real vector.
+            # Given current implementation supports complex numpy, let's treat as vector.
+            
+            # Correction: Adam on complex numbers is tricky.
+            # Simplest way: treat as Real 2N vector.
+            # But let's stay in complex domain if numpy supports it.
+            # v should track magnitude squared.
+            
+            m_hat = m / (1 - b1 ** i)
+            v_hat = v / (1 - b2 ** i)
+            
+            # Complex safe division? 
+            # If v tracks magnitude squared (real), then sqrt(v_hat) is real.
+            # Let's verify pot.gradient returns complex.
+            # Yes. 
+            # We urge to split into Z_re, Z_im for safety? 
+            # Let's try direct complex first, but ensure v is real.
+            
+            # Re-implementation for safety:
+            # Treat z as 2N real floats to be standard Adam.
+            pass 
+        
+        # Proper 2N Real implementation
+        z_re = z0.real.ravel()
+        z_im = z0.imag.ravel()
+        params = np.concatenate([z_re, z_im])
+        
+        m = np.zeros_like(params)
+        v = np.zeros_like(params)
+        
+        for i in range(1, steps + 1):
+            # Reconstruct z
+            z_curr = params[:z0.size] + 1j * params[z0.size:]
+            z_curr = z_curr.reshape(z0.shape)
+            
+            if i % 10 == 0:
+                energies.append(pot.potential(z_curr))
+            
+            # Gradient
+            # pot.gradient returns dV/dz_conj (standard for gradient descent on complex plane)
+            # This is equivalent to (dV/dx + i dV/dy) * 0.5? 
+            # Actually simplest is: G = pot.gradient(z) 
+            # Update: z <- z - lr * G
+            grad_c = pot.gradient(z_curr).ravel()
+            
+            # Map complex gradient to real parameters [g_re, g_im]
+            # If V is real valued function of z, then gradient vector in R^2N is (dV/dx, dV/dy).
+            # If pot.gradient returns 2 * dV/dz_conj, then it corresponds to (dV/dx + i dV/dy).
+            # Let's trust that pot.gradient direction is correct for descent.
+            
+            grad_params = np.concatenate([grad_c.real, grad_c.imag])
+            
+            m = b1 * m + (1 - b1) * grad_params
+            v = b2 * v + (1 - b2) * (grad_params**2)
+            
+            m_hat = m / (1 - b1 ** i)
+            v_hat = v / (1 - b2 ** i)
+            
+            params = params - lr * m_hat / (np.sqrt(v_hat) + eps)
+            
+        return energies, params
+
     # 3. Run SGD
     sgd_energies, z_sgd = run_sgd_baseline(pot, z_init, steps=cfg.steps, lr=0.005)
     
+    # 3b. Run Adam
+    adam_energies, z_adam = run_adam_baseline(pot, z_init, steps=cfg.steps, lr=0.005)
+    
     # 4. Plot
     plt.figure(figsize=(10, 5))
-    plt.plot(sgd_energies, label='SGD (Gradient Descent)')
+    plt.plot(sgd_energies, label='SGD')
+    plt.plot(adam_energies, label='Adam')
     plt.plot(np.linspace(0, cfg.steps, len(hei_energies)), hei_energies, label='HEI (Hamiltonian)')
-    plt.title('Tunneling Experiment: Escaping False Hierarchy Trap')
+    plt.title('Tunneling Experiment: HEI vs SGD vs Adam')
     plt.xlabel('Steps')
     plt.ylabel('Stress Energy')
     plt.legend()
@@ -206,8 +291,11 @@ def run_hei_experiment():
     
     final_hei = hei_energies[-1]
     final_sgd = sgd_energies[-1]
+    final_adam = adam_energies[-1]
+    
     print(f"Final Energy - HEI: {final_hei:.4f}")
     print(f"Final Energy - SGD: {final_sgd:.4f}")
+    print(f"Final Energy - Adam: {final_adam:.4f}")
     
     if final_hei < final_sgd * 0.5:
         print("SUCCESS: HEI found a much better minimum!")
