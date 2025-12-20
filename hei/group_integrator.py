@@ -180,20 +180,29 @@ class GroupContactIntegrator:
         保证 det(G) = 1，修正累积的浮点误差。
         使用极分解方法保持群结构。
         """
-        det = G[0, 0] * G[1, 1] - G[0, 1] * G[1, 0]
+        det = G[..., 0, 0] * G[..., 1, 1] - G[..., 0, 1] * G[..., 1, 0]
         
         # 1. Ensure positive determinant (fix connected component)
-        if det < 0:
-            G[:, 0] *= -1.0
-            det = -det
+        # Vectorized check
+        mask_neg = det < 0
+        if np.any(mask_neg):
+            # Updates G in place or copy? G is array.
+            # G[mask_neg, :, 0] *= -1.0 # This changes shape if mask is not uniform?
+            # G[mask_neg] is (k, 2, 2).
+            G[mask_neg, 0, 0] *= -1.0
+            G[mask_neg, 1, 0] *= -1.0
+            det[mask_neg] *= -1.0 # Update local det var
             
         # 2. Scale to det = 1
-        if abs(det - 1.0) > 1e-10:
-            scale = 1.0 / np.sqrt(det + 1e-15)
-            G = G * scale
-        
-        # 额外的对称化（可选）
-        # 如果 G 应该是正交的某种形式，可以用 polar decomposition
+        mask_scale = np.abs(det - 1.0) > 1e-10
+        if np.any(mask_scale):
+            scale = 1.0 / np.sqrt(det[mask_scale] + 1e-15)
+            # scale is (k,). G[mask_scale] is (k, 2, 2).
+            # G[mask_scale] *= scale[:, np.newaxis, np.newaxis]
+            # In-place update of slice might be tricky with broadcasting
+            G_sub = G[mask_scale]
+            G_sub *= scale[:, np.newaxis, np.newaxis]
+            G[mask_scale] = G_sub
         
         return G
     
@@ -335,12 +344,16 @@ class GroupContactIntegrator:
             # 计算惯性特征值（检测λ_max爆炸）
             I_current = locked_inertia_hyperboloid(h_current)
             eigvals = np.linalg.eigvalsh(I_current)
-            lambda_min = eigvals[0]
-            lambda_max = eigvals[-1]
+            lambda_min = np.min(eigvals)
+            lambda_max = np.max(eigvals)
             condition_number = lambda_max / max(lambda_min, 1e-12)
             
             # 能量分解
-            T = 0.5 * float(state.xi @ (I_current @ state.xi))
+            if state.xi.ndim == 2:
+                m_tmp = apply_inertia(I_current, state.xi)
+                T = 0.5 * float(np.tensordot(state.xi, m_tmp))
+            else:
+                T = 0.5 * float(state.xi @ (I_current @ state.xi))
             V = float(self.potential_fn(z_current, state.action))
             H_total = T + V
             
@@ -374,8 +387,9 @@ class GroupContactIntegrator:
                 print(f"  ❌ 错误: 能量出现NaN/Inf!")
         
         # 2a. 计算势能力和力矩（UHP 坐标系）
+        use_batch = (state.xi.ndim == 2)
         forces_potential = self.force_fn(z_current, state.action)  # 复数力 (N,)
-        torque_potential = aggregate_torque(z_current, forces_potential)  # (3,)
+        torque_potential = aggregate_torque(z_current, forces_potential, sum_torque=not use_batch)
         
         # 2b. 计算几何力和力矩（Hyperboloid 坐标系）✅ 新增
         # 几何力来自动能对位置的梯度：F_geom = -∇_h K
@@ -383,7 +397,7 @@ class GroupContactIntegrator:
         F_geom_h = -compute_kinetic_energy_gradient_hyperboloid(
             h_current, state.xi, weights=None
         )  # (N, 3) 或 (3,)
-        torque_geom = aggregate_torque_hyperboloid(h_current, F_geom_h)  # (3,)
+        torque_geom = aggregate_torque_hyperboloid(h_current, F_geom_h, sum_torque=not use_batch)
         
         # 2c. 总力矩 = 势能力矩 + 几何力矩 ✅ 修改
         torque = torque_potential + torque_geom
@@ -502,7 +516,12 @@ class GroupContactIntegrator:
             G_new = self._renormalize_sl2(G_new)
         
         # 8. 接触作用量更新
-        T = 0.5 * float(xi_new @ (I @ xi_new))
+        if xi_new.ndim == 2:
+            m_tmp = apply_inertia(I, xi_new)
+            # T = 0.5 * sum(xi . m)
+            T = 0.5 * float(np.tensordot(xi_new, m_tmp))
+        else:
+            T = 0.5 * float(xi_new @ (I @ xi_new))
         V = float(self.potential_fn(z_current, state.action))
         denom = 1.0 + 0.5 * dt * gamma
         action_new = alpha * state.action + dt / denom * (T - V)

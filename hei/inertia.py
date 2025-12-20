@@ -249,14 +249,36 @@ def compute_kinetic_energy_gradient(z_uhp: ArrayLike, xi: ArrayLike, weights: Ar
 
 
 def apply_inertia(I: ArrayLike, xi: ArrayLike) -> NDArray[np.float64]:
-    """Compute m = I xi."""
-    return np.asarray(I, dtype=float) @ np.asarray(xi, dtype=float)
+    """Compute m = I xi. Supports broadcasting for (N, 3, 3) and (N, 3)."""
+    I_arr = np.asarray(I, dtype=float)
+    xi_arr = np.asarray(xi, dtype=float)
+    
+    # Debug shapes
+    # print(f"DEBUG: I shape={I_arr.shape}, xi shape={xi_arr.shape}")
+    
+    if I_arr.ndim == 3 and xi_arr.ndim == 2:
+        return np.einsum('nij,nj->ni', I_arr, xi_arr)
+    return I_arr @ xi_arr
 
 
 def invert_inertia(I: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     """Compute xi = I^{-1} m using robust solve."""
     I_arr = np.asarray(I, dtype=float)
-    return np.linalg.solve(I_arr + 1e-8 * np.eye(3), np.asarray(m, dtype=float))
+    m_arr = np.asarray(m, dtype=float)
+    
+    # Broadcast safety for regularization
+    if I_arr.ndim == 3:
+        reg = 1e-8 * np.eye(3)[np.newaxis, :, :]
+        # Check if m is (N, 3), solve expects (N, 3) treated as vector stack?
+        # Or (N, 3, 1). Explicit (N, 3, 1) is safer.
+        if m_arr.ndim == 2:
+            m_expanded = m_arr[..., np.newaxis]
+            sol = np.linalg.solve(I_arr + reg, m_expanded)
+            return sol[..., 0]
+    else:
+        reg = 1e-8 * np.eye(3)
+        
+    return np.linalg.solve(I_arr + reg, m_arr)
 
 
 def moment_map_covariance(z_uhp: ArrayLike, weights: ArrayLike | None = None, alpha: float = 0.2) -> NDArray[np.float64]:
@@ -427,24 +449,39 @@ def locked_inertia_hyperboloid(
     # 生成元列表，对应 sl(2,R) 的 (u, v, w) 基
     generators = [a_u, a_v, a_w]
     
-    I_matter = np.zeros((3, 3), dtype=float)
+    # I_matter: (N, 3, 3)
+    # I_ij = w * <a_i, a_j>
+    
+    # Calculate all dot products efficiently
+    # inner products: (3, 3, N)
+    inner_matrix = np.zeros((3, 3, n), dtype=float)
     
     for i, a_i in enumerate(generators):
         for j, a_j in enumerate(generators):
-            # I_ij = Σ_k m_k * <a_i(h_k), a_j(h_k)>_M
-            inner = _minkowski_metric_inner(a_i, a_j)  # 形状 (n,)
-            I_matter[i, j] = np.sum(w_arr * inner)
+            inner_matrix[i, j, :] = _minkowski_metric_inner(a_i, a_j)
+            
+    # Apply weights and vacuum regularization
+    # w_arr: (N,)
+    # I_local: (N, 3, 3) via transpose/swapping
+    # inner_matrix[i, j, k] is i,j component for particle k
     
-    # 相对真空正则化
-    trace_val = np.trace(I_matter)
+    I_matter = np.einsum('k,ijk->kij', w_arr, inner_matrix) # (N, 3, 3)
+    
+    # Regularization
+    # We apply regularization per-particle or average?
+    # Per-particle is safer.
+    # Trace per particle
+    trace_val = np.trace(I_matter, axis1=1, axis2=2) # (N,)
     avg_mass = trace_val / 3.0
-    if avg_mass < 1e-9:
-        avg_mass = 1.0
+    # vectorized clamp
+    avg_mass = np.maximum(avg_mass, 1e-9)
     
     REL_EPS = 1e-2
-    I_vac_rel = np.eye(3, dtype=float) * (avg_mass * REL_EPS)
+    # I_vac: (N, 3, 3)
+    I_vac_rel = np.einsum('n,ij->nij', avg_mass * REL_EPS, np.eye(3))
     
-    return I_matter + I_vac_rel + I_base
+    # Broadcast I_base (3, 3) -> (N, 3, 3)
+    return I_matter + I_vac_rel + I_base[np.newaxis, :, :]
 
 
 def compute_kinetic_energy_gradient_hyperboloid(
@@ -531,8 +568,12 @@ def compute_kinetic_energy_gradient_hyperboloid(
         # I_local is (N, 3, 3). Xi is (3,)
         # temp = I_local @ xi  -> (N, 3)
         # result = dot(xi, temp) -> (N)
-        mv = np.einsum('nij,j->ni', I_local, xi_vec)
-        local_K = 0.5 * np.einsum('i,ni->n', xi_vec, mv)
+        if xi_vec.ndim == 2:
+            mv = np.einsum('nij,nj->ni', I_local, xi_vec)
+            local_K = 0.5 * np.einsum('ni,ni->n', xi_vec, mv)
+        else:
+            mv = np.einsum('nij,j->ni', I_local, xi_vec)
+            local_K = 0.5 * np.einsum('j,nj->n', xi_vec, mv)
         
         return local_K * w_arr
 

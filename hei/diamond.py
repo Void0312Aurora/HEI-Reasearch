@@ -8,147 +8,105 @@ from numpy.typing import ArrayLike, NDArray
 from .lie import matrix_to_vec
 
 
-def diamond_torque_matrix(z: complex, f: complex) -> NDArray[np.float64]:
+def diamond_torque_matrix(z: complex | ArrayLike, f: complex | ArrayLike) -> NDArray[np.float64]:
     """
     Compute single-point torque matrix J in sl(2)^* from position z and force f.
-    
-    Coefficients consistent with docs/积分器.md and trace pairing:
-    J = [[ Re(z \bar f)      , -0.5 Re(\bar f z^2) ],
-         [ 0.5 Re(\bar f)    , -Re(z \bar f)       ]]
+    Supports batch inputs (N,) -> (N, 2, 2).
     """
+    zc = np.asarray(z, dtype=np.complex128)
+    fc = np.asarray(f, dtype=np.complex128)
+    
+    # Lever arm clipping
     MAX_LEVER_ARM = 100.0
-    z_mag = abs(z)
-    if z_mag > MAX_LEVER_ARM:
-        z = z * (MAX_LEVER_ARM / z_mag)
+    z_mag = np.abs(zc)
+    
+    # Vectorized clipping
+    mask = z_mag > MAX_LEVER_ARM
+    if np.any(mask):
+        # Avoid in-place modification of input if it was array
+        if mask.ndim > 0:
+            zc = zc.copy()
+            zc[mask] *= (MAX_LEVER_ARM / z_mag[mask])
+        else: # Scalar
+             zc *= (MAX_LEVER_ARM / z_mag)
 
-    zc = complex(z)
-    fc = complex(f)
     re_zf = np.real(zc * np.conj(fc))
-    re_f = np.real(fc)  # Note: Re(f) == Re(bar f)
+    re_f = np.real(fc)
     re_fz2 = np.real(np.conj(fc) * (zc * zc))
 
-    return np.array(
-        [
-            [re_zf, -0.5 * re_fz2],
-            [0.5 * re_f, -re_zf],
-        ],
-        dtype=float,
-    )
+    # Construct batch matrix
+    # [[re_zf, -0.5 * re_fz2], [0.5 * re_f, -re_zf]]
+    
+    row1 = np.stack([re_zf, -0.5 * re_fz2], axis=-1)
+    row2 = np.stack([0.5 * re_f, -re_zf], axis=-1)
+    return np.stack([row1, row2], axis=-2)
 
 
-def diamond_torque_vec(z: complex, f: complex) -> NDArray[np.float64]:
-    """Return torque in (u, v, w) vector form."""
+def diamond_torque_vec(z: complex | ArrayLike, f: complex | ArrayLike) -> NDArray[np.float64]:
+    """Return torque in (u, v, w) vector form. Supports batch."""
     return matrix_to_vec(diamond_torque_matrix(z, f))
 
 
-def aggregate_torque(z_uhp: ArrayLike, forces: ArrayLike) -> NDArray[np.float64]:
-    """Sum torques over all points."""
-    z_arr = np.asarray(z_uhp, dtype=np.complex128)
-    f_arr = np.asarray(forces, dtype=np.complex128)
-    if z_arr.shape != f_arr.shape:
-        raise ValueError("z_uhp and forces must share shape")
-    total = np.zeros(3, dtype=float)
-    for zc, fc in zip(z_arr.flat, f_arr.flat):
-        total += diamond_torque_vec(zc, fc)
-    return total
-
-
-def diamond_torque_hyperboloid(h: ArrayLike, f_h: ArrayLike) -> NDArray[np.float64]:
+def aggregate_torque(z_uhp: ArrayLike, forces: ArrayLike, sum_torque: bool = True) -> NDArray[np.float64]:
     """
-    在 Hyperboloid 模型上计算 Diamond 力矩
-    
-    理论依据：
-    ---------
-    将 Hyperboloid 上的切向量（力）转换为 UHP 上的切向量，
-    然后使用标准 diamond 算子计算力矩。
-    
-    坐标转换：
-        Hyperboloid → UHP:  z = (X + iY) / (1 + T)
-    
-    切映射（Jacobian）：
-        dz/dX = 1/(1+T)
-        dz/dY = i/(1+T)
-        dz/dT = -(X+iY)/(1+T)²
-    
-    因此，Hyperboloid 切向量 f_h = (fX, fY, fT) 对应的 UHP 切向量：
-        f_uhp = (fX + i*fY)/(1+T) - (X+iY)*fT/(1+T)²
-    
-    参数：
-        h: Hyperboloid 坐标 (3,) 或 (..., 3)，形式为 (X, Y, T)
-        f_h: Hyperboloid 切向量（力）(3,) 或 (..., 3)
-    
-    返回：
-        SL(2,R) 李代数中的力矩 (3,)，形式为 (u, v, w)
-    
-    物理意义：
-        将 Hyperboloid 上的几何力（如惯性力）转换为 Möbius 变换的力矩
+    Compute torques over all points.
+    If sum_torque is True, returns (3,).
+    If sum_torque is False, returns (N, 3).
+    """
+    # Simply call vectorized
+    torques = diamond_torque_vec(z_uhp, forces)
+    if sum_torque:
+        if torques.ndim == 2:
+            return np.sum(torques, axis=0)
+        return torques # If torques is already (3,) (e.g., single point input)
+    return torques
+
+
+
+def diamond_torque_hyperboloid_batch(h: ArrayLike, f_h: ArrayLike) -> NDArray[np.float64]:
+    """
+    Vectorized implementation of diamond_torque_hyperboloid.
+    Returns (N, 3).
     """
     h_arr = np.asarray(h, dtype=np.float64)
     f_arr = np.asarray(f_h, dtype=np.float64)
-    
-    # 支持单点或批量处理
-    if h_arr.ndim == 1:
-        h_arr = h_arr.reshape(1, 3)
-        f_arr = f_arr.reshape(1, 3)
-        is_single = True
-    else:
-        is_single = False
     
     # 提取坐标分量
-    X, Y, T = h_arr[..., 0], h_arr[..., 1], h_arr[..., 2]
-    fX, fY, fT = f_arr[..., 0], f_arr[..., 1], f_arr[..., 2]
+    X = h_arr[..., 0]
+    Y = h_arr[..., 1]
+    T = h_arr[..., 2]
     
-    # 计算 UHP 坐标
-    factor = 1.0 / (1.0 + T + 1e-15)  # 防止除零
-    z_uhp = (X + 1j * Y) * factor
+    fX = f_arr[..., 0]
+    fY = f_arr[..., 1]
+    fT = f_arr[..., 2]
     
-    # 计算 UHP 切向量（通过链式法则）
-    # f_uhp = df/dh · f_h = J(h) · f_h
-    # 其中 J 是 Hyperboloid → UHP 的 Jacobian
-    f_uhp = (fX + 1j * fY) * factor - z_uhp * fT * factor
+    denom = 1.0 + T
+    denom2 = denom * denom
     
-    # 使用标准 UHP diamond 算子
-    if is_single:
-        return diamond_torque_vec(z_uhp[0], f_uhp[0])
-    else:
-        # 批量处理
-        torques = np.zeros((len(h_arr), 3), dtype=float)
-        for i in range(len(h_arr)):
-            torques[i] = diamond_torque_vec(z_uhp[i], f_uhp[i])
-        return torques
+    # f_uhp = (fX + i*fY)/(1+T) - (X+iY)*fT/(1+T)^2
+    term1 = (fX + 1j * fY) / denom
+    z_numerator = X + 1j * Y
+    term2 = z_numerator * (fT / denom2)
+    
+    f_uhp = term1 - term2
+    
+    # z = (X + iY) / (1 + T)
+    z_uhp = z_numerator / denom
+    
+    return diamond_torque_vec(z_uhp, f_uhp)
+
+# Legacy alias
+diamond_torque_hyperboloid = diamond_torque_hyperboloid_batch
 
 
-def aggregate_torque_hyperboloid(
-    h: ArrayLike,
-    f_h: ArrayLike,
-    weights: ArrayLike | None = None
-) -> NDArray[np.float64]:
-    """
-    聚合 Hyperboloid 上的力到总力矩
-    
-    对每个点的力计算 diamond 力矩，然后加权求和。
-    
-    参数：
-        h: Hyperboloid 坐标 (N, 3)，每行为 (X, Y, T)
-        f_h: Hyperboloid 力 (N, 3)，每行为 (fX, fY, fT)
-        weights: 权重 (N,)，可选。默认无权重（直接求和）
-    
-    返回：
-        总力矩 (3,)，形式为 (u, v, w) 在 sl(2,R) 李代数中
-    
-    使用场景：
-        计算几何力（如惯性力）对系统的总力矩贡献
-    
-    注意：
-        与 aggregate_torque() 保持一致，使用求和而非平均。
-        力矩是广延量，应该对各点力矩求和。
-    """
-    h_arr = np.asarray(h, dtype=np.float64)
-    f_arr = np.asarray(f_h, dtype=np.float64)
-    
-    if h_arr.ndim == 1:
-        h_arr = h_arr.reshape(1, 3)
-        f_arr = f_arr.reshape(1, 3)
+def aggregate_torque_hyperboloid(h: ArrayLike, f_h: ArrayLike, sum_torque: bool = True) -> NDArray[np.float64]:
+    """Hyperboloid version. Wraps diamond_torque_hyperboloid + sum options."""
+    # This calls diamond_torque_hyperboloid which handles conversion
+    torques = diamond_torque_hyperboloid_batch(h, f_h)
+    if sum_torque:
+        if torques.ndim == 2:
+            return np.sum(torques, axis=0)
+    return torques
     
     n = h_arr.shape[0]
     
@@ -167,3 +125,48 @@ def aggregate_torque_hyperboloid(
     else:
         # 无权重时直接求和（与 aggregate_torque 保持一致）
         return np.sum(torques, axis=0)
+
+def diamond_torque_hyperboloid_batch(h: ArrayLike, f_h: ArrayLike) -> NDArray[np.float64]:
+    """
+    Vectorized implementation of diamond_torque_hyperboloid.
+    Returns (N, 3).
+    """
+    h_arr = np.asarray(h, dtype=np.float64)
+    f_arr = np.asarray(f_h, dtype=np.float64)
+    
+    # 提取坐标分量
+    X = h_arr[..., 0]
+    Y = h_arr[..., 1]
+    T = h_arr[..., 2]
+    
+    fX = f_arr[..., 0]
+    fY = f_arr[..., 1]
+    fT = f_arr[..., 2]
+    
+    denom = 1.0 + T
+    denom2 = denom * denom
+    
+    # f_uhp = (fX + i*fY)/(1+T) - (X+iY)*fT/(1+T)^2
+    term1 = (fX + 1j * fY) / denom
+    z_numerator = X + 1j * Y
+    term2 = z_numerator * (fT / denom2)
+    
+    f_uhp = term1 - term2
+    
+    # z = (X + iY) / (1 + T)
+    z_uhp = z_numerator / denom
+    
+    return diamond_torque_vec(z_uhp, f_uhp)
+
+# Legacy alias
+diamond_torque_hyperboloid = diamond_torque_hyperboloid_batch
+
+
+def aggregate_torque_hyperboloid(h: ArrayLike, f_h: ArrayLike, sum_torque: bool = True) -> NDArray[np.float64]:
+    """Hyperboloid version. Wraps diamond_torque_hyperboloid + sum options."""
+    # This calls diamond_torque_hyperboloid which handles conversion
+    torques = diamond_torque_hyperboloid_batch(h, f_h)
+    if sum_torque:
+        if torques.ndim == 2:
+            return np.sum(torques, axis=0)
+    return torques
