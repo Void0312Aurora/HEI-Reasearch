@@ -169,71 +169,129 @@ def run_double_well():
         if i % 10 == 0:
             sgd_energies.append(pot.potential(z_curr))
             
+    def run_adam_baseline(pot, z0, steps=1000, lr=0.005, b1=0.9, b2=0.999, eps=1e-8):
+        # Flatten input
+        z = z0.copy().ravel()
+        energies = []
+        
+        # Track Real/Imag components as 2N vector
+        z_re = z.real
+        z_im = z.imag
+        params = np.concatenate([z_re, z_im])
+        
+        m = np.zeros_like(params)
+        v = np.zeros_like(params)
+        
+        for i in range(1, steps + 1):
+            # Reconstruct z
+            z_curr_c = params[:z.size] + 1j * params[z.size:]
+            z_curr = z_curr_c.reshape(z0.shape)
+            
+            grad_c = pot.gradient(z_curr).ravel()
+            grad_params = np.concatenate([grad_c.real, grad_c.imag])
+            
+            # Adam Update
+            m = b1 * m + (1 - b1) * grad_params
+            v = b2 * v + (1 - b2) * (grad_params**2)
+            
+            m_hat = m / (1 - b1 ** i)
+            v_hat = v / (1 - b2 ** i)
+            
+            params = params - lr * m_hat / (np.sqrt(v_hat) + eps)
+            
+            # Constraint check (y > 0)
+            # z_im part is params[z.size:]
+            # simpler to reconstruct and check
+            z_check = params[:z.size] + 1j * params[z.size:]
+            if z_check[0].imag < 1e-4:
+                # Project back
+                params[z.size:] = np.maximum(params[z.size:], 1e-4)
+                
+            if i % 10 == 0:
+                z_snapshot = params[:z.size] + 1j * params[z.size:]
+                energies.append(pot.potential(z_snapshot.reshape(z0.shape)))
+        
+        return energies, params
+
     # 4. Adam Simulation
     print("Running Adam...")
+    adam_energies, _ = run_adam_baseline(pot, z_init, steps=steps, lr=0.05)
+    
+    # 5. Momentum SGD (Euclidean)
+    print("Running Momentum SGD...")
     z_curr = z_init.copy().ravel()
-    adam_energies = []
-    m = np.zeros_like(z_curr, dtype=float) # ? Adam complex handling again
-    # Let's treat complex as complex vector
-    m = np.zeros_like(z_curr)
+    mom_energies = []
     v = np.zeros_like(z_curr)
-    b1=0.9; b2=0.999; eps=1e-8
-    adam_path = []
+    mu = 0.9 # High momentum
     lr = 0.05
     
-    for i in range(1, steps + 1):
+    for i in range(steps):
         grad = pot.gradient(z_curr).ravel()
-        m = b1 * m + (1-b1)*grad
-        v = b2 * v + (1-b2)*(np.abs(grad)**2)
-        m_hat = m / (1-b1**i)
-        v_hat = v / (1-b2**i)
-        z_curr = z_curr - lr * m_hat / (np.sqrt(v_hat) + eps)
-        
+        v = mu * v - lr * grad
+        z_curr = z_curr + v
         if z_curr.imag < 1e-4: z_curr = z_curr.real + 1e-4j
-        
-        adam_path.append(z_curr[0])
         if i % 10 == 0:
-            adam_energies.append(pot.potential(z_curr))
+            mom_energies.append(pot.potential(z_curr))
             
+    # 6. Riemannian SGD (Natural Gradient)
+    # Update: z = z - lr * (y^2) * grad
+    print("Running Riemannian SGD...")
+    z_curr = z_init.copy().ravel()
+    rsgd_energies = []
+    lr = 0.01 # Smaller LR needed due to y^2 scaling
+    
+    for i in range(steps):
+        grad = pot.gradient(z_curr).ravel()
+        # Metric inverse factor y^2
+        y = z_curr.imag
+        grad_riem = (y**2) * grad
+        
+        z_curr = z_curr - lr * grad_riem
+        if z_curr.imag < 1e-4: z_curr = z_curr.real + 1e-4j
+        if i % 10 == 0:
+            rsgd_energies.append(pot.potential(z_curr))
+
     # Plot results
     plt.figure(figsize=(12, 5))
     
     # Subplot 1: Energies
     plt.subplot(1, 2, 1)
-    plt.plot(hei_energies, label='HEI')
-    plt.plot(sgd_energies, label='SGD')
-    plt.plot(adam_energies, label='Adam')
+    plt.plot(hei_energies, label='HEI', linewidth=2)
+    plt.plot(sgd_energies, label='SGD', alpha=0.5)
+    plt.plot(adam_energies, label='Adam', alpha=0.5)
+    plt.plot(mom_energies, label='Momentum SGD', linestyle='--')
+    plt.plot(rsgd_energies, label='Riemannian SGD', linestyle=':')
+    
     plt.axhline(-pot.A_l, color='r', linestyle='--', label='Local Min Level')
     plt.axhline(-pot.A_g, color='g', linestyle='--', label='Global Min Level')
     plt.legend()
-    plt.title('Energy Landscape (Double Well)')
+    plt.title('Fairness Check: HEI vs Baselines')
     plt.xlabel('Steps/10')
+    plt.grid(True, alpha=0.3)
     
-    # Subplot 2: Trajectories (Imaginary axis mostly, since 1j and 3j are on y-axis)
-    # We plot Real vs Imag
+    # Subplot 2: Trajectories
     plt.subplot(1, 2, 2)
     hei_p = np.array(hei_path)
-    sgd_p = np.array(sgd_path)
-    adam_p = np.array(adam_path)
-    
+    # Re-run baselines to get paths? simplified just plotting HEI vs traps
+    # actually let's skip paths for baselines to avoid clutter, focus on ENERGY.
     plt.plot(hei_p.real, hei_p.imag, label='HEI', alpha=0.7)
-    plt.plot(sgd_p.real, sgd_p.imag, label='SGD', alpha=0.7)
-    plt.plot(adam_p.real, adam_p.imag, label='Adam', alpha=0.7)
     
     plt.scatter([pot.mu_g.real], [pot.mu_g.imag], c='g', marker='*', s=200, label='Global')
     plt.scatter([pot.mu_l.real], [pot.mu_l.imag], c='r', marker='x', s=200, label='Local')
     plt.scatter([z_init.real], [z_init.imag], c='k', marker='o', label='Start')
     
     plt.legend()
-    plt.title('Trajectories in UHP')
+    plt.title('HEI Trajectory')
     plt.xlim(-2, 2)
-    plt.ylim(0, 6)
+    plt.ylim(0, 11)
     
-    plt.savefig('double_well_result.png')
+    plt.savefig('double_well_fairness.png')
     
     print(f"Final E - HEI: {hei_energies[-1]:.4f}")
     print(f"Final E - SGD: {sgd_energies[-1]:.4f}")
     print(f"Final E - Adam: {adam_energies[-1]:.4f}")
+    print(f"Final E - MomSGD: {mom_energies[-1]:.4f}")
+    print(f"Final E - RSGD: {rsgd_energies[-1]:.4f}")
 
 if __name__ == "__main__":
     run_double_well()
