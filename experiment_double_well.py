@@ -21,93 +21,82 @@ def uhp_dist(z1, z2):
     return 2 * np.arctanh(delta / delta_conj)
 
 @dataclasses.dataclass
-class SyntheticDoubleWellPotential:
+class SoftDoubleWellPotential:
     """
-    Synthetic Double Well Potential on Hyperboloid.
+    Soft-Core Double Well Potential.
+    Consistent with Hamiltonian Regularization.
     
-    V(z) = - A_g * exp(-d(z, mu_g)^2 / 2sigma^2) - A_l * exp(-d(z, mu_l)^2 / 2sigma^2)
-    
-    A_g: Depth of Global Well (e.g. 50)
-    mu_g: Center of Global Well (e.g. 0 + 1j)
-    A_l: Depth of Local Well (e.g. 30)
-    mu_l: Center of Local Well (e.g. 0 + 3j)
-    sigma: Width of wells
+    V(z) = - A_g * exp(-(d^2 + eps^2) / 2sigma^2) ...
     """
-    mu_g: complex = 1j      # Global Min at Origin (UHP)
-    mu_l: complex = 3j      # Local Min at y=3
+    mu_g: complex = 1j      # Global Min
+    mu_l: complex = 3j      # Local Min
     A_g: float = 10.0       # Global Depth
     A_l: float = 5.0        # Local Depth
     sigma: float = 0.5
+    eps_soft: float = 0.2   # Smoothing
     
     def potential(self, z_uhp, action=None):
         z = np.asarray(z_uhp, dtype=np.complex128).ravel()
-        # Single particle limit for now
-        d_g = uhp_dist(z, self.mu_g)
-        d_l = uhp_dist(z, self.mu_l)
+        
+        # Helper for soft dist
+        def get_d_soft(target):
+            d_true, _ = uhp_distance_and_grad(z, target)
+            return np.sqrt(d_true**2 + self.eps_soft**2)
+
+        d_g = get_d_soft(self.mu_g)
+        d_l = get_d_soft(self.mu_l)
         
         V_g = -self.A_g * np.exp(-d_g**2 / (2 * self.sigma**2))
         V_l = -self.A_l * np.exp(-d_l**2 / (2 * self.sigma**2))
         
-        # Shift so min V is approx -A_g. Max V (far away) is 0.
-        # Add offset to make it look like a well in a flat plain?
-        # Or just return negative energy?
-        # Let's return V_total + offset so min is 0? 
-        # No, physics is fine with negative.
         return np.sum(V_g + V_l)
 
     def gradient(self, z_uhp, action=None):
-        # Numerical gradient or analytical? 
-        # Analytical is better. 
-        # V(d) = -A exp(-d^2/2s^2)
-        # dV/dz = dV/dd * dd/dz
-        # dV/dd = -A exp(...) * (-2d/2s^2) = A * d/s^2 * exp(...)
-        # dd/dz: Need gradient of distance.
-        
-        # uhp_distance_and_grad returns distance matrix and grad matrix
-        
         z = np.asarray(z_uhp, dtype=np.complex128).ravel()
         n = z.size
-        
-        # Gradient accumulator
-        grad_total = np.zeros(n, dtype=np.complex128)
+        Grad = np.zeros(n, dtype=np.complex128)
         
         for k in range(n):
             zk = z[k]
             
-            # Global Well Term
-            dg_val, dg_grad = self._dist_grad_helper(zk, self.mu_g)
-            decay_g = np.exp(-dg_val**2 / (2 * self.sigma**2))
-            # Chain rule: dV/dz = (A/sigma^2 * d) * exp * dd/dz
-            # Wait: V = -A exp(-d^2/2s^2)
-            # dV/dd = -A * exp * (-d/s^2) = (A * d / s^2) * exp
-            factor_g = (self.A_g * dg_val / self.sigma**2) * decay_g
-            grad_g = factor_g * dg_grad
+            # Global Well
+            d_true, d_grad = self._dist_grad_helper(zk, self.mu_g)
+            d_soft = np.sqrt(d_true**2 + self.eps_soft**2)
+            grad_scale = d_true / d_soft
             
-            # Local Well Term
-            dl_val, dl_grad = self._dist_grad_helper(zk, self.mu_l)
-            decay_l = np.exp(-dl_val**2 / (2 * self.sigma**2))
-            factor_l = (self.A_l * dl_val / self.sigma**2) * decay_l
-            grad_l = factor_l * dl_grad
+            # V = -A exp(-d_soft^2 / 2s^2)
+            # dV/dd_soft = A * d_soft/s^2 * exp
+            decay_g = np.exp(-d_soft**2 / (2 * self.sigma**2))
+            factor_g = (self.A_g * d_soft / self.sigma**2) * decay_g
+            # Chain rule: dV/dz = dV/dd_soft * dd_soft/dd_true * dd_true/dz
+            term_g = factor_g * grad_scale * d_grad
             
-            grad_total[k] = grad_g + grad_l
+            # Local Well
+            d_true, d_grad = self._dist_grad_helper(zk, self.mu_l)
+            d_soft = np.sqrt(d_true**2 + self.eps_soft**2)
+            grad_scale = d_true / d_soft
             
-        return grad_total.reshape(z_uhp.shape)
+            decay_l = np.exp(-d_soft**2 / (2 * self.sigma**2))
+            factor_l = (self.A_l * d_soft / self.sigma**2) * decay_l
+            term_l = factor_l * grad_scale * d_grad
+            
+            Grad[k] = term_g + term_l
+            
+        return Grad.reshape(z_uhp.shape)
         
     def _dist_grad_helper(self, z1, z2):
-        # reuse uhp_distance_and_grad logic for single pair
-        # input is scalar complex, wrap in 1-element array
         z1_arr = np.array([z1])
         z2_arr = np.array([z2])
         d_mat, g_mat = uhp_distance_and_grad(z1_arr, z2_arr)
-        # d_mat and g_mat are (1,) arrays
         return d_mat[0], g_mat[0]
 
 def run_double_well():
     # 1. Setup
-    pot = SyntheticDoubleWellPotential(
+    print("Setting up Soft Double Well...")
+    pot = SoftDoubleWellPotential(
         mu_g=1j,   A_g=10.0,
-        mu_l=4j,   A_l=6.0,   # Local trap at 4j
-        sigma=0.5             # Wider wells for better gradients
+        mu_l=4j,   A_l=6.0,
+        sigma=0.5, eps_soft=0.2
     )
     
     # Init particle at 6j (Steep slope of Local Well)
@@ -120,15 +109,16 @@ def run_double_well():
     
     steps = 4000
     
-    # 2. HEI Simulation
+    # 2. HEI Physics Simulation (Soft Core = No Clipping)
     cfg = GroupIntegratorConfig(
         max_dt=0.01,
         min_dt=1e-6,
-        gamma_scale=0.01,    # VERY Low damping to force tunneling!
+        gamma_scale=0.01,    # Low damping to enforce tunneling
         gamma_mode="constant",
-        torque_clip=10000.0,
+        torque_clip=10000.0, # NO CLIPPING
         xi_clip=1000.0,
-        use_riemannian_inertia=True
+        use_riemannian_inertia=True,
+        implicit_potential=True # Robust
     )
     
     state = GroupIntegratorState(
@@ -144,13 +134,14 @@ def run_double_well():
     hei_path = []
     hei_energies = []
     
-    print("Running HEI...")
+    print("Running HEI (Soft Physics)...")
     for i in range(steps):
         state = integrator.step(state)
         z = state.z_uhp[0]
         hei_path.append(z)
         if i % 10 == 0:
             hei_energies.append(pot.potential(state.z_uhp))
+
             
     # 3. SGD Simulation
     print("Running SGD...")
