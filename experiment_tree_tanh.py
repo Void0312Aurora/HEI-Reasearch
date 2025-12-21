@@ -44,15 +44,19 @@ class SyntheticTree:
         return non_edges
 
 @dataclasses.dataclass
-class RobustTreePotential:
+@dataclasses.dataclass
+class TanhTreePotential:
     tree: SyntheticTree
     L_target: float = 1.7
-    k_att: float = 2.0
+    k_att_eff: float = 2.0  # Effective stiffness near equilibrium
+    V_max: float = 5.0      # Maximum bond energy (Depth of well)
     A_rep: float = 5.0
     sigma_rep: float = 0.5
     eps_soft: float = 0.2
-    huber_delta: float = 1.0 # Scale where behavior switches from Quadratic to Linear
     
+    def __post_init__(self):
+        self.sigma_bond_sq = self.V_max / self.k_att_eff
+        
     def potential(self, Z_uhp, action=None):
         Z = np.asarray(Z_uhp, dtype=np.complex128).ravel()
         n = Z.size
@@ -65,16 +69,13 @@ class RobustTreePotential:
         d_mat = 2 * np.arctanh(np.minimum(val, 1.0 - 1e-9))
         d_soft = np.sqrt(d_mat**2 + self.eps_soft**2)
         
-        # 1. Edge Potential (Pseudo-Huber)
-        # V(x) = k * delta^2 * (sqrt(1 + (x/delta)^2) - 1)
-        # Matches 0.5 * k * x^2 for small x
+        # 1. Edge Potential (Tanh)
         edges = np.array(self.tree.get_edges())
         if len(edges) > 0:
             d_edges = d_soft[edges[:, 0], edges[:, 1]]
-            err = d_edges - self.L_target
-            # Pseudo-Huber
-            scale = self.huber_delta
-            V_edge = np.sum(self.k_att * (scale**2) * (np.sqrt(1 + (err/scale)**2) - 1))
+            err_sq = (d_edges - self.L_target)**2
+            # V = Vmax * tanh( err^2 / 2sigma^2 )
+            V_edge = np.sum(self.V_max * np.tanh(err_sq / (2 * self.sigma_bond_sq)))
         else:
             V_edge = 0.0
             
@@ -105,20 +106,19 @@ class RobustTreePotential:
             
             forces = np.zeros(n, dtype=float)
             
-            # Edge Forces (Pseudo-Huber)
+            # Edge Forces (Tanh)
             neighbors = list(self.tree.graph.neighbors(i))
             if neighbors:
                 nbrs = np.array(neighbors)
-                err = d_soft[nbrs] - self.L_target
-                scale = self.huber_delta
-                # Force = dV/derr = k * delta^2 * (1/sqrt(...)) * (1/delta) * (2*err/delta) * 0.5 ...
-                # V = k d^2 (sqrt(1+u^2) - 1), u = err/d
-                # dV/du = k d^2 * u / sqrt(1+u^2)
-                # dV/derr = dV/du * 1/d = k d * u / sqrt(1+u^2) = k * d * (err/d) / sqrt = k * err / sqrt(...)
-                denom = np.sqrt(1 + (err/scale)**2)
-                force_huber = self.k_att * err / denom
+                d_val = d_soft[nbrs]
+                err = d_val - self.L_target
                 
-                forces[nbrs] += force_huber
+                u = (err**2) / (2 * self.sigma_bond_sq)
+                tanh_u = np.tanh(u)
+                sech2_u = 1.0 - tanh_u**2
+                
+                force_tanh = self.k_att_eff * err * sech2_u
+                forces[nbrs] += force_tanh
                 
             # Repulsive Forces
             mask_rep = np.ones(n, dtype=bool)
@@ -192,11 +192,13 @@ def run_rsgd_baseline(pot, z0, steps=1000, lr=0.01):
     return dist_hist, z
 
 def run_tree_experiment():
-    print("Setting up Tree Experiment (Physics Mode - Pseudo-Huber)...")
+    print("Setting up Tree Experiment (Physics Mode - Tanh-Soft)...")
     depth = 3
     tree = SyntheticTree(depth=depth)
     
-    pot = RobustTreePotential(tree=tree, L_target=1.7, k_att=2.0, A_rep=5.0, sigma_rep=0.5, eps_soft=0.2, huber_delta=1.0)
+    # Using Tanh Potential
+    # V_max=5.0 gives 'bond energy' of 5 units. If force exceeds this, it yields.
+    pot = TanhTreePotential(tree=tree, L_target=1.7, k_att_eff=2.0, V_max=10.0, A_rep=5.0, sigma_rep=0.5, eps_soft=0.2)
     
     np.random.seed(42)
     z0 = init_big_bang(tree.num_nodes, sigma=0.01)
@@ -225,7 +227,23 @@ def run_tree_experiment():
     hei_distortion = []
     z_final_hei = None
     
+    # Gamma Schedule: Exponential Increase
+    # gamma(t) = gamma_min * (gamma_max / gamma_min) ** (t / T)
+    gamma_min = 0.1
+    gamma_max = 10.0
+    
+    hei_distortion = []
+    z_final_hei = None
+    
     for i in range(steps):
+        # Update gamma
+        progress = i / steps
+        # Exponential schedule
+        current_gamma = gamma_min * (gamma_max / gamma_min)**(progress**2) # Quadratically exponential for slower start
+        
+        # Update integrator config (gamma_mode must be 'constant')
+        integrator.config.gamma_scale = current_gamma
+        
         state = integrator.step(state)
         if i % 50 == 0:
             d = calculate_distortion(state.z_uhp, tree)
