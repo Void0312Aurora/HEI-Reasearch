@@ -265,30 +265,135 @@ def run_experiment_3d():
     untangled = x1_f < x2_f
     print(f"Untangled? {untangled}")
     
-    # Plot Trajectories (Projection X-Z)
-    plt.figure(figsize=(10, 5))
+    # --- Baselines ---
     
-    # Plot X-Y (Top View) - Check Swap
-    plt.subplot(1, 2, 1)
-    # C1: Red
-    plt.plot(traj[:, 1, 1], traj[:, 1, 2], 'r-', label='C1 (Left)')
-    # C2: Blue
-    plt.plot(traj[:, 2, 1], traj[:, 2, 2], 'b-', label='C2 (Right)')
-    plt.scatter(traj[0, 1, 1], traj[0, 1, 2], c='k', marker='x') # Start
-    plt.scatter(traj[0, 2, 1], traj[0, 2, 2], c='k', marker='x')
-    plt.title("X-Y Projection (Swap?)")
-    plt.xlabel("X"); plt.ylabel("Y")
-    plt.grid(True)
+    def project_to_h3(x):
+        """Project x in R^4 to H^3: t = sqrt(1 + r^2)"""
+        # x is (N, 4)
+        r_vec = x[..., 1:]
+        r2 = np.sum(r_vec**2, axis=-1)
+        t = np.sqrt(1.0 + r2)
+        x_proj = np.empty_like(x)
+        x_proj[..., 0] = t
+        x_proj[..., 1:] = r_vec
+        return x_proj
+
+    def run_sgd_3d(pot, x0, steps=2000, lr=0.01):
+        x = x0.copy()
+        traj = []
+        for i in range(steps):
+            grad = pot.gradient(x)
+            x = x - lr * grad
+            x = project_to_h3(x)
+            if i % 10 == 0: traj.append(x.copy())
+        return np.array(traj), x
+
+    def run_adam_3d(pot, x0, steps=2000, lr=0.01):
+        x = x0.copy()
+        m = np.zeros_like(x)
+        v = np.zeros_like(x)
+        b1=0.9; b2=0.999; eps=1e-8
+        traj = []
+        
+        for i in range(1, steps+1):
+            grad = pot.gradient(x)
+            m = b1*m + (1-b1)*grad
+            v = b2*v + (1-b2)*grad**2
+            m_hat = m/(1-b1**i)
+            v_hat = v/(1-b2**i)
+            
+            x = x - lr * m_hat / (np.sqrt(v_hat) + eps)
+            x = project_to_h3(x)
+            if i % 10 == 0: traj.append(x.copy())
+            
+        return np.array(traj), x
+
+    def run_rsgd_3d(pot, x0, steps=2000, lr=0.01):
+        """Riemannian SGD on Hyperboloid."""
+        x = x0.copy()
+        traj = []
+        J = minkowski_metric(4) # diag(-1, 1, 1, 1)
+        
+        for i in range(steps):
+            # 1. Euclidean Gradient
+            g_euc = pot.gradient(x)
+            
+            # 2. Project to Tangent Space
+            # Minkowski Inner (x, g_euc) ?
+            # Wait, Gradient defined via metric.
+            # grad_M V = J * grad_E V.
+            # P_x(v) = v + <x, v>_M x.
+            # So RiemGrad = P_x ( J * g_euc ).
+            
+            # g_mink = (J @ g_euc.T).T ?
+            # J is diagonal (-1, 1, 1, 1).
+            # So term 0 is negated.
+            
+            g_mink = g_euc.copy()
+            g_mink[..., 0] *= -1.0
+            
+            # Inner product <x, g_mink>_M
+            # <x, g_mink>_M = -x0*g0 + x_rest*g_rest
+            inner = minkowski_inner(x, g_mink)
+            
+            # Riem Grad
+            grad_R = g_mink + inner[..., np.newaxis] * x
+            
+            # 3. Retraction: Exponential map or simply x - lr*grad + project
+            # Retraction: R_x(v) = x + v (normalized).
+            # Or exponential map formula.
+            # Let's use simple retraction: x - lr * grad_R, then project.
+            
+            v = -lr * grad_R
+            x_new = x + v
+            x = project_to_h3(x_new)
+            
+            if i % 10 == 0: traj.append(x.copy())
+            
+        return np.array(traj), x
+
+    print("Running SGD...")
+    sgd_traj, sgd_final = run_sgd_3d(pot, x0, steps=2000, lr=0.05)
+    print(f"SGD Untangled? {sgd_final[1, 1] < sgd_final[2, 1]}")
     
-    # Plot X-Z (Side View) - Check Avoidance
-    plt.subplot(1, 2, 2)
-    plt.plot(traj[:, 1, 1], traj[:, 1, 3], 'r-', label='C1')
-    plt.plot(traj[:, 2, 1], traj[:, 2, 3], 'b-', label='C2')
-    plt.title("X-Z Projection (Avoidance?)")
-    plt.xlabel("X"); plt.ylabel("Z (3rd Dim)")
-    plt.grid(True)
+    print("Running Adam...")
+    adam_traj, adam_final = run_adam_3d(pot, x0, steps=2000, lr=0.01)
+    print(f"Adam Untangled? {adam_final[1, 1] < adam_final[2, 1]}")
     
-    plt.savefig('tangled_3d_result.png')
+    print("Running RSGD...")
+    rsgd_traj, rsgd_final = run_rsgd_3d(pot, x0, steps=2000, lr=0.01)
+    print(f"RSGD Untangled? {rsgd_final[1, 1] < rsgd_final[2, 1]}")
+
+    # Plot Trajectories
+    plt.figure(figsize=(16, 12))
+    
+    def plot_traj(idx, title, traj, x_final):
+        # Plot X-Z Projection
+        plt.subplot(2, 2, idx)
+        # C1: Red
+        plt.plot(traj[:, 1, 1], traj[:, 1, 3], 'r-', label='C1', alpha=0.6)
+        # C2: Blue
+        plt.plot(traj[:, 2, 1], traj[:, 2, 3], 'b-', label='C2', alpha=0.6)
+        
+        # Start/End
+        plt.scatter(traj[0, 1, 1], traj[0, 1, 3], c='k', marker='x')
+        plt.scatter(traj[-1, 1, 1], traj[-1, 1, 3], c='r', s=50)
+        plt.scatter(traj[-1, 2, 1], traj[-1, 2, 3], c='b', s=50)
+        
+        unt = (x_final[1, 1] < x_final[2, 1])
+        plt.title(f"{title} (Untangled: {unt})")
+        plt.xlabel("X"); plt.ylabel("Z")
+        plt.grid(True)
+        plt.xlim(-1.5, 1.5)
+        plt.ylim(-1.5, 1.5)
+
+    plot_traj(1, "HEI (Z-Kick)", traj, x_final)
+    plot_traj(2, "SGD", sgd_traj, sgd_final)
+    plot_traj(3, "Adam", adam_traj, adam_final)
+    plot_traj(4, "RSGD", rsgd_traj, rsgd_final)
+    
+    plt.tight_layout()
+    plt.savefig('tangled_3d_comparison.png')
 
 if __name__ == "__main__":
     run_experiment_3d()
