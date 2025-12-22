@@ -51,23 +51,39 @@ class ContactStateN:
 @dataclasses.dataclass
 class ContactConfigN:
     dt: float = 0.01
-    gamma: float = 0.0 # Damping
-    
+    gamma: float = 0.0 # Base damping
+    target_temp: float = None # Temp setpoint for adaptive thermostat
+    thermostat_tau: float = 10.0 # Thermostat time constant
+
 class ContactIntegratorN:
     def __init__(self, oracle: PotentialOracleN, inertia: Any, config: ContactConfigN):
         self.oracle = oracle
         self.inertia = inertia
         self.config = config
+        self.gamma = config.gamma 
 
     def step(self, state: ContactStateN) -> ContactStateN:
         G = state.G
         M = state.M
         z = state.z
         dt = self.config.dt
-        gamma = self.config.gamma
         
         # 0. Get current position
         x_world = G[..., 0]
+        
+        # Adaptive Thermostat Logic
+        if self.config.target_temp is not None:
+             N = G.shape[0]
+             # Kinetic Energy T = sum(0.5 v I v) ? 
+             # Inertia.kinetic_energy returns TOTAL T.
+             T_current = self.inertia.kinetic_energy(M, x_world) / N 
+             
+             # Integral Control: d(gamma)/dt = (1/tau) * (T - T_target)
+             delta_gamma = (dt / self.config.thermostat_tau) * (T_current - self.config.target_temp)
+             self.gamma += delta_gamma
+             self.gamma = max(0.0, self.gamma) # Clamp non-negative
+             
+        gamma = self.gamma
         
         # 1. Potential Energy and Gradient
         try:

@@ -1,4 +1,6 @@
-outputs/
-test.py
 **/__pycache__/
 *.py[cod]
+*.png
+*.jpg
+*.csv
+data

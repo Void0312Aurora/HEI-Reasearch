@@ -155,6 +155,90 @@ class CompositePotentialN:
     def gradient(self, x):
         return sum(t.gradient(x) for t in self.terms)
 
+class SparseEdgePotential:
+    """
+    Attraction between defined edges (O(E) complexity).
+    Used for graph-based skeleton or semantic streams.
+    """
+    def __init__(self, edges: np.ndarray, 
+                 kernel_fn: Callable[[np.ndarray], np.ndarray], 
+                 d_kernel_fn: Callable[[np.ndarray], np.ndarray]):
+        self.edges = np.asarray(edges, dtype=int)
+        self.kernel_fn = kernel_fn
+        self.d_kernel_fn = d_kernel_fn
+        
+    def potential(self, x: np.ndarray) -> float:
+        idx_u, idx_v = self.edges[:, 0], self.edges[:, 1]
+        xu, xv = x[idx_u], x[idx_v]
+        inner = np.sum(xu * xv * np.array([-1] + [1]*(x.shape[1]-1)), axis=-1)
+        val = np.maximum(-inner, 1.0 + 1e-7)
+        return float(np.sum(self.kernel_fn(np.arccosh(val))))
+        
+    def gradient(self, x: np.ndarray) -> np.ndarray:
+        N, dim = x.shape
+        grad = np.zeros_like(x)
+        idx_u, idx_v = self.edges[:, 0], self.edges[:, 1]
+        xu, xv = x[idx_u], x[idx_v]
+        inner = np.sum(xu * xv * np.array([-1] + [1]*(dim-1)), axis=-1)
+        val = np.maximum(-inner, 1.0 + 1e-7)
+        dists = np.arccosh(val)
+        denom = np.sqrt(val**2 - 1.0)
+        denom = np.maximum(denom, 1e-7)
+        S = self.d_kernel_fn(dists) / denom
+        J = np.ones(dim); J[0] = -1.0
+        Fu = -S[:, np.newaxis] * (xv * J)
+        Fv = -S[:, np.newaxis] * (xu * J)
+        np.add.at(grad, idx_u, Fu)
+        np.add.at(grad, idx_v, Fv)
+        return grad
+
+class NegativeSamplingPotential:
+    """
+    Stochastic Repulsion using Negative Sampling (O(N*k) complexity).
+    """
+    def __init__(self, kernel_fn: Callable[[np.ndarray], np.ndarray], 
+                 d_kernel_fn: Callable[[np.ndarray], np.ndarray],
+                 num_neg: int = 5,
+                 rescale: float = 1.0,
+                 seed: Optional[int] = None):
+        self.kernel_fn = kernel_fn
+        self.d_kernel_fn = d_kernel_fn
+        self.num_neg = num_neg
+        self.rescale = rescale
+        self.rng = np.random.default_rng(seed)
+        
+    def _sample(self, N):
+        u = np.repeat(np.arange(N), self.num_neg)
+        v = self.rng.integers(0, N, size=N * self.num_neg)
+        mask = (u != v)
+        return u[mask], v[mask]
+
+    def potential(self, x: np.ndarray) -> float:
+        N = x.shape[0]
+        u, v = self._sample(N)
+        xu, xv = x[u], x[v]
+        inner = np.sum(xu * xv * np.array([-1] + [1]*(x.shape[1]-1)), axis=-1)
+        val = np.maximum(-inner, 1.0 + 1e-7)
+        return float(np.sum(self.kernel_fn(np.arccosh(val))) * self.rescale)
+
+    def gradient(self, x: np.ndarray) -> np.ndarray:
+        N, dim = x.shape
+        grad = np.zeros_like(x)
+        u, v = self._sample(N)
+        xu, xv = x[u], x[v]
+        inner = np.sum(xu * xv * np.array([-1] + [1]*(dim-1)), axis=-1)
+        val = np.maximum(-inner, 1.0 + 1e-7)
+        dists = np.arccosh(val)
+        denom = np.sqrt(val**2 - 1.0)
+        denom = np.maximum(denom, 1e-7)
+        S = (self.d_kernel_fn(dists) / denom) * self.rescale
+        J = np.ones(dim); J[0] = -1.0
+        Fu = -S[:, np.newaxis] * (xv * J)
+        Fv = -S[:, np.newaxis] * (xu * J)
+        np.add.at(grad, u, Fu)
+        np.add.at(grad, v, Fv)
+        return grad
+
 # Common Kernels
 def kernel_lennard_jones(d, sigma=1.0, epsilon=1.0):
     # d^-12 - d^-6 ?
@@ -173,11 +257,7 @@ def d_kernel_soft_cluster(d, sigma=0.5):
     val = -np.exp(-d**2 / (2 * sigma**2))
     return val * (d / sigma**2) # Note sign is positive (Attraction increases V as d increases? No V is negative Gaussian)
     # V goes from -1 to 0. Min at d=0.
-    # Force = -grad V = - (d/sigma^2 exp) grad d.
-    # Gradient is positive -> Pushes towards larger d?
-    # Wait.
-    # V(d) looks like \_/ (inverted Gaussian). Min at 0.
     # V'(d) > 0 for d > 0.
-    # Force = - V'(d) grad d.
+    # Force = -grad V = - (d/sigma^2 exp) grad d.
     # grad d points away. -grad d points in.
     # So Force points IN. Correct.
