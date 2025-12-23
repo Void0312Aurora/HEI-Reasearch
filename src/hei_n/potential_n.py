@@ -59,9 +59,21 @@ class HarmonicPriorN:
             factor = self.k * d / denom
             grad[..., 0] = factor
         else:
-            # TODO: Implement generic gradient if needed
-            # For now assume e0 is Origin for efficiency
-            return self.gradient(x) 
+            # Handle non-origin center
+            d = dist_n(x, self.e0)
+            
+            # grad d = 1/sqrt(...) * grad_u
+            inner = minkowski_inner(x, self.e0)
+            val = np.maximum(-inner, 1.0 + 1e-7)
+            denom = np.sqrt(val**2 - 1.0)
+            denom = np.maximum(denom, 1e-7)
+            
+            J = np.ones(x.shape[-1]); J[0] = -1.0
+            grad_u = self.e0 * J # (dim,) broad
+            grad_d = (-1.0 / denom)[:, np.newaxis] * grad_u
+            
+            grad = self.k * d[:, np.newaxis] * grad_d
+            return grad 
             
         return grad
 

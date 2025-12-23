@@ -162,10 +162,14 @@ class ContactIntegratorN:
         except AttributeError:
              V = 0.0 
         grad_pot = self.oracle.gradient(x_world)
-        I_min = 1.0 
+        # Explicit Torque Guess
+        force_geom = self.inertia.geometric_force(M, x_world)
+        # Force = -gradV Result + force_geom
+        # Project both to tangent space (although geometric force should be tangent already?)
+        # grad_pot is in R^{n+1}, geometric_force is ideally internal but usually represented in R^{n+1}.
         
-        grad_geom = self.inertia.geometric_force(M, x_world)
-        Force_world = - project_to_tangent(x_world, grad_pot - grad_geom)
+        grad_V_minus_forceGeom = grad_pot - force_geom
+        Force_world = - project_to_tangent(x_world, grad_V_minus_forceGeom)
         
         from .inertia_n import compute_diamond_torque
         Torque_explicit = compute_diamond_torque(G, Force_world)

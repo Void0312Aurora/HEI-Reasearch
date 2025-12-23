@@ -29,7 +29,9 @@ def dist_n(x: np.ndarray, y: np.ndarray, eps=1e-7) -> np.ndarray:
     """
     inner = minkowski_inner(x, y)
     # Clamp for numerical stability (inner <= -1)
-    inner = np.minimum(inner, -1.0 + eps)
+    # inner must be <= -1. If slight drift makes it -0.999, arccosh fails.
+    # So we clamp to -1.0 - eps.
+    inner = np.minimum(inner, -1.0 - eps)
     return np.arccosh(-inner)
 
 def dist_grad_n(x: np.ndarray, y: np.ndarray) -> np.ndarray:

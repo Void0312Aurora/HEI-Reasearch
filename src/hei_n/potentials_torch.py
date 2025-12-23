@@ -183,25 +183,47 @@ class HarmonicPriorTorch:
         # Assuming origin for simplicity, or handle center.
         # Most usage is origin.
         
-        x0 = x[:, 0]
-        # Safety
-        x0 = torch.clamp(x0, min=1.0 + 1e-7)
-        dists = torch.acosh(x0)
-        
-        energy = torch.sum(0.5 * self.k * dists**2)
-        
-        # Grad
-        # V' = k * d
-        # dd/dx = 1/sqrt(x0^2 - 1) * dx0/dx
-        # dx0/dx = (1, 0, ...)
-        
-        force = self.k * dists # (N,)
-        denom = torch.sqrt(x0**2 - 1.0)
-        factor = force / denom # (N,)
-        
-        grad = torch.zeros_like(x)
-        grad[:, 0] = factor
-        
+        if self.center is None:
+            # Origin case (optimized)
+            x0 = x[:, 0]
+            # Safety
+            x0 = torch.clamp(x0, min=1.0 + 1e-7)
+            dists = torch.acosh(x0)
+            
+            energy = torch.sum(0.5 * self.k * dists**2)
+            
+            force = self.k * dists # (N,)
+            denom = torch.sqrt(x0**2 - 1.0)
+            factor = force / (denom + 1e-9) # Safety denom
+            
+            grad = torch.zeros_like(x)
+            grad[:, 0] = factor
+        else:
+            # Generic Center
+            device = x.device
+            dim = x.shape[-1]
+            J_vec = torch.ones(dim, device=device)
+            J_vec[0] = -1.0
+            
+            # <x, e0>
+            inner = torch.sum(x * self.center * J_vec, dim=-1)
+            # Clamp inner <= -1
+            inner = torch.clamp(inner, max=-1.0 - 1e-7)
+            
+            dists = torch.acosh(-inner)
+            energy = torch.sum(0.5 * self.k * dists**2)
+            
+            # Grad
+            # grad d = 1/sinh(d) * (-J e0) ? 
+            # grad_x <x, e0> = J e0
+            # grad d = (-1/sqrt) * J e0
+            # grad V = k * d * (-1/sqrt) * J e0
+            
+            denom = torch.sqrt(inner**2 - 1.0)
+            factor = - (self.k * dists) / (denom + 1e-9)
+            
+            grad = factor.unsqueeze(-1) * (self.center * J_vec)
+             
         return energy, grad
 
 class CompositePotentialTorch:

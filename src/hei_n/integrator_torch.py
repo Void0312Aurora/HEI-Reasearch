@@ -142,11 +142,17 @@ class ContactIntegratorTorch:
         V_tot, grad_pot = self.oracle.potential_and_grad(x_world)
         
         # Geom Force = 0 for Identity
-        # grad_geom = 0
+        # force_geom = 0
         
         # Tangent Projection
         from .torch_core import project_to_tangent_torch
-        Force_world = - project_to_tangent_torch(x_world, grad_pot)
+        # Force = -gradV + force_geom
+        # Note: IdentityInertia has force_geom=0. 
+        # But for correctness if extended:
+        force_geom = self.inertia.geometry_force(M, x_world)
+        
+        grad_V_minus_forceGeom = grad_pot - force_geom
+        Force_world = - project_to_tangent_torch(x_world, grad_V_minus_forceGeom)
         
         Torque_explicit = compute_diamond_torque_torch(G, Force_world)
         

@@ -175,49 +175,67 @@ def train(args):
     print(f"Starting GPU Training: {args.steps} steps...", flush=True)
     start_time = time.time()
     
-    # Torch benchmark warm-up?
-    # Just run.
+    # Torch benchmark warm-up
+    for _ in range(5):
+        pass
+        
+    residuals = []
+    step_times = []
+    renorms = []
+    
+    print(f"Starting GPU Training: {args.steps} steps...", flush=True)
     
     for step in range(args.steps):
         step_start = time.time()
         
         # Pin Root
-        # state.M[root_idx] = 0.0 
-        # Using indexing on GPU M is efficient.
         state.M[root_idx] = 0.0
-        
         state = integrator.step(state)
-        
         state.M[root_idx] = 0.0
         
         torch.cuda.synchronize() # Wait for GPU
         step_end = time.time()
         step_dur = step_end - step_start
         
+        # Collect Stats
+        diag = state.diagnostics
+        residuals.append(diag.get('solver_residual', 0.0))
+        renorms.append(diag.get('renorm_magnitude', 0.0))
+        step_times.append(step_dur * 1000.0) # ms
+        
         if step % args.log_interval == 0:
-            diag = state.diagnostics
-            
             # Metrics (GPU -> CPU for print)
-            # Sample 1000 nodes for radius
-            # Random indices
             with torch.no_grad():
                 idx = torch.randint(0, N, (min(N, 1000),), device=device)
                 x_sample = state.x[idx]
                 radii = torch.acosh(torch.clamp(x_sample[:, 0], min=1.0))
                 mean_R = torch.mean(radii).item()
             
-            res = diag.get('solver_residual', 0.0)
-            err = diag.get('manifold_error', 0.0) # Not calculated in PyTorch yet?
-            # I didn't add manifold_error to IntegratorTorch step.
-            # But I added Renorm.
-            
+            res = residuals[-1]
+            renorm = renorms[-1]
             dt_used = diag.get('dt', args.dt)
-            renorm = diag.get('renorm_magnitude', 0.0)
-            
             elapsed = time.time() - start_time
+            
             print(f"Step {step}: T={elapsed:.1f}s | dt={dt_used:.1e} | R={mean_R:.2f} | Res={res:.1e} | Renorm={renorm:.1e} | {step_dur*1000:.1f}ms/step", flush=True)
             
     print("Training Complete.", flush=True)
+    
+    # Gate Analysis
+    res_arr = np.array(residuals)
+    time_arr = np.array(step_times)
+    ren_arr = np.array(renorms)
+    
+    res_p99 = np.percentile(res_arr, 99)
+    time_p99 = np.percentile(time_arr, 99)
+    time_mean = np.mean(time_arr)
+    ren_max = np.max(ren_arr)
+    
+    print("\n=== GATE CHECK REPORT ===")
+    print(f"Metric\t\tValue\t\tThreshold\tStatus")
+    print(f"Residual P99\t{res_p99:.2e}\t< 5.00e-03\t{'PASS' if res_p99 < 5e-3 else 'FAIL'}")
+    print(f"Renorm Max\t{ren_max:.2e}\t< 1.00e-04\t{'PASS' if ren_max < 1e-4 else 'FAIL'}")
+    print(f"Throughput P99\t{time_p99:.1f}ms\t< {2*time_mean:.1f}ms\t{'PASS' if time_p99 < 2*time_mean else 'WARN'}")
+    print("=========================")
     
     # Save
     if args.save:
