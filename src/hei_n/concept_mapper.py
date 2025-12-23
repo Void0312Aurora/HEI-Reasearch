@@ -29,6 +29,7 @@ BILINGUAL_LEXICON = {
     # Emotions
     "love": "爱", "happy": "快乐", "sad": "悲伤", "angry": "生气", "fear": "恐惧",
     "joy": "喜悦", "hate": "恨", "like": "喜欢", "dislike": "不喜欢",
+    "开心": "快乐", "难过": "悲伤", "高兴": "快乐", "痛苦": "悲伤",
     
     # Nature
     "sun": "太阳", "moon": "月亮", "star": "星星", "sky": "天空", "earth": "地球",
@@ -37,6 +38,11 @@ BILINGUAL_LEXICON = {
     # Actions
     "go": "去", "come": "来", "see": "看", "hear": "听", "say": "说",
     "think": "想", "know": "知道", "want": "想要", "need": "需要", "have": "有",
+    
+    # Intention Cluster (Gate M Fix)
+    "desire": "想要", "require": "需要", "hope": "希望", "plan": "打算",
+    "wish": "希望", "will": "想要", "would": "想要", "can": "能",
+    "must": "必须", "should": "应该",
     
     # Time
     "time": "时间", "day": "天", "night": "夜", "today": "今天", "tomorrow": "明天",
@@ -98,8 +104,12 @@ class ConceptMapper:
                     word = parts[1].lower()
                     if word not in self.word_to_id:  # Don't overwrite
                         self.word_to_id[word] = i
+            elif node.startswith('Code:'):
+                # Cilin Code node: Code:Aa01
+                code = node.split(':')[1]
+                self.word_to_id[code.lower()] = i
             elif '|' in node:
-                # Sememe node: English|Chinese
+                # Sememe node: English|Chinese (Legacy OpenHowNet)
                 # Add BOTH parts to vocab
                 parts = node.split('|')
                 eng_part = parts[0].lower()
@@ -114,7 +124,7 @@ class ConceptMapper:
                     self.word_to_id[node.lower()] = i
                 
         self.id_to_word = {v: k for k, v in self.word_to_id.items()}
-        print(f"Loaded {len(self.word_to_id)} concepts from checkpoint.")
+        # print(f"Loaded {len(self.word_to_id)} concepts from checkpoint.")
         
     def save_vocab(self, path: str):
         """Save vocabulary to JSON file."""
@@ -156,22 +166,58 @@ class ConceptMapper:
         return [self.id_to_word.get(i, f"<UNK:{i}>") for i in ids]
     
     def _tokenize(self, text: str) -> List[str]:
-        """Simple tokenization with bilingual support."""
-        # Remove punctuation and split
-        text = re.sub(r'[^\w\s]', ' ', text)
-        words = text.split()
+        """
+        Tokenization with Forward Maximum Matching (FMM) for Chinese support.
+        """
+        # 1. Clean text
+        text = re.sub(r'[^\w\s]', ' ', text).strip()
         
-        # Convert English words to Chinese using bilingual lexicon
-        translated = []
-        for w in words:
-            if w:
+        # 2. Check if text contains Chinese (if so, use FMM)
+        has_zh = any('\u4e00' <= char <= '\u9fff' for char in text)
+        
+        if not has_zh:
+            # Simple English split
+            words = text.split()
+            translated = []
+            for w in words:
                 w_lower = w.lower()
-                if w_lower in BILINGUAL_LEXICON:
-                    translated.append(BILINGUAL_LEXICON[w_lower])
-                else:
-                    translated.append(w)
+                translated.append(BILINGUAL_LEXICON.get(w_lower, w))
+            return translated
+        else:
+            # Chinese FMM
+            # Remove spaces for FMM
+            text_continuous = text.replace(" ", "")
+            tokens = []
+            max_len = 5 # Max word length to check
+            
+            i = 0
+            while i < len(text_continuous):
+                matched = False
+                # Try longest match first
+                for l in range(max_len, 0, -1):
+                    if i + l > len(text_continuous):
+                        continue
                     
-        return translated
+                    sub = text_continuous[i : i+l]
+                    # Check if sub is in vocab or lexicon keys (English keys, but we are parsing Chinese)
+                    # Or lexicon values (Chinese mappings)
+                    
+                    # Check 1: In vocab directly
+                    if sub in self.word_to_id:
+                        tokens.append(sub)
+                        i += l
+                        matched = True
+                        break
+                        
+                    # Check 2: In Lexicon Values (Reverse lookup? Too slow. We shouldn't need it if vocab is complete)
+                    # But vocab keys are what we want.
+                    
+                if not matched:
+                    # Input single char
+                    tokens.append(text_continuous[i])
+                    i += 1
+            
+            return tokens
     
     def find_similar(self, word: str, top_k: int = 5) -> List[str]:
         """Find similar words in vocabulary (fuzzy match)."""

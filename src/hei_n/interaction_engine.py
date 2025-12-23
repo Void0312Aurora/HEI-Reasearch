@@ -227,99 +227,186 @@ class InteractionEngine:
             if nid not in self.observation_target_ids:  # Don't count input concepts
                 self.state.trajectory_neighbors[nid] += float(scores[i])
                 
-    def get_trajectory_output(self, top_k: int = 10, skeleton_only: bool = True) -> List[Tuple[str, float]]:
+    # Pragmatic Patch: Stop Concepts (Do not output these)
+    STOP_CONCEPTS = {
+        "我", "我们", "咱们", "吾侪", "你", "你们", "他", "他们", "它", "它们",
+        "的", "了", "吗", "呢", "吧", "啊", "这", "那", "这个", "那个",
+        "什么", "怎么", "为什么", "如果", "那么", "因为", "所以", "但是",
+        "是", "在", "有", "和", "跟", "与", "就", "都", "也", "还", "只",
+        "want", "need", "should", "can", "will", "would",
+        "想要", "希望", "打算", "需要", "会", "要", "想"
+    }
+
+    def process_input(self, text: str, steps: int = 200, top_k: int = 10) -> List[Tuple[str, float]]:
         """
-        Get top-K concepts using skeleton-first readout.
-        
-        Args:
-            top_k: Number of concepts to return
-            skeleton_only: If True, only return skeleton neighbors (Priority Fix)
-            
-        Returns:
-            List of (concept_word, score) tuples
+        Process user input and return activated concepts.
         """
-        combined_scores = Counter()
-        
-        # 1. Add skeleton neighbors (Priority Fix from temp-09.md)
-        skeleton_neighbors = set()
-        if self.skeleton is not None and self.observation_target_ids:
-            for anchor_id in self.observation_target_ids:
-                # Get 1-hop and 2-hop skeleton neighbors
-                skel_neighbors = self.skeleton.get_neighbors(anchor_id, max_hop=2)
-                skeleton_neighbors.update(skel_neighbors)
-                
-                # Score skeleton neighbors by their trajectory activation (if any)
-                for sn in skel_neighbors:
-                    trajectory_score = self.state.trajectory_neighbors.get(sn, 0)
-                    combined_scores[sn] = trajectory_score + 1.0  # Base score for being skeleton neighbor
-                    
-        # 2. If skeleton_only, only keep skeleton neighbors
-        if not skeleton_only:
-            # Add trajectory neighbors not in skeleton
-            for nid, score in self.state.trajectory_neighbors.items():
-                if nid not in skeleton_neighbors:
-                    combined_scores[nid] += score * 0.1  # Lower weight for non-skeleton
-                    
-        # 3. Filter out input concepts
-        for anchor_id in self.observation_target_ids:
-            combined_scores.pop(anchor_id, None)
-            
-        if not combined_scores:
-            # Fallback to pure trajectory if no skeleton
-            top_ids = self.state.trajectory_neighbors.most_common(top_k)
-            results = []
-            for concept_id, score in top_ids:
-                word = self.mapper.particles_to_text([concept_id])[0]
-                results.append((word, score))
-            return results
-            
-        # Get top concepts
-        top_ids = combined_scores.most_common(top_k)
-        
-        results = []
-        for concept_id, score in top_ids:
-            word = self.mapper.particles_to_text([concept_id])[0]
-            results.append((word, score))
-            
-        return results
-            
-        return results
-        
-    def process_input(self, text: str, steps: int = 200, top_k: int = 10) -> List[str]:
-        """
-        Process user input and generate response concepts.
-        
-        V2: Uses sustained observation + trajectory readout.
-        
-        Args:
-            text: User input text
-            steps: Number of simulation steps
-            top_k: Number of top concepts to return
-            
-        Returns:
-            List of activated concept words (by trajectory score)
-        """
-        # Map text to particle IDs
+        # 1. Map text to particles
         target_ids = self.mapper.text_to_particles(text)
-        
         if not target_ids:
-            print(f"Warning: No concepts found for '{text}'")
+            print(f"Warning: No known concepts in input '{text}'")
             return []
             
-        input_concepts = self.mapper.particles_to_text(target_ids)
-        print(f"Input concepts: {input_concepts}")
+        # 2. Set observation targets (Sustained Force)
+        # Pragmatic Patch: Focus Selection
         
-        # Set sustained observation (NEW)
-        self.set_observation(target_ids, strength=self.observation_strength)
+        content_ids = []
+        function_ids = []
         
-        # Run simulation
+        for tid in target_ids:
+            c_text_list = self.mapper.particles_to_text([tid])
+            if not c_text_list: continue
+            c_text = c_text_list[0]
+            print(f"DEBUG: Processing '{c_text}' (Stop: {c_text in self.STOP_CONCEPTS})")
+            
+            if c_text in self.STOP_CONCEPTS or c_text in ["想要", "希望", "打算", "需要", "会", "要", "想"]:
+                function_ids.append(tid)
+            else:
+                content_ids.append(tid)
+                
+        # Strategy: If we have content words, ONLY observe content words.
+        # If we only have function words (e.g. "Who am I?"), observe function words.
+        
+        if content_ids:
+             final_target_ids = content_ids
+             print(f"Strict Focus: Observing only content ({len(content_ids)})")
+        else:
+             final_target_ids = function_ids
+             print(f"Strict Focus: Observing function words ({len(function_ids)})")
+             
+        targets_tensor = torch.tensor(self.positions[final_target_ids], dtype=torch.float32, device=self.device)
+        self.observation_targets = targets_tensor
+        self.observation_target_ids = target_ids # Keep ALL for neighbor boosting logic (Context)?
+        # NO. If we boost neighbors of function words, we get "吾辈" again.
+        # But we ALREADY filtered boosting in Step 6517.
+        # So we can keep self.observation_target_ids as full input for Context checking?
+        # Step 6517 logic iterates self.observation_target_ids.
+        # So let's keep it full, but we use final_target_ids for FORCE.
+        
+        self.observation_target_ids = target_ids 
+        
+        # 3. Simulate (Think)
+        self.state.trajectory_neighbors.clear()
+        
         for _ in range(steps):
             self.step()
             
-        # Get trajectory output (NEW)
+        # 4. Readout (Collapse)
         results = self.get_trajectory_output(top_k=top_k)
         
-        return [word for word, score in results]
+        # 5. Output Fallback
+        if len(results) < 3 and self.skeleton:
+             # Try to expand parents of NON-STOP input concepts
+             print("Triggering Fallback: Expanding parents of input...")
+             for tid in target_ids:
+                 c_text = self.mapper.particles_to_text([tid])[0]
+                 if c_text in self.STOP_CONCEPTS or c_text in ["想要", "希望", "打算", "需要"]:
+                     continue # Don't expand "want" or "I"
+                     
+                 parents = self.skeleton.get_neighbors(tid)
+                 parent_codes = [p for p in parents if self.nodes[p].startswith('Code:')]
+                 for p_code in parent_codes[:2]: 
+                     expansion_results = self._expand_category_code(p_code, score=1.0)
+                     results.extend(expansion_results)
+                     
+        # Deduplicate and Filter Stop Concepts
+        seen = set()
+        final_results = []
+        for w, s in sorted(results, key=lambda x: x[1], reverse=True):
+            if w in self.STOP_CONCEPTS:
+                continue
+            if w not in seen and w not in text: 
+                seen.add(w)
+                final_results.append((w, s))
+                
+        return final_results[:top_k]
+
+    def _expand_category_code(self, code_id: int, score: float) -> List[Tuple[str, float]]:
+        """Helper to expand a category code to leaf words."""
+        leaves = []
+        if self.skeleton is None:
+            return leaves
+            
+        q = [code_id]
+        visited = {code_id}
+        expansion_limit = 5 
+        
+        while q and len(leaves) < expansion_limit:
+            curr = q.pop(0)
+            children = self.skeleton.get_children(curr)
+            for child in children:
+                child_node = self.nodes[child]
+                if child_node.startswith('C:'):
+                     # Found word
+                     word_list = self.mapper.particles_to_text([child])
+                     if word_list:
+                         leaves.append((word_list[0], score * 0.9))
+                elif child_node.startswith('Code:') and child not in visited:
+                    visited.add(child)
+                    q.append(child)
+        return leaves
+
+    def get_trajectory_output(self, top_k: int = 10) -> List[Tuple[str, float]]:
+        """
+        Get concepts based on trajectory integration + Skeleton.
+        """
+        # ... (Previous Logic but refactored to use helper) ...
+        # Combine trajectory neighbors
+        combined_scores = Counter()
+        
+        # Base scores from trajectory frequency
+        for nid, count in self.state.trajectory_neighbors.items():
+            combined_scores[nid] += count
+            
+        # Skeleton Boost (Skeleton-First Readout)
+        if self.skeleton:
+            # For every active concept in input AND trajectory, boost its neighbors
+            # Boost Sequence: Input > Trajectory
+            
+            # 1. Boost Input Neighbors (Context)
+            for tid in self.observation_target_ids:
+                # Pragmatic Patch: Focus Selection
+                # Do not boost neighbors of Stop/Function concepts
+                c_text_list = self.mapper.particles_to_text([tid])
+                if not c_text_list: continue
+                c_text = c_text_list[0]
+                
+                if c_text in self.STOP_CONCEPTS or c_text in ["想要", "希望", "打算", "需要", "会", "要"]:
+                    continue # Skip boosting neighbors for function words
+                    
+                neighbors = self.skeleton.get_neighbors(tid)
+                for n in neighbors:
+                    combined_scores[n] += 100.0  # Huge boost for CONTENT neighbors
+                    
+            # 2. Boost Trajectory Neighbors (drifted thought)
+            # Only if we aren't strict skeleton-only. 
+            # For Phase I, we want strict skeleton control.
+            pass
+            
+        # Filter for output
+        # If skeleton is present, we ONLY return nodes that are in the skeleton neighborhood of inputs
+        # or their children.
+        
+        # V3 Strategy: Return highest scored items, resolving Codes to Words
+        top_ids = combined_scores.most_common(top_k * 2) # Get more candidates
+        
+        results = []
+        for concept_id, score in top_ids:
+            raw_node = self.nodes[concept_id]
+            
+            if raw_node.startswith('Code:') or raw_node == 'CilinRoot':
+                # Expand
+                leaves = self._expand_category_code(concept_id, score)
+                results.extend(leaves)
+            else:
+                # Word
+                word_list = self.mapper.particles_to_text([concept_id])
+                if word_list:
+                    results.append((word_list[0], score))
+                    
+        return results
+            
+
         
     def get_cursor_position(self) -> np.ndarray:
         """Get current cursor position."""
