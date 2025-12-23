@@ -55,7 +55,12 @@ class SparseEdgePotential:
         
         dists, idx_u, idx_v, val = self._compute_dists(x) # val is -<u,v>
         
-        denom = np.sqrt(val**2 - 1.0)
+        # Overflow safe sqrt using asymptotic
+        large_val = (val > 1e100)
+        denom = np.zeros_like(val)
+        denom[large_val] = val[large_val]
+        denom[~large_val] = np.sqrt(val[~large_val]**2 - 1.0)
+        
         denom = np.maximum(denom, 1e-7)
         dv = self.d_kernel_fn(dists)
         
@@ -147,7 +152,15 @@ class NegativeSamplingPotential:
         val = np.maximum(-inner, 1.0 + 1e-7)
         dists = np.arccosh(val)
         
-        denom = np.sqrt(val**2 - 1.0)
+        # Overflow safe sqrt using asymptotic
+        # if val > 1e150, val**2 overflows float64.
+        # sqrt(val**2 - 1) approx val.
+        large_val = (val > 1e100)
+        denom = np.zeros_like(val)
+        
+        denom[large_val] = val[large_val]
+        denom[~large_val] = np.sqrt(val[~large_val]**2 - 1.0)
+        
         denom = np.maximum(denom, 1e-7)
         dv = self.d_kernel_fn(dists)
         

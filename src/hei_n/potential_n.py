@@ -40,13 +40,20 @@ class HarmonicPriorN:
         # grad V = k * d * grad d
         if self.e0 is None:
             x0 = x[..., 0]
-            d = np.arccosh(np.maximum(x0, 1.0 + 1e-7))
-            denom = np.sqrt(x0**2 - 1.0)
-            denom = np.maximum(denom, 1e-7)
+            # Numerical guard against x0 < 1.0 (float error)
+            val = np.maximum(x0, 1.0 + 1e-7)
+            d = np.arccosh(val)
             
-            # grad d (Euclidean) wrt x
-            # d = arccosh(x0). d' = 1/sqrt(x0^2-1).
-            # grad d = (1/sqrt, 0, 0...)
+            # grad d = 1 / sqrt(x0^2 - 1)
+            # if x0 is large (>1e100), x0^2 overflows.
+            # Use asymptotic: d approx log(2*x0), denom approx x0.
+            
+            large_val = (val > 1e100)
+            denom = np.zeros_like(val)
+            denom[large_val] = val[large_val]
+            denom[~large_val] = np.sqrt(val[~large_val]**2 - 1.0)
+            
+            denom = np.maximum(denom, 1e-7)
             
             grad = np.zeros_like(x)
             factor = self.k * d / denom
@@ -54,7 +61,7 @@ class HarmonicPriorN:
         else:
             # TODO: Implement generic gradient if needed
             # For now assume e0 is Origin for efficiency
-            return self.gradient(x) # Recursion fallback if e0 is default
+            return self.gradient(x) 
             
         return grad
 

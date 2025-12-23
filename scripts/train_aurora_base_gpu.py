@@ -1,0 +1,245 @@
+
+import torch
+import numpy as np
+import sys
+import os
+import networkx as nx
+import argparse
+import time
+import pickle
+import re
+
+# Add src to path
+sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
+
+from hei_n.torch_core import minkowski_metric_torch
+from hei_n.integrator_torch import ContactIntegratorTorch, ContactConfigTorch, ContactStateTorch, IdentityInertiaTorch
+from hei_n.potentials_torch import SparseEdgePotentialTorch, NegativeSamplingPotentialTorch, HarmonicPriorTorch, CompositePotentialTorch, SpringAttractionTorch, LogCoshRepulsionTorch
+
+# Reuse Load Logic (or duplicated for standalone)
+def load_dataset(limit=None):
+    """
+    Load Sememe Taxonomy and OpenHowNet Concepts (CPU Preprocessing).
+    """
+    print("Loading Datasets (CPU)...", flush=True)
+    
+    # 1. Load Sememe Taxonomy
+    sememe_path = "data/openhow/resources/sememe_triples_taxonomy.txt"
+    G = nx.DiGraph()
+    with open(sememe_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) < 3: continue
+            u, rel, v = parts[0], parts[1], parts[2]
+            G.add_edge(u, v)
+    
+    sememe_nodes = set(G.nodes)
+    
+    # 2. Load Concepts
+    dict_path = "data/openhow/resources/HowNet_dict_complete"
+    print(f"Loading concepts from {dict_path}...", flush=True)
+    with open(dict_path, 'rb') as f:
+        hownet_dict = pickle.load(f)
+        
+    pattern = re.compile(r'\{([a-zA-Z]+)\|')
+    sememe_map = {}
+    for node in sememe_nodes:
+        if '|' in node:
+            eng = node.split('|')[0]
+            sememe_map[eng] = node
+        else:
+            sememe_map[node] = node
+            
+    keys = list(hownet_dict.keys())
+    if limit:
+        keys = keys[:limit]
+        
+    for k in keys:
+        item = hownet_dict[k]
+        en_word = item.get('en_word', f"Concept_{k}")
+        definition = item.get('Def', '')
+        
+        match = pattern.search(definition)
+        if match:
+            head_sememe_key = match.group(1)
+            if head_sememe_key in sememe_map:
+                sememe_node = sememe_map[head_sememe_key]
+                concept_node = f"C:{en_word}:{k}"
+                G.add_edge(sememe_node, concept_node)
+    
+    # Root
+    roots = [n for n, d in G.in_degree() if d == 0]
+    if not roots:
+         roots = sorted(G.nodes, key=lambda n: G.degree(n), reverse=True)[:1]
+    root = roots[0]
+    print(f"Graph: {G.number_of_nodes()} nodes. Root: {root}", flush=True)
+    
+    node_list = list(G.nodes)
+    node_map = {n: i for i, n in enumerate(node_list)}
+    edges = np.array([[node_map[u], node_map[v]] for u, v in G.edges()], dtype=np.int64)
+    
+    # Depths
+    try:
+        lens = nx.shortest_path_length(G, source=root)
+        depths = np.zeros(len(node_list))
+        for i, n in enumerate(node_list):
+            if n in lens:
+                depths[i] = lens[n]
+    except:
+        depths = np.zeros(len(node_list))
+        
+    return node_list, edges, depths, node_map[root]
+
+def train(args):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using Device: {device}", flush=True)
+    
+    # 1. Load Data (CPU)
+    nodes, edges, depths, root_idx = load_dataset(limit=args.limit)
+    N = len(nodes)
+    dim = args.dim
+    
+    # 2. Physics Init (CPU -> GPU)
+    print(f"Initializing {N} particles...", flush=True)
+    np.random.seed(args.seed)
+    
+    G_np = np.zeros((N, dim+1, dim+1), dtype=np.float32)
+    M_np = np.zeros((N, dim+1, dim+1), dtype=np.float32)
+    
+    scale_init = 0.05
+    for i in range(N):
+        d_i = depths[i]
+        r = scale_init * d_i + np.random.uniform(0, 0.01)
+        
+        dir_vec = np.random.randn(dim)
+        dir_vec /= np.linalg.norm(dir_vec) + 1e-9
+        
+        ch = np.cosh(r); sh = np.sinh(r)
+        B = np.eye(dim+1)
+        B[0,0] = ch
+        B[0,1:] = sh * dir_vec
+        B[1:,0] = sh * dir_vec
+        B[1:,1:] = np.eye(dim) + (ch - 1) * np.outer(dir_vec, dir_vec)
+        
+        G_np[i] = B
+        v = np.random.randn(dim) * 0.01
+        M_np[i, 0, 1:] = v; M_np[i, 1:, 0] = v
+        
+    # Transfer to GPU
+    G = torch.tensor(G_np, device=device)
+    M = torch.tensor(M_np, device=device)
+    z = torch.tensor(0.0, device=device)
+    edges_gpu = torch.tensor(edges, device=device, dtype=torch.long)
+    
+    state = ContactStateTorch(G=G, M=M, z=z)
+    
+    # 3. Potentials (GPU)
+    print("Configuring GPU Potentials...", flush=True)
+    
+    k_attract = SpringAttractionTorch(k=1.0)
+    attract = SparseEdgePotentialTorch(edges_gpu, k_attract)
+    
+    k_repulse = LogCoshRepulsionTorch(sigma=1.0, A=5.0)
+    repulse = NegativeSamplingPotentialTorch(k_repulse, num_neg=10, rescale=1.0)
+    
+    trap = HarmonicPriorTorch(k=0.05)
+    
+    # Use Composite
+    # Wait, CompositePotentialTorch wrapper?
+    # I implemented individual classes with `potential_and_grad` method.
+    # I need a composite wrapper or manual call.
+    # Ah, I implemented CompositePotentialTorch in `potentials_torch.py` last time?
+    # Yes, it loops.
+    
+    oracle = CompositePotentialTorch([attract, repulse, trap])
+    inertia = IdentityInertiaTorch()
+    
+    # 4. Integrator
+    config = ContactConfigTorch(
+        dt=args.dt,
+        gamma=2.0,
+        target_temp=0.1,
+        thermostat_tau=5.0,
+        fixed_point_iters=3,
+        solver_mixing=0.5,
+        torque_clip=50.0,
+        renorm_interval=50,
+        adaptive=True,
+        tol_disp=0.2,
+        device=device
+    )
+    
+    integrator = ContactIntegratorTorch(oracle, inertia, config)
+    
+    # 5. Loop
+    print(f"Starting GPU Training: {args.steps} steps...", flush=True)
+    start_time = time.time()
+    
+    # Torch benchmark warm-up?
+    # Just run.
+    
+    for step in range(args.steps):
+        step_start = time.time()
+        
+        # Pin Root
+        # state.M[root_idx] = 0.0 
+        # Using indexing on GPU M is efficient.
+        state.M[root_idx] = 0.0
+        
+        state = integrator.step(state)
+        
+        state.M[root_idx] = 0.0
+        
+        torch.cuda.synchronize() # Wait for GPU
+        step_end = time.time()
+        step_dur = step_end - step_start
+        
+        if step % args.log_interval == 0:
+            diag = state.diagnostics
+            
+            # Metrics (GPU -> CPU for print)
+            # Sample 1000 nodes for radius
+            # Random indices
+            with torch.no_grad():
+                idx = torch.randint(0, N, (min(N, 1000),), device=device)
+                x_sample = state.x[idx]
+                radii = torch.acosh(torch.clamp(x_sample[:, 0], min=1.0))
+                mean_R = torch.mean(radii).item()
+            
+            res = diag.get('solver_residual', 0.0)
+            err = diag.get('manifold_error', 0.0) # Not calculated in PyTorch yet?
+            # I didn't add manifold_error to IntegratorTorch step.
+            # But I added Renorm.
+            
+            dt_used = diag.get('dt', args.dt)
+            renorm = diag.get('renorm_magnitude', 0.0)
+            
+            elapsed = time.time() - start_time
+            print(f"Step {step}: T={elapsed:.1f}s | dt={dt_used:.1e} | R={mean_R:.2f} | Res={res:.1e} | Renorm={renorm:.1e} | {step_dur*1000:.1f}ms/step", flush=True)
+            
+    print("Training Complete.", flush=True)
+    
+    # Save
+    if args.save:
+        save_path = f"checkpoints/aurora_base_gpu_{args.limit or 'full'}.pkl"
+        os.makedirs("checkpoints", exist_ok=True)
+        # Convert to CPU numpy
+        G_cpu = state.G.detach().cpu().numpy()
+        M_cpu = state.M.detach().cpu().numpy()
+        
+        with open(save_path, 'wb') as f:
+            pickle.dump({'G': G_cpu, 'M': M_cpu, 'nodes': nodes}, f)
+        print(f"Saved to {save_path}", flush=True)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--steps", type=int, default=1000)
+    parser.add_argument("--dt", type=float, default=0.01)
+    parser.add_argument("--dim", type=int, default=5)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--log_interval", type=int, default=10)
+    parser.add_argument("--save", action="store_true")
+    
+    args = parser.parse_args()
+    train(args)
