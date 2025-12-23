@@ -240,6 +240,7 @@ def train(args):
     # Save
     if args.save:
         save_path = f"checkpoints/aurora_base_gpu_{args.limit or 'full'}.pkl"
+        depths_path = f"checkpoints/aurora_base_gpu_{args.limit or 'full'}_depths.npy"
         os.makedirs("checkpoints", exist_ok=True)
         # Convert to CPU numpy
         G_cpu = state.G.detach().cpu().numpy()
@@ -248,6 +249,10 @@ def train(args):
         with open(save_path, 'wb') as f:
             pickle.dump({'G': G_cpu, 'M': M_cpu, 'nodes': nodes}, f)
         print(f"Saved to {save_path}", flush=True)
+        
+        # Save depths for Semantic Audit
+        np.save(depths_path, depths)
+        print(f"Saved depths to {depths_path}", flush=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
