@@ -36,6 +36,7 @@ class ContactConfigTorch:
     renorm_interval: int = 50
     adaptive: bool = True
     tol_disp: float = 0.1
+    freeze_radius: bool = False # NEW: Freeze radial component (x0)
     device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class IdentityInertiaTorch:
@@ -210,24 +211,51 @@ class ContactIntegratorTorch:
         M_new = M_next
         
         # 4. Update G
+        x0_old = None
+        if self.config.freeze_radius:
+            x0_old = G[..., 0, 0].clone() # Capture old Time component (Radius proxy)
+
         step_g = exp_so1n_torch(xi_final, dt=dt_val)
         G_new = G @ step_g
         
-        # 5. Update z
+        # Apply Radius Freeze (Project back to old radius manifold)
+        if self.config.freeze_radius and x0_old is not None:
+            # G_new[..., 0] is the position vector x_new
+            # x_new = [t, x_s]
+            # Constraint: -t^2 + |x_s|^2 = -1 => |x_s| = sqrt(t^2 - 1)
+            # We want t = x0_old
+            
+            t_new = G_new[..., 0, 0]
+            xs_new = G_new[..., 1:, 0]
+            
+            # Enforce t = x0_old
+            G_new[..., 0, 0] = x0_old
+            
+            # Rescale spatial part to satisfy hyperboloid constraint
+            # target_norm_sq = x0_old^2 - 1
+            # current_norm_sq = |xs_new|^2
+            target_norm = torch.sqrt(torch.clamp(x0_old**2 - 1.0, min=0.0))
+            current_norm = torch.norm(xs_new, dim=0) # (N,) ?? No, xs_new is (dim-1, N)?
+            # G shape (N, dim, dim). xs_new shape (N, dim-1) if sliced like G[..., 1:, 0]
+            
+            current_norm = torch.norm(G_new[..., 1:, 0], dim=-1) # (N,)
+            scale = target_norm / (current_norm + 1e-9)
+            
+            G_new[..., 1:, 0] *= scale.unsqueeze(-1)
+            
+            # Since we modified column 0, the frame is no longer orthogonal.
+            # Must renormalize immediately.
+            G_new, _ = renormalize_so1n_torch(G_new)
+
+        # 5. Update z ... (unchanged)
         T_val = self.inertia.kinetic_energy(M_new, x_world) # (N,)
-        # L = T - V - gamma z
-        # But V is total potential? Or per particle?
-        # Typically z is global. V is total.
-        # But contact action usually per particle?
-        # "M = T*Q x R_z". z is a scalar if simple contact.
-        # But in `contact_integrator_n`, z is float (scalar).
-        # So summing T and V.
         T_total = torch.sum(T_val)
         L = T_total - V_tot - gamma * z
         z_new = z + L * dt_val
         
-        # 6. Renorm
+        # 6. Renorm (Periodic)
         renorm_mag = 0.0
+        # If frozen, we already renormed. But periodic check is fine.
         if self._step_count % self.config.renorm_interval == 0:
             G_new, renorm_mag = renormalize_so1n_torch(G_new)
             

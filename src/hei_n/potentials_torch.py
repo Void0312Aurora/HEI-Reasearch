@@ -226,6 +226,86 @@ class HarmonicPriorTorch:
              
         return energy, grad
 
+
+class RadiusAnchorPotentialTorch:
+    """
+    Soft radius regularization: V = λ Σ (r_i - r_target_i)²
+    
+    Anchors each node's radius to a per-node target (typically from depth mapping).
+    Prevents global collapse or expansion while allowing angular optimization.
+    """
+    def __init__(self, target_radii: torch.Tensor, lamb: float = 1.0):
+        """
+        target_radii: (N,) Tensor of target radii for each node.
+        lamb: Regularization strength.
+        """
+        self.target_radii = target_radii
+        self.lamb = lamb
+        
+    def potential_and_grad(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # x: (N, dim), time-first convention.
+        # Radius r = acosh(x0).
+        
+        x0 = x[:, 0]
+        x0_safe = torch.clamp(x0, min=1.0 + 1e-7)
+        radii = torch.acosh(x0_safe)
+        
+        delta = radii - self.target_radii
+        energy = torch.sum(0.5 * self.lamb * delta**2)
+        
+        # Gradient: dV/dx0 = λ(r - r_target) * dr/dx0
+        # dr/dx0 = 1 / sqrt(x0² - 1) = 1 / sinh(r)
+        sinh_r = torch.sqrt(x0_safe**2 - 1.0)
+        grad_factor = self.lamb * delta / (sinh_r + 1e-9)
+        
+        grad = torch.zeros_like(x)
+        grad[:, 0] = grad_factor
+        
+        return energy, grad
+
+
+class ShortRangeGatedRepulsionTorch:
+    """
+    Short-range gated repulsion: Only repels when d < epsilon.
+    
+    Beyond epsilon, repulsion decays rapidly to avoid driving global expansion.
+    """
+    def __init__(self, A: float, epsilon: float = 0.5, sigma: float = 0.2):
+        """
+        A: Repulsion amplitude.
+        epsilon: Distance threshold for full repulsion.
+        sigma: Decay rate beyond epsilon.
+        """
+        self.A = A
+        self.epsilon = epsilon
+        self.sigma = sigma
+        
+    def forward(self, dists: torch.Tensor) -> torch.Tensor:
+        # Gate: smooth decay beyond epsilon.
+        # V = A * max(0, epsilon - d)² / epsilon² for soft gating
+        # Or: V = A * exp(-(d - epsilon)²/sigma²) for d > epsilon
+        
+        # Use smooth gating factor: gate = sigmoid((epsilon - d) / sigma)
+        gate = torch.sigmoid((self.epsilon - dists) / (self.sigma + 1e-9))
+        
+        # Base repulsion: log(cosh(d/sigma)) style but gated
+        base_rep = torch.log(torch.cosh(dists / self.sigma))
+        
+        return self.A * gate * base_rep
+        
+    def derivative(self, dists: torch.Tensor) -> torch.Tensor:
+        gate = torch.sigmoid((self.epsilon - dists) / (self.sigma + 1e-9))
+        
+        # d(gate)/dd = -gate*(1-gate)/sigma
+        gate_grad = -gate * (1 - gate) / (self.sigma + 1e-9)
+        
+        base_rep = torch.log(torch.cosh(dists / self.sigma))
+        base_rep_grad = torch.tanh(dists / self.sigma) / self.sigma
+        
+        # Product rule: d(gate*base)/dd = gate'*base + gate*base'
+        return self.A * (gate_grad * base_rep + gate * base_rep_grad)
+
+
 class CompositePotentialTorch:
     def __init__(self, potentials: list):
         self.potentials = potentials
@@ -240,3 +320,4 @@ class CompositePotentialTorch:
             total_grad += g
             
         return total_e, total_grad
+
