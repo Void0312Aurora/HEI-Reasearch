@@ -247,7 +247,7 @@ def train(args):
         M_cpu = state.M.detach().cpu().numpy()
         
         with open(save_path, 'wb') as f:
-            pickle.dump({'G': G_cpu, 'M': M_cpu, 'nodes': nodes}, f)
+            pickle.dump({'G': G_cpu, 'M': M_cpu, 'nodes': nodes, 'edges': edges}, f)
         print(f"Saved to {save_path}", flush=True)
         
         # Save depths for Semantic Audit

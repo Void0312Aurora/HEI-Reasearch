@@ -11,6 +11,48 @@ import re
 from typing import List, Optional, Dict
 import pickle
 
+# Bilingual lexicon for English -> Chinese mapping
+BILINGUAL_LEXICON = {
+    # Food & Eating
+    "food": "食物", "eat": "吃", "meal": "饭", "cook": "做饭", "rice": "米饭",
+    "fruit": "水果", "vegetable": "蔬菜", "meat": "肉", "fish": "鱼",
+    "apple": "苹果", "water": "水", "drink": "喝", "tea": "茶", "coffee": "咖啡",
+    
+    # Animals
+    "animal": "动物", "dog": "狗", "cat": "猫", "bird": "鸟", "fish": "鱼",
+    "horse": "马", "cow": "牛", "pig": "猪", "chicken": "鸡",
+    
+    # People & Relations
+    "human": "人", "person": "人", "man": "男人", "woman": "女人", "child": "孩子",
+    "friend": "朋友", "family": "家庭", "mother": "妈妈", "father": "爸爸",
+    
+    # Emotions
+    "love": "爱", "happy": "快乐", "sad": "悲伤", "angry": "生气", "fear": "恐惧",
+    "joy": "喜悦", "hate": "恨", "like": "喜欢", "dislike": "不喜欢",
+    
+    # Nature
+    "sun": "太阳", "moon": "月亮", "star": "星星", "sky": "天空", "earth": "地球",
+    "mountain": "山", "river": "河", "sea": "海", "tree": "树", "flower": "花",
+    
+    # Actions
+    "go": "去", "come": "来", "see": "看", "hear": "听", "say": "说",
+    "think": "想", "know": "知道", "want": "想要", "need": "需要", "have": "有",
+    
+    # Time
+    "time": "时间", "day": "天", "night": "夜", "today": "今天", "tomorrow": "明天",
+    "year": "年", "month": "月", "week": "周",
+    
+    # Places
+    "place": "地方", "home": "家", "school": "学校", "city": "城市", "country": "国家",
+    
+    # Common
+    "good": "好", "bad": "坏", "big": "大", "small": "小", "new": "新", "old": "旧",
+    "beautiful": "美丽", "ugly": "丑", "hot": "热", "cold": "冷",
+    
+    # Greetings
+    "hello": "你好", "hi": "嗨", "goodbye": "再见", "thanks": "谢谢", "sorry": "对不起",
+}
+
 
 class ConceptMapper:
     """Map text to particle IDs and vice versa."""
@@ -46,7 +88,7 @@ class ConceptMapper:
         
         for i, node in enumerate(nodes):
             # Node format examples:
-            # Sememe: "AttributeValue|属性值" -> extract "attributevalue"
+            # Sememe: "edible|食物" -> extract BOTH "edible" AND "食物"
             # Concept: "C:apple:000000000123" -> extract "apple"
             
             if node.startswith('C:'):
@@ -54,13 +96,22 @@ class ConceptMapper:
                 parts = node.split(':')
                 if len(parts) >= 2:
                     word = parts[1].lower()
-                    self.word_to_id[word] = i
+                    if word not in self.word_to_id:  # Don't overwrite
+                        self.word_to_id[word] = i
             elif '|' in node:
                 # Sememe node: English|Chinese
-                eng_part = node.split('|')[0].lower()
-                self.word_to_id[eng_part] = i
+                # Add BOTH parts to vocab
+                parts = node.split('|')
+                eng_part = parts[0].lower()
+                zh_part = parts[1] if len(parts) > 1 else None
+                
+                if eng_part not in self.word_to_id:
+                    self.word_to_id[eng_part] = i
+                if zh_part and zh_part not in self.word_to_id:
+                    self.word_to_id[zh_part] = i
             else:
-                self.word_to_id[node.lower()] = i
+                if node.lower() not in self.word_to_id:
+                    self.word_to_id[node.lower()] = i
                 
         self.id_to_word = {v: k for k, v in self.word_to_id.items()}
         print(f"Loaded {len(self.word_to_id)} concepts from checkpoint.")
@@ -105,11 +156,22 @@ class ConceptMapper:
         return [self.id_to_word.get(i, f"<UNK:{i}>") for i in ids]
     
     def _tokenize(self, text: str) -> List[str]:
-        """Simple tokenization."""
+        """Simple tokenization with bilingual support."""
         # Remove punctuation and split
         text = re.sub(r'[^\w\s]', ' ', text)
         words = text.split()
-        return [w for w in words if w]
+        
+        # Convert English words to Chinese using bilingual lexicon
+        translated = []
+        for w in words:
+            if w:
+                w_lower = w.lower()
+                if w_lower in BILINGUAL_LEXICON:
+                    translated.append(BILINGUAL_LEXICON[w_lower])
+                else:
+                    translated.append(w)
+                    
+        return translated
     
     def find_similar(self, word: str, top_k: int = 5) -> List[str]:
         """Find similar words in vocabulary (fuzzy match)."""
