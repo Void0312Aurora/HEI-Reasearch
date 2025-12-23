@@ -27,7 +27,7 @@ from typing import Dict, List, Tuple
 from multiprocessing import Pool, cpu_count
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../src"))
 
 # Global mapper for each worker
 _worker_mapper = None
@@ -319,10 +319,16 @@ def main():
         for v, s in nbrs[:TOP_K]:
             pair = (min(u,v), max(u,v))
             if pair in seen: continue
-            edges_to_save.append((u, v, s, 2))
-            seen.add(pair)
-            active_nodes_set.add(u)
-            active_nodes_set.add(v)
+            
+            # Decoupling: Save Strings instead of IDs
+            if u in id_to_word and v in id_to_word:
+                w_u = id_to_word[u]
+                w_v = id_to_word[v]
+                edges_to_save.append((w_u, w_v, s, 2))
+                
+                seen.add(pair)
+                active_nodes_set.add(u)
+                active_nodes_set.add(v)
             
     # Stats
     print("\n=== PMI Graph Health Check ===", flush=True)

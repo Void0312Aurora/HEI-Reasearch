@@ -4,4 +4,7 @@
 *.jpg
 *.csv
 data
-checkpoints
+checkpoints/*
+src/outputs/*
+docs/temp/*
+docs/report/*
