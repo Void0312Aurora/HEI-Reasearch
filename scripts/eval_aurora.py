@@ -98,7 +98,7 @@ def eval_ultrametricity(h_data, sample_size=10000):
             
     return np.mean(scores) if scores else 0.0
 
-def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000):
+def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000, split="all", radius_norm=False):
     """
     For a subset of semantic edges (u, v), calculate the rank of v relative to u 
     among all nodes (or a negative sample set).
@@ -106,15 +106,22 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000):
     if not os.path.exists(semantic_path):
         return None
         
+    print(f"Loading edges from {semantic_path} (Split: {split})...")
     with open(semantic_path, 'rb') as f:
-        edges = pickle.load(f) # List[(u_str, v_str, w, ...)]
-        
-    # Filter edges to those in vocab
-    # [FIX] Handle mismatch between Raw Words (edges) and Node IDs (vocab)
+        edges_raw = pickle.load(f) # List[(u_str, v_str, w, ...)]
+    
+    # Deterministic Split Logic (Must match data.py)
+    rng = np.random.RandomState(42)
+    # We need to map raw edges to indices FIRST to be consistent? 
+    # data.py shuffles 'mapped_edges'. 
+    # Here we might not have raw_map easily available. 
+    # Actually, data.py shuffles 'mapped_edges'.
+    # So we need to map first.
+    
+    # ... (Mapping Logic Code Block) ...
     # Reconstruct raw map from vocab keys
     raw_to_id = {}
     for node_str, idx in vocab.items():
-        # Node format: C:word:id
         if node_str.startswith("C:"):
             parts = node_str.split(":")
             if len(parts) >= 2:
@@ -122,30 +129,36 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000):
                 if raw_word not in raw_to_id:
                     raw_to_id[raw_word] = idx
                     
-    valid_pairs = []
-    match_count = 0
-    total_edges = 0
+    mapped_edges = []
     
-    for item in edges:
+    for item in edges_raw:
         try:
-            u_s, v_s = item[0], item[1]
-            total_edges += 1
-            
-            # Try exact match first
-            u_id = vocab.get(u_s)
-            v_id = vocab.get(v_s)
-            
-            # Try raw match
-            if u_id is None: u_id = raw_to_id.get(u_s)
-            if v_id is None: v_id = raw_to_id.get(v_s)
-            
-            if u_id is not None and v_id is not None:
-                valid_pairs.append((u_id, v_id))
-                match_count += 1
+             u_s, v_s = item[0], item[1]
+             # Resolving
+             u_id = vocab.get(u_s)
+             v_id = vocab.get(v_s)
+             if u_id is None: u_id = raw_to_id.get(u_s)
+             if v_id is None: v_id = raw_to_id.get(v_s)
+             if u_id is not None and v_id is not None:
+                 if u_id != v_id:
+                     mapped_edges.append((u_id, v_id))
         except:
-            continue
-            
-    print(f"Matched {match_count}/{total_edges} edges using fuzzy lookup.")
+             continue
+             
+    # Shuffle and Split
+    rng.shuffle(mapped_edges)
+    total = len(mapped_edges)
+    split_idx = int(total * 0.9)
+    
+    if split == "train":
+        valid_pairs = mapped_edges[:split_idx]
+    elif split == "holdout":
+        valid_pairs = mapped_edges[split_idx:]
+    else:
+        valid_pairs = mapped_edges
+        
+    print(f"Eval Set Size: {len(valid_pairs)} (Total Pool: {total})")
+
             
     if not valid_pairs:
         print("No valid semantic pairs found for evaluation.")
@@ -167,8 +180,22 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000):
     active_node_list = list(active_nodes)
     print(f"Active Nodes for Evaluation: {len(active_node_list)}")
     
+    # Load depths for constrained sampling
+    # Assuming dataset has depths matching the embedding order
+    try:
+        from aurora.data import AuroraDataset
+        ds_temp = AuroraDataset("cilin", limit=None)
+        depths = np.array(ds_temp.depths)
+    except:
+        # Fallback: infer depths from radii if dataset unavailable
+        x0 = h_data[:, 0]
+        radii = np.arccosh(np.maximum(x0, 1.0 + 1e-7))
+        # Reverse-engineer depth from radius (assuming target_r = 0.5 + depth*0.5)
+        depths = np.clip((radii - 0.5) / 0.5, 0, 10)  # Rough approximation
+    
     ranks_active = []
     ranks_global = []
+    ranks_constrained = []  # New: same-depth only
     
     # Global distance calculation is expensive (N*N).
     # Use negative sampling: compare v against 100 random negatives.
@@ -176,9 +203,30 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000):
     
     N = h_data.shape[0]
     
-    for u_idx, v_idx in tqdm(valid_pairs, desc="Semantic Rank"):
+    # Pre-normalize if requested (efficient)
+    if radius_norm:
+        print("Normalizing all embeddings to R=5.0 for De-structured Eval...")
+        target_r = 5.0
+        target_x0 = np.cosh(target_r)
+        target_sinh = np.sinh(target_r)
+        
+        # h_data: (N, dim)
+        # Calculate current radii
+        x0 = h_data[:, 0]
+        curr_radii = np.arccosh(np.maximum(x0, 1.0 + 1e-7))
+        curr_sinh = np.sinh(curr_radii) + 1e-9
+        
+        # Scale spatial
+        scale_factors = (target_sinh / curr_sinh).reshape(-1, 1)
+        h_data = h_data.copy() # Don't modify original if reused? Function copies arg ref? 
+        # Better to copy.
+        h_data[:, 1:] = h_data[:, 1:] * scale_factors
+        h_data[:, 0] = target_x0
+        
+    for u_idx, v_idx in tqdm(valid_pairs, desc=f"Semantic Rank (Norm={radius_norm})"):
         u_vec = h_data[u_idx]
         v_vec = h_data[v_idx]
+        
         d_pos = dist_hyperbolic_np(u_vec, v_vec)
         
         # 1. Active Subgraph Rank (Harder, Main Metric)
@@ -203,11 +251,34 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000):
         rank_glob = np.sum(d_negs_glob < d_pos) + 1
         ranks_global.append(rank_glob)
         
+        # 3. Constrained Rank (Same-Depth Only) - Phase XX diagnostic
+        # Sample negatives only from nodes with similar depth (|Δdepth| ≤ 1)
+        u_depth = depths[u_idx]
+        # Find candidates within depth tolerance
+        depth_diff = np.abs(depths - u_depth)
+        valid_candidates = np.where(depth_diff <= 1)[0]
+        
+        if len(valid_candidates) >= 100:
+            neg_indices_const = np.random.choice(valid_candidates, size=100, replace=False)
+        else:
+            # Fallback: sample with replacement if not enough candidates
+            neg_indices_const = np.random.choice(valid_candidates, size=100, replace=True)
+            
+        neg_vecs_const = h_data[neg_indices_const]
+        inner_const = minkowski_inner_np(neg_vecs_const, u_vec)
+        inner_const = np.minimum(inner_const, -1.0 - 1e-7)
+        d_negs_const = np.arccosh(-inner_const)
+        
+        rank_const = np.sum(d_negs_const < d_pos) + 1
+        ranks_constrained.append(rank_const)
+        
     mean_rank_active = np.mean(ranks_active)
     mean_rank_global = np.mean(ranks_global)
+    mean_rank_constrained = np.mean(ranks_constrained)
     
     print(f">>> Active Subgraph Mean Rank: {mean_rank_active:.2f} (Primary)")
     print(f">>> Global Mean Rank: {mean_rank_global:.2f} (Reference)")
+    print(f">>> Constrained Mean Rank (Same-Depth): {mean_rank_constrained:.2f} (Angular-Only)")
     
     return mean_rank_active
 
@@ -273,17 +344,46 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--semantic_path", type=str, default=None)
+    parser.add_argument("--split", type=str, default="holdout", choices=["train", "holdout", "all"])
+    parser.add_argument("--radius_norm", action="store_true", help="Normalize to same radius for angular eval")
     args = parser.parse_args()
+    
+    # Import locally to use load_semantic_edges
+    from aurora.data import AuroraDataset
+    # Dataset isn't needed fully, just the splitting logic. 
+    # But wait, AuroraDataset loads structure.
+    # We can instantiate a dummy or just replicate snippet?
+    # Replicating snippet is risky. Let's use AuroraDataset properly if possible.
+    # But we don't know the dataset name (cilin/openhow) from args.
+    # Let's assume 'cilin' for this project context or add --dataset arg.
+    # To avoid breaking existing flow: Reimplement deterministic split here.
     
     print(f"Loading checkpoint: {args.checkpoint}...")
     with open(args.checkpoint, 'rb') as f:
         data = pickle.load(f)
+    
+    # Backward Compatibility: Detect checkpoint version
+    version = data.get('version', '0.0')  # Legacy checkpoints have no version field
+    if version == '0.0':
+        print(f"  WARNING: Legacy checkpoint detected (no version field). Assuming v0.0 schema.")
+        print(f"  Legacy schema: {{'x', 'vocab', 'nodes'}}")
+    else:
+        print(f"  Checkpoint version: v{version}")
+        if 'timestamp' in data:
+            print(f"  Created: {data['timestamp']}")
+        if 'recipe' in data:
+            print(f"  Recipe: {data['recipe']}")
+        if 'config' in data:
+            print(f"  Config: seed={data['config'].get('seed', 'N/A')}, "
+                  f"triplet={data['config'].get('triplet', 'N/A')}, "
+                  f"candidates={data['config'].get('num_candidates', 'N/A')}")
         
     h_data = data['x'] # (N, dim)
     vocab = data['vocab']
     nodes = data['nodes']
     
     print(f"Embedding Shape: {h_data.shape}")
+
     
     # 1. Radius Statistics (Crucial for Volume Control Audit)
     print("Calculating Radius Statistics...")
@@ -310,7 +410,7 @@ def main():
     
     # 3. Semantic Rank
     if args.semantic_path:
-        rank = eval_semantic_rank(h_data, args.semantic_path, vocab)
+        rank = eval_semantic_rank(h_data, args.semantic_path, vocab, split=args.split, radius_norm=args.radius_norm)
         if rank:
             print(f">>> Mean Rank (vs 100 Negs): {rank:.2f} (1.0 = Perfect)")
             

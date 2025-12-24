@@ -30,7 +30,7 @@ from aurora import (
     CompositePotential,
     SpringPotential,
     RadiusAnchorPotential,
-    RepulsionPotential,
+    GatedRepulsionPotential,
     RadialInertia
 )
 from aurora.geometry import random_hyperbolic_init, project_to_tangent
@@ -41,38 +41,43 @@ def diagnose_forces(state, potentials, names, device):
     """
     x = state.x
     
-    headers = ["Component", "Energy", "GradNorm(Mean)", "GradNorm(Max)"]
+    headers = ["Component", "Energy", "GradNorm(Mean)", "GradNorm(Max)", "Collision(%)"]
     print(f"\n--- Force Diagnosis (Step {state.step if hasattr(state, 'step') else '?'}) ---")
-    print(f"{headers[0]:<15} | {headers[1]:<10} | {headers[2]:<15} | {headers[3]:<15}")
-    print("-" * 65)
+    print(f"{headers[0]:<15} | {headers[1]:<10} | {headers[2]:<15} | {headers[3]:<15} | {headers[4]:<12}")
+    print("-" * 80)
     
     total_grad = torch.zeros_like(x)
     
     for name, pot in zip(names, potentials):
         e, g = pot.compute_forces(x)
         
-        # Project gradient to tangent space to measure actual "force"
-        # Force = - project(grad)
-        # Note: g returned by potentials is Euclidean gradient.
-        # Aurora dynamics projects it: F = - project(x, g)
-        
-        # We want to measure the magnitude of the force vector in tangent space.
-        # But for diag, just Euclidean grad norm is indicative enough of relative scale.
-        # Or better: construct real force.
-        
         f_tangent = -project_to_tangent(x, g)
-        # Norm in Minkowski metric? Or Euclidean norm of coefficients?
-        # Contact Integrator uses geometric_force and diamond torque.
-        # Let's just use Euclidean norm of f_tangent rows.
-        
         f_mags = torch.norm(f_tangent, dim=-1)
         mean_f = f_mags.mean().item()
         max_f = f_mags.max().item()
         energy = e.item()
         
-        print(f"{name:<15} | {energy:<10.1f} | {mean_f:<15.2e} | {max_f:<15.2e}")
+        collision_rate = "-"
+        # Special check for Gated Repulsion
+        if isinstance(pot, GatedRepulsionPotential):
+            # Re-run dist calculation to count active contacts
+            # This is duplicate work but fine for debug script
+            N = x.shape[0]
+            # Use same seed? No, but stochastic estimate is fine
+            u_idx = torch.randint(0, N, (N * pot.num_neg,), device=device)
+            v_idx = torch.randint(0, N, (N * pot.num_neg,), device=device)
+            xu = x[u_idx]; xv = x[v_idx]
+            J = torch.ones(x.shape[-1], device=device); J[0] = -1.0
+            inner = (xu * xv * J).sum(dim=-1)
+            inner = torch.clamp(inner, max=-1.0 - 1e-7)
+            dist = torch.acosh(-inner)
+            mask = dist < pot.epsilon
+            rate = mask.float().mean().item() * 100.0
+            collision_rate = f"{rate:.2f}%"
         
-    print("-" * 65)
+        print(f"{name:<15} | {energy:<10.1f} | {mean_f:<15.2e} | {max_f:<15.2e} | {collision_rate:<12}")
+        
+    print("-" * 80)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -86,6 +91,7 @@ def main():
     parser.add_argument("--k_struct", type=float, default=1.0)
     parser.add_argument("--k_sem", type=float, default=0.5)
     parser.add_argument("--k_rep", type=float, default=5.0) # Repulsion A
+    parser.add_argument("--epsilon", type=float, default=0.1) # Repulsion Eps
     
     # Test Modes
     parser.add_argument("--sem_amp_test", action="store_true", help="Run Semantic Amplification Test")
@@ -100,7 +106,7 @@ def main():
         args.steps = 200
     
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    print(f"Aurora V2 Diagnostic on {device}")
+    print(f"Aurora V2 Diagnostic on {device} (Epsilon={args.epsilon})")
     
     # 1. Load Data
     ds = AuroraDataset(args.dataset, limit=args.limit)
@@ -150,9 +156,9 @@ def main():
     potentials.append(RadiusAnchorPotential(target_radii, lamb=0.1))
     names.append("Anchor")
     
-    # Repulsion
-    potentials.append(RepulsionPotential(A=args.k_rep, sigma=1.0))
-    names.append("Repulsion")
+    # Repulsion (Gated)
+    potentials.append(GatedRepulsionPotential(A=args.k_rep, epsilon=args.epsilon, num_neg=10))
+    names.append("GatedRep")
     
     oracle = CompositePotential(potentials)
     
@@ -175,6 +181,24 @@ def main():
             
             # Run Force Diagnosis
             diagnose_forces(state, potentials, names, device)
+            
+            # --- Additional Metrics (Min Dist & Force Ratio) ---
+            # Use random sampling for dist stats to save time
+            idx_sample = torch.randint(0, state.x.shape[0], (1000,), device=device)
+            idx_sample_2 = torch.randint(0, state.x.shape[0], (1000,), device=device)
+            xu = state.x[idx_sample]; xv = state.x[idx_sample_2]
+            J = torch.ones(state.x.shape[-1], device=device); J[0] = -1.0
+            inner = (xu * xv * J).sum(dim=-1)
+            dist_sample = torch.acosh(torch.clamp(-inner, min=1.0001))
+            d_p1 = torch.quantile(dist_sample, 0.01).item()
+            d_min = dist_sample.min().item()
+            print(f">>> Dist Stats: Min={d_min:.4f}, P1={d_p1:.4f} (Target Eps={args.epsilon})")
+            
+            # Force Ratio
+            # We need to capture mean_f from diagnose_forces.
+             # Ideally diagnose_forces should return a dict.
+            # But calculating here roughly is fine.
+            pass
             
     # Debug Save
     os.makedirs("checkpoints", exist_ok=True)

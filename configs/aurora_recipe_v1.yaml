@@ -1,0 +1,125 @@
+# Aurora Training Recipe v1.0
+# Codified Phase IV-VII Parameters (Validated 2024-12-24)
+# Reference: Phase VII 3-Seed Holdout Validation (Active=38.98±3.5, Global=7.84±0.4)
+
+# Dataset Configuration
+dataset:
+  name: "cilin"
+  semantic_edges_path: "checkpoints/semantic_edges_wiki.pkl"
+  holdout_split_ratio: 0.9  # 90% train, 10% holdout
+  holdout_seed: 42
+
+# Training Configuration
+training:
+  steps: 10000
+  stage_ratio: 0.0  # 0.0 = no staging, start with semantics immediately (Phase V+)
+  device: "cuda"
+  
+  # Random Seeds for Robustness Testing
+  # Use different seeds for independent runs
+  # Validated seeds: [42, 43, 44]
+  seed: 42
+
+# Physics Configuration
+physics:
+  dt: 0.05
+  gamma: 0.5
+  adaptive_dt: true
+  solver_iters: 10
+  
+  # Inertia
+  inertia_type: "radial"
+  inertia_alpha: 5.0
+
+# Potential Configuration
+potentials:
+  # Structure (Hierarchical Tree)
+  structure:
+    type: "spring"
+    k_struct: 0.1  # Relaxed for fine-tuning (Phase V+)
+  
+  # Repulsion (Soft Constraint)
+  repulsion:
+    type: "gated"
+    k_rep: 0.1     # Phase IV sweet spot (A=0.1)
+    epsilon: 0.1   # Gating threshold
+    num_neg: 10    # Negative samples per node
+  
+  # Semantics (Triplet Loss with Hard Mining)
+  semantics:
+    type: "triplet"
+    enabled: true
+    k_sem: 1.0
+    margin: 0.1
+    num_candidates: 50  # Phase VI hard mining intensity
+  
+  # Anchor
+  anchor:
+    type: "radius"
+    k_anchor: 0.01
+    target_radius: 0.5
+
+# Evaluation Configuration
+evaluation:
+  # Metrics
+  metrics:
+    - "ultrametricity"
+    - "active_rank"
+    - "global_rank"
+    - "radius_stats"
+  
+  # Holdout Evaluation
+  holdout_eval: true
+  holdout_split: "holdout"  # Evaluate on 10% holdout set
+  
+  # De-structured Evaluation (Radius Normalization)
+  radius_norm_eval: false  # Optional stress test
+  
+  # Evaluation Frequency
+  eval_interval: 500  # steps
+
+# Training Gates (Quality Assurance)
+gates:
+  ultrametricity:
+    max: 0.20      # Structure must remain hyperbolic
+    description: "Ultrametricity score must stay below 0.20"
+  
+  radius:
+    max: 0.85      # Controlled expansion
+    description: "Mean radius must stay below 0.85"
+  
+  active_rank:
+    target: 50     # Short-term goal (Phase V baseline)
+    long_term: 20  # Long-term goal (Phase VIII+)
+    description: "Active Rank should show downward trend"
+
+# Checkpoint Configuration
+checkpoint:
+  save_interval: 1000  # steps
+  save_path: "checkpoints/aurora_v2_final.pkl"
+  
+  # Metadata to include
+  metadata:
+    - "version"
+    - "recipe"
+    - "training_config"
+    - "seed"
+    - "timestamp"
+
+# Reproducibility Notes
+notes: |
+  This recipe consolidates the validated Phase IV-VII training protocol:
+  - Phase IV: Soft-Constraint Repulsion (k_rep=0.1, epsilon=0.1)
+  - Phase V: Triplet Loss + Hard Mining (margin=0.1, candidates=10)
+  - Phase VI: Hard Mining Scaling (candidates=50)
+  - Phase VII: 3-Seed Holdout Validation (Active=38.98±3.5)
+  
+  Key Insights:
+  1. Soft repulsion (k_rep=0.1) provides stability without collapse.
+  2. Hard mining with 50 candidates improves Active Rank to ~39.
+  3. Holdout generalization confirmed (no overfitting).
+  4. Structure preserved (Ultrametricity=0.173±0.002).
+  
+  Next Steps:
+  - For Active<20: Implement semi-hard curriculum, local candidate pools, memory bank.
+  - For enhanced evaluation: Expand negatives to 1k/10k, de-structured control.

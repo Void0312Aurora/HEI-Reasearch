@@ -88,52 +88,67 @@ class AuroraDataset:
         self.depths = depths
         self.root_idx = root
         
-    def load_semantic_edges(self, path: str) -> List[Tuple[int, int, float]]:
+    def load_semantic_edges(self, path: str, split: str = "all") -> List[Tuple[int, int, float]]:
         """
         Load semantic edges from pickle containing (str, str, float) tuples.
         Maps them to current indices.
+        
+        Args:
+            split: "all", "train" (90%), or "holdout" (10%). Deterministic split based on index.
         """
         if not os.path.exists(path):
             print(f"Warning: Semantic edge file {path} not found.")
             return []
             
-        print(f"Loading semantic edges from {path}...")
+        print(f"Loading semantic edges from {path} (Split: {split})...")
         with open(path, 'rb') as f:
             raw_edges = pickle.load(f)
             
         valid_edges = []
         miss_count = 0
         
-        # Heuristic check: is the first item int or str?
+        # Heuristic check
         if raw_edges and isinstance(raw_edges[0][0], int):
-            print("WARNING: Loaded edges are Integers (Legacy Format). Using strict index.")
-            print("Error: Cannot safely load Integer edges with decoupled dataset. Please regenerate edges as Strings.")
+            print("WARNING: Loaded edges are Integers (Legacy Format). Cannot apply splits safely.")
             return []
             
+        # Process edges
+        mapped_edges = []
         for item in raw_edges:
-            # Expected: (u_str, v_str, w, type)
             try:
                 u_s, v_s = item[0], item[1]
                 w = item[2]
                 
-                # Try Exact Match First (if node string passed directly)
+                # Resolving
                 u_id = self.vocab[u_s]
                 v_id = self.vocab[v_s]
                 
-                # Fallback to Raw Map (Loose Match)
-                if u_id is None:
-                    u_id = self.raw_map.get(u_s)
-                if v_id is None:
-                    v_id = self.raw_map.get(v_s)
+                if u_id is None: u_id = self.raw_map.get(u_s)
+                if v_id is None: v_id = self.raw_map.get(v_s)
                 
                 if u_id is not None and v_id is not None:
-                    # Filter self-loops if any
                     if u_id != v_id:
-                        valid_edges.append((u_id, v_id, w))
+                        mapped_edges.append((u_id, v_id, w))
                 else:
                     miss_count += 1
             except:
                 continue
                 
-        print(f"Loaded {len(valid_edges)} semantic edges (Skipped {miss_count} unknown words).")
-        return valid_edges
+        # Apply deterministic split
+        # We'll use a simple modulo on the edge index (assuming random order in file, or shuffle)
+        # To be safe, let's shuffle deterministically.
+        rng = np.random.RandomState(42) # Fixed seed for splitting
+        rng.shuffle(mapped_edges)
+        
+        total = len(mapped_edges)
+        split_idx = int(total * 0.9) # 90/10
+        
+        if split == "train":
+            final_edges = mapped_edges[:split_idx]
+        elif split == "holdout":
+            final_edges = mapped_edges[split_idx:]
+        else:
+            final_edges = mapped_edges
+            
+        print(f"Loaded {len(final_edges)} semantic edges (Split: {split}, Total Pool: {total}, Skipped {miss_count}).")
+        return final_edges
