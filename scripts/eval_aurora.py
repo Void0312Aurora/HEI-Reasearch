@@ -269,12 +269,30 @@ def main():
     
     print(f"Embedding Shape: {h_data.shape}")
     
-    # 1. Ultrametricity
+    # 1. Radius Statistics (Crucial for Volume Control Audit)
+    print("Calculating Radius Statistics...")
+    # h_data is (N, dim). x0 = h_data[:, 0]
+    x0 = h_data[:, 0]
+    # Safety clamp
+    x0 = np.maximum(x0, 1.0 + 1e-7)
+    radii = np.arccosh(x0)
+    
+    r_mean = np.mean(radii)
+    r_median = np.median(radii)
+    r_p95 = np.percentile(radii, 95)
+    r_max = np.max(radii)
+    
+    print(f">>> Radius Stats: Mean={r_mean:.2f}, Median={r_median:.2f}, P95={r_p95:.2f}, Max={r_max:.2f}")
+    if r_mean > 20.0:
+        print("WARNING: High mean radius detected. Check Volume Control or Repulsion Force.")
+
+    # 2. Ultrametricity
     print("Calculating Ultrametricity Score...")
+    print("Def: Mean((longest - middle) / longest) for random triangles.")
     um_score = eval_ultrametricity(h_data)
     print(f">>> Ultrametricity Score: {um_score:.4f} (Lower=Better, 0=Tree)")
     
-    # 2. Semantic Rank
+    # 3. Semantic Rank
     if args.semantic_path:
         rank = eval_semantic_rank(h_data, args.semantic_path, vocab)
         if rank:

@@ -142,8 +142,20 @@ class RepulsionPotential(ForceField):
         
         # Energy
         val = dist / self.sigma
-        logcosh = torch.log(torch.cosh(val)) # Safe impl?
-        energy = (self.A * self.sigma * logcosh).sum() * (1.0 / self.num_neg) # Normalize?
+        
+        # Stable log(cosh(x))
+        # For large |x|, log(cosh(x)) approx |x| - log(2)
+        # We can use softplus logic or simple masking.
+        abs_val = torch.abs(val)
+        mask_large = abs_val > 10.0
+        
+        logcosh = torch.zeros_like(val)
+        # Large x: |x| - log(2)
+        logcosh[mask_large] = abs_val[mask_large] - 0.69314718
+        # Small x: log(cosh(x))
+        logcosh[~mask_large] = torch.log(torch.cosh(val[~mask_large]))
+        
+        energy = (self.A * self.sigma * logcosh).sum() * (1.0 / self.num_neg)
         
         # Grad
         # dV/dd = A * tanh(val)
