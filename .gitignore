@@ -8,3 +8,4 @@ checkpoints/*
 src/outputs/*
 docs/temp/*
 docs/report/*
+*.log
