@@ -159,7 +159,16 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000):
         random.shuffle(valid_pairs)
         valid_pairs = valid_pairs[:sample_limit]
         
-    ranks = []
+    # Collect active node set for Active-Only Negative Sampling
+    active_nodes = set()
+    for u, v in valid_pairs:
+        active_nodes.add(u)
+        active_nodes.add(v)
+    active_node_list = list(active_nodes)
+    print(f"Active Nodes for Evaluation: {len(active_node_list)}")
+    
+    ranks_active = []
+    ranks_global = []
     
     # Global distance calculation is expensive (N*N).
     # Use negative sampling: compare v against 100 random negatives.
@@ -170,30 +179,37 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000):
     for u_idx, v_idx in tqdm(valid_pairs, desc="Semantic Rank"):
         u_vec = h_data[u_idx]
         v_vec = h_data[v_idx]
-        
-        # Sample negatives
-        neg_indices = np.random.randint(0, N, size=100)
-        neg_vecs = h_data[neg_indices]
-        
-        # Distances
         d_pos = dist_hyperbolic_np(u_vec, v_vec)
         
-        # Vectorized dist to negs
-        # <u, neg>
-        # u is (dim,), negs is (100, dim)
-        inner_negs = minkowski_inner_np(neg_vecs, u_vec) # (100,)
-        # clamp
-        inner_negs = np.minimum(inner_negs, -1.0 - 1e-7)
-        d_negs = np.arccosh(-inner_negs)
+        # 1. Active Subgraph Rank (Harder, Main Metric)
+        neg_indices_act = np.random.choice(active_node_list, size=100)
+        neg_vecs_act = h_data[neg_indices_act]
         
-        # Rank: Count how many negs are closer than pos
-        rank = np.sum(d_negs < d_pos) + 1 # 1-based rank
-        ranks.append(rank)
+        inner_act = minkowski_inner_np(neg_vecs_act, u_vec)
+        inner_act = np.minimum(inner_act, -1.0 - 1e-7)
+        d_negs_act = np.arccosh(-inner_act)
         
-    mean_rank = np.mean(ranks)
-    # Normalized: 1 is perfect, 50 is random (among 100 negs) for uniform?
-    # Actually rank 1 means closest. 
-    return mean_rank
+        rank_act = np.sum(d_negs_act < d_pos) + 1
+        ranks_active.append(rank_act)
+        
+        # 2. Global Rank (Reference)
+        neg_indices_glob = np.random.randint(0, N, size=100)
+        neg_vecs_glob = h_data[neg_indices_glob]
+        
+        inner_glob = minkowski_inner_np(neg_vecs_glob, u_vec)
+        inner_glob = np.minimum(inner_glob, -1.0 - 1e-7)
+        d_negs_glob = np.arccosh(-inner_glob)
+        
+        rank_glob = np.sum(d_negs_glob < d_pos) + 1
+        ranks_global.append(rank_glob)
+        
+    mean_rank_active = np.mean(ranks_active)
+    mean_rank_global = np.mean(ranks_global)
+    
+    print(f">>> Active Subgraph Mean Rank: {mean_rank_active:.2f} (Primary)")
+    print(f">>> Global Mean Rank: {mean_rank_global:.2f} (Reference)")
+    
+    return mean_rank_active
 
 def clean_and_map_labels(vocab, max_labels=50):
     # Reverse vocab

@@ -29,6 +29,7 @@ from aurora import (
     SpringPotential,
     RadiusAnchorPotential,
     RepulsionPotential,
+    GatedRepulsionPotential,
     RadialInertia
 )
 from aurora.geometry import random_hyperbolic_init
@@ -100,8 +101,11 @@ def main():
     target_radii = 0.5 + depths * 0.5
     potentials.append(RadiusAnchorPotential(target_radii, lamb=0.1))
     
-    # Repulsion
-    potentials.append(RepulsionPotential(A=5.0, sigma=1.0))
+    # Repulsion (Gated / Short-Range)
+    # Epsilon should be related to local density.
+    # If mean r=0.69, typical dist is small.
+    # Let's try epsilon=0.1
+    potentials.append(GatedRepulsionPotential(A=5.0, epsilon=0.1, num_neg=10))
     
     oracle = CompositePotential(potentials)
     

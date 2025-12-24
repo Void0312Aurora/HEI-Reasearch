@@ -158,8 +158,8 @@ class RepulsionPotential(ForceField):
         energy = (self.A * self.sigma * logcosh).sum() * (1.0 / self.num_neg)
         
         # Grad
-        # dV/dd = (A/N) * tanh(val)
-        force_mag = (self.A * torch.tanh(val)) / self.num_neg # (E_neg,)
+        # dV/dd = A * tanh(val)
+        force_mag = self.A * torch.tanh(val) # (E_neg,)
         
         denom = torch.sqrt(inner**2 - 1.0)
         # d(d)/du = -1/sqrt * J v
@@ -191,66 +191,3 @@ class CompositePotential(ForceField):
             total_g = total_g + g
             
         return total_e, total_g
-class GatedRepulsionPotential(ForceField):
-    """
-    Short-Range Repulsion (Contact Constraint).
-    V = A * (epsilon - d)^2  if d < epsilon else 0.
-    
-    Acts as a soft barrier to prevent collision, but exerts NO force 
-    when nodes are separated by more than epsilon.
-    """
-    def __init__(self, A: float = 100.0, epsilon: float = 0.1, num_neg: int = 5):
-        super().__init__()
-        self.A = A
-        self.epsilon = epsilon
-        self.num_neg = num_neg
-        
-    def compute_forces(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        N, dim = x.shape
-        device = x.device
-        
-        # Sample negs
-        # Ideally we'd use a spatial index to find actual neighbors,
-        # but for now random sampling + gating is a stochastic approximation.
-        # To be effective, we might need more samples or a better heuristic.
-        # But given the critique was "Global Noise", even random sampling with gating
-        # removes the noise.
-        
-        u_idx = torch.randint(0, N, (N * self.num_neg,), device=device)
-        v_idx = torch.randint(0, N, (N * self.num_neg,), device=device)
-        
-        xu = x[u_idx]
-        xv = x[v_idx]
-        
-        J = torch.ones(dim, device=device); J[0] = -1.0
-        inner = (xu * xv * J).sum(dim=-1)
-        inner = torch.clamp(inner, max=-1.0 - 1e-7)
-        dist = torch.acosh(-inner)
-        
-        # Gating: Mask where d < epsilon
-        mask = dist < self.epsilon
-        
-        if not mask.any():
-            return torch.tensor(0.0, device=device), torch.zeros_like(x)
-            
-        d_active = dist[mask]
-        
-        # Energy: 0.5 * A * (eps - d)^2 * (1/num_neg)
-        delta = self.epsilon - d_active
-        energy = 0.5 * self.A * (delta**2).sum() * (1.0 / self.num_neg)
-        
-        # Grad: dV/dx = (A / num_neg) * (eps - d) * grad_d
-        
-        force_mag = (self.A * delta) / self.num_neg  # Scale force by 1/num_neg
-        
-        denom = torch.sqrt(inner[mask]**2 - 1.0)
-        factor = -(force_mag / (denom + 1e-9)).unsqueeze(-1)
-        
-        grad_u = factor * (xv[mask] * J)
-        grad_v = factor * (xu[mask] * J)
-        
-        grad = torch.zeros_like(x)
-        grad.index_add_(0, u_idx[mask], grad_u)
-        grad.index_add_(0, v_idx[mask], grad_v)
-        
-        return energy, grad

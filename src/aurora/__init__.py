@@ -1,5 +1,5 @@
 from .geometry import dist_hyperbolic
 from .dynamics import ContactIntegrator, PhysicsState, PhysicsConfig
 from .data import AuroraDataset
-from .potentials import CompositePotential, SpringPotential, RadiusAnchorPotential, RepulsionPotential
+from .potentials import CompositePotential, SpringPotential, RadiusAnchorPotential, RepulsionPotential, GatedRepulsionPotential
 from .inertia import RadialInertia
