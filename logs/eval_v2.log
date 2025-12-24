@@ -1,0 +1,19 @@
+Loading checkpoint: checkpoints/aurora_v2_eval.pkl...
+Embedding Shape: (164560, 5)
+Calculating Ultrametricity Score...
+>>> Ultrametricity Score: 0.1732 (Lower=Better, 0=Tree)
+Matched 224893/229491 edges using fuzzy lookup.
+Evaluating alignment on substring of 224893 semantic edges (sampling 1000)...
+Semantic Rank:   0%|          | 0/1000 [00:00<?, ?it/s]Semantic Rank:   0%|          | 0/1000 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py", line 284, in <module>
+    main()
+    ~~~~^^
+  File "/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py", line 276, in main
+    rank = eval_semantic_rank(h_data, args.semantic_path, vocab)
+  File "/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py", line 179, in eval_semantic_rank
+    inner_negs = minkowski_inner_np(neg_vecs, u_vec) # (100,)
+  File "/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py", line 41, in minkowski_inner_np
+    return -u[:, 0]*v[:, 0] + np.sum(u[:, 1:]*v[:, 1:], axis=1)
+                    ~^^^^^^
+IndexError: too many indices for array: array is 1-dimensional, but 2 were indexed

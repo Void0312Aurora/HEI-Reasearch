@@ -1,0 +1,140 @@
+Loading checkpoint: checkpoints/aurora_v2_eval.pkl...
+Embedding Shape: (164560, 5)
+Calculating Ultrametricity Score...
+>>> Ultrametricity Score: 0.1767 (Lower=Better, 0=Tree)
+Matched 224893/229491 edges using fuzzy lookup.
+Evaluating alignment on substring of 224893 semantic edges (sampling 1000)...
+Semantic Rank:   0%|          | 0/1000 [00:00<?, ?it/s]Semantic Rank: 100%|██████████| 1000/1000 [00:00<00:00, 17003.84it/s]
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 31038 (\N{CJK UNIFIED IDEOGRAPH-793E}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 25945 (\N{CJK UNIFIED IDEOGRAPH-6559}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 36716 (\N{CJK UNIFIED IDEOGRAPH-8F6C}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 26426 (\N{CJK UNIFIED IDEOGRAPH-673A}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 25237 (\N{CJK UNIFIED IDEOGRAPH-6295}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 26631 (\N{CJK UNIFIED IDEOGRAPH-6807}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 27861 (\N{CJK UNIFIED IDEOGRAPH-6CD5}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 22622 (\N{CJK UNIFIED IDEOGRAPH-585E}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 23572 (\N{CJK UNIFIED IDEOGRAPH-5C14}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 32500 (\N{CJK UNIFIED IDEOGRAPH-7EF4}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 20122 (\N{CJK UNIFIED IDEOGRAPH-4E9A}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 20849 (\N{CJK UNIFIED IDEOGRAPH-5171}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 21644 (\N{CJK UNIFIED IDEOGRAPH-548C}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 22269 (\N{CJK UNIFIED IDEOGRAPH-56FD}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 22320 (\N{CJK UNIFIED IDEOGRAPH-5730}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 25670 (\N{CJK UNIFIED IDEOGRAPH-6446}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 24179 (\N{CJK UNIFIED IDEOGRAPH-5E73}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 20570 (\N{CJK UNIFIED IDEOGRAPH-505A}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 24191 (\N{CJK UNIFIED IDEOGRAPH-5E7F}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 21578 (\N{CJK UNIFIED IDEOGRAPH-544A}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 24605 (\N{CJK UNIFIED IDEOGRAPH-601D}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 24819 (\N{CJK UNIFIED IDEOGRAPH-60F3}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 24615 (\N{CJK UNIFIED IDEOGRAPH-6027}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 23138 (\N{CJK UNIFIED IDEOGRAPH-5A62}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 22899 (\N{CJK UNIFIED IDEOGRAPH-5973}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 33333 (\N{CJK UNIFIED IDEOGRAPH-8235}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 25163 (\N{CJK UNIFIED IDEOGRAPH-624B}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 25171 (\N{CJK UNIFIED IDEOGRAPH-6253}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 21475 (\N{CJK UNIFIED IDEOGRAPH-53E3}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 21736 (\N{CJK UNIFIED IDEOGRAPH-54E8}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 22352 (\N{CJK UNIFIED IDEOGRAPH-5750}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 31561 (\N{CJK UNIFIED IDEOGRAPH-7B49}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 20943 (\N{CJK UNIFIED IDEOGRAPH-51CF}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 23569 (\N{CJK UNIFIED IDEOGRAPH-5C11}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 25353 (\N{CJK UNIFIED IDEOGRAPH-6309}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 21160 (\N{CJK UNIFIED IDEOGRAPH-52A8}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 24198 (\N{CJK UNIFIED IDEOGRAPH-5E86}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 21151 (\N{CJK UNIFIED IDEOGRAPH-529F}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 20250 (\N{CJK UNIFIED IDEOGRAPH-4F1A}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 31163 (\N{CJK UNIFIED IDEOGRAPH-79BB}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 36864 (\N{CJK UNIFIED IDEOGRAPH-9000}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 20241 (\N{CJK UNIFIED IDEOGRAPH-4F11}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 20877 (\N{CJK UNIFIED IDEOGRAPH-518D}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 23601 (\N{CJK UNIFIED IDEOGRAPH-5C31}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 26159 (\N{CJK UNIFIED IDEOGRAPH-662F}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 32928 (\N{CJK UNIFIED IDEOGRAPH-80A0}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 38459 (\N{CJK UNIFIED IDEOGRAPH-963B}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 21521 (\N{CJK UNIFIED IDEOGRAPH-5411}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 19978 (\N{CJK UNIFIED IDEOGRAPH-4E0A}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 29645 (\N{CJK UNIFIED IDEOGRAPH-73CD}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 35270 (\N{CJK UNIFIED IDEOGRAPH-89C6}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 22788 (\N{CJK UNIFIED IDEOGRAPH-5904}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 29702 (\N{CJK UNIFIED IDEOGRAPH-7406}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 26435 (\N{CJK UNIFIED IDEOGRAPH-6743}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 40614 (\N{CJK UNIFIED IDEOGRAPH-9EA6}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 31174 (\N{CJK UNIFIED IDEOGRAPH-79C6}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 34411 (\N{CJK UNIFIED IDEOGRAPH-866B}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 29301 (\N{CJK UNIFIED IDEOGRAPH-7275}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 25346 (\N{CJK UNIFIED IDEOGRAPH-6302}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 32463 (\N{CJK UNIFIED IDEOGRAPH-7ECF}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 20037 (\N{CJK UNIFIED IDEOGRAPH-4E45}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 19981 (\N{CJK UNIFIED IDEOGRAPH-4E0D}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 25955 (\N{CJK UNIFIED IDEOGRAPH-6563}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+/home/void0312/HEI-Research/HEI/scripts/eval_aurora.py:255: UserWarning: Glyph 31354 (\N{CJK UNIFIED IDEOGRAPH-7A7A}) missing from font(s) DejaVu Sans.
+  plt.savefig(save_path, dpi=150)
+>>> Mean Rank (vs 100 Negs): 53.75 (1.0 = Perfect)
+Projecting to Poincaré Ball...
+Reducing 4D -> 2D via PCA...
+PCA Variance Explained: [0.25217572 0.2509223 ]
+Saved visualization to checkpoints/aurora_viz.png

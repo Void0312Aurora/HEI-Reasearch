@@ -1,0 +1,23 @@
+nohup: 忽略输入
+Aurora V2 Training on cuda
+Loading Dataset...
+Loading Cilin Dataset...
+Graph: 164560 nodes. Words: 140992
+  Nodes: 164560
+  Struct Edges: 164559
+Loading semantic edges from checkpoints/semantic_edges_wiki.pkl...
+Loaded 220817 semantic edges (Skipped 4598 unknown words).
+  Added 220817 Semantic Edges.
+Starting Simulation...
+Step 0: R=0.05, dt=2.0e-01, E=88137.0
+Step 100: R=nan, dt=2.0e-01, E=nan
+Step 200: R=nan, dt=2.0e-01, E=nan
+Step 300: R=nan, dt=2.0e-01, E=nan
+Step 400: R=nan, dt=2.0e-01, E=nan
+Step 500: R=nan, dt=2.0e-01, E=nan
+Step 600: R=nan, dt=2.0e-01, E=nan
+Step 700: R=nan, dt=2.0e-01, E=nan
+Step 800: R=nan, dt=2.0e-01, E=nan
+Step 900: R=nan, dt=2.0e-01, E=nan
+Done. 1000 steps in 63.4s
+Saved to checkpoints/aurora_v2_final.pkl

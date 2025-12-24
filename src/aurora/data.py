@@ -53,6 +53,20 @@ class AuroraDataset:
         self.vocab = Vocabulary(self.nodes)
         self.num_nodes = len(self.nodes)
         
+        # [NEW] Build Raw Word Map for Loose Matching (Index Decoupling Support)
+        # Maps "apple" -> candidate index (e.g. index of "C:apple:01")
+        self.raw_map = {}
+        for idx, node_str in enumerate(self.nodes):
+            # Parse C:word:id or Code:code
+            if node_str.startswith("C:"):
+                # Format C:word:id
+                parts = node_str.split(":")
+                if len(parts) >= 2:
+                    raw_word = parts[1]
+                    # Strategy: First Come First Serve (matches ConceptMapper)
+                    if raw_word not in self.raw_map:
+                        self.raw_map[raw_word] = idx
+                        
     def _load_cilin(self):
         # Re-implement simple loader or import?
         # Let's import the legacy loader to save space, but wrap result
@@ -87,20 +101,12 @@ class AuroraDataset:
         with open(path, 'rb') as f:
             raw_edges = pickle.load(f)
             
-        # raw_edges format: List[Tuple[u, v, w, type]]?
-        # Or just checking what build_wiki_pmi currently outputs?
-        # Current build_wiki_pmi outputs ints. 
-        # But our plan was to UPDATE it to output strings.
-        # Assuming we have valid data (or we will handle int legacy if needed, but implementation plan said fix generation).
-        
         valid_edges = []
         miss_count = 0
         
         # Heuristic check: is the first item int or str?
         if raw_edges and isinstance(raw_edges[0][0], int):
             print("WARNING: Loaded edges are Integers (Legacy Format). Using strict index.")
-            # This is dangerous if vocab mismatch.
-            # But for migration, maybe we allow it? No, force safety.
             print("Error: Cannot safely load Integer edges with decoupled dataset. Please regenerate edges as Strings.")
             return []
             
@@ -110,11 +116,20 @@ class AuroraDataset:
                 u_s, v_s = item[0], item[1]
                 w = item[2]
                 
+                # Try Exact Match First (if node string passed directly)
                 u_id = self.vocab[u_s]
                 v_id = self.vocab[v_s]
                 
+                # Fallback to Raw Map (Loose Match)
+                if u_id is None:
+                    u_id = self.raw_map.get(u_s)
+                if v_id is None:
+                    v_id = self.raw_map.get(v_s)
+                
                 if u_id is not None and v_id is not None:
-                    valid_edges.append((u_id, v_id, w))
+                    # Filter self-loops if any
+                    if u_id != v_id:
+                        valid_edges.append((u_id, v_id, w))
                 else:
                     miss_count += 1
             except:
