@@ -97,7 +97,7 @@ class ContactIntegrator:
         dt = max(dt, cfg.min_dt)
         return dt
 
-    def step(self, state: PhysicsState, potentials: Any) -> PhysicsState:
+    def step(self, state: PhysicsState, potentials: Any, freeze_radius: bool = False) -> PhysicsState:
         """
         Perform one integration step with Advection and Geometric Forces.
         """
@@ -105,6 +105,11 @@ class ContactIntegrator:
         M = state.M
         z = state.z
         x = G[..., 0]
+        
+        # Capture old radius if freezing
+        if freeze_radius:
+            r_old = torch.acosh(torch.clamp(x[:, 0], min=1.0 + 1e-7))
+
         
         # 1. Compute Forces (Potentials + Geometric)
         # Potential Force
@@ -254,8 +259,31 @@ class ContactIntegrator:
         avg_mass = torch.mean(self.inertia._get_mass(x)).item()
         diag = {'dt': dt, 'energy': total_E.item(), 'avg_mass': avg_mass}
         
-        if state.step % self.config.renorm_interval == 0:
-            G_next, err = renormalize_frame(G_next)
-            diag['renorm_error'] = err
+        if state.step % self.config.renorm_interval == 0 or freeze_radius:
+            # If freezing, we MUST restore radius first
+            if freeze_radius:
+                # x_next is G_next[..., 0]
+                x_curr = G_next[..., 0]
+                r_curr = torch.acosh(torch.clamp(x_curr[:, 0], min=1.0+1e-7))
+                
+                # Target is r_old
+                sinh_t = torch.sinh(r_old)
+                sinh_c = torch.sinh(r_curr)
+                
+                # Scale spatial: x_s_new = x_s_curr * (sinh_t / sinh_c)
+                scale = (sinh_t / (sinh_c + 1e-9)).unsqueeze(-1)
+                
+                # Modify G_next column 0 in place
+                G_next[..., 0, 1:] *= scale
+                G_next[..., 0, 0] = torch.cosh(r_old)
+                
+                # Renormalize to fix orthogonality
+                G_next, err = renormalize_frame(G_next)
+                diag['renorm_error'] = err
+                diag['frozen'] = 1.0
+            
+            elif state.step % self.config.renorm_interval == 0:
+                G_next, err = renormalize_frame(G_next)
+                diag['renorm_error'] = err
             
         return PhysicsState(G=G_next, M=M_next, z=z_next, step=state.step+1, diagnostics=diag)

@@ -24,6 +24,7 @@ from aurora import (
     AuroraDataset,
     PhysicsConfig,
     PhysicsState,
+    RadiusPIDController,
     ContactIntegrator,
     CompositePotential,
     SpringPotential,
@@ -31,7 +32,8 @@ from aurora import (
     RepulsionPotential,
     GatedRepulsionPotential,
     SemanticTripletPotential,
-    RadialInertia
+    RadialInertia,
+    RobustSpringPotential
 )
 from aurora.geometry import random_hyperbolic_init
 
@@ -48,6 +50,10 @@ def main():
     parser.add_argument("--k_struct", type=float, default=1.0)
     parser.add_argument("--k_sem", type=float, default=0.5)
     parser.add_argument("--k_rep", type=float, default=0.1, help="Repulsion Stiffness (A)")
+    
+    # Robust Potential Args
+    parser.add_argument("--robust", action="store_true", help="Use Robust LogCosh Potential instead of Quadratic Spring")
+    parser.add_argument("--delta", type=float, default=1.0, help="Transition scale for Robust Potential")
     
     # Phase V Args
     parser.add_argument("--triplet", action="store_true", help="Use Triplet Margin Loss for Semantics")
@@ -69,7 +75,20 @@ def main():
     parser.add_argument("--soft_weight", type=float, default=0.0, help="Weight for Soft Positive attraction (Phase XVI)")
     parser.add_argument("--pseudo_edges_path", type=str, default=None, help="Path to harvested pseudo-edges (Phase XVII)")
     parser.add_argument("--pseudo_weight", type=float, default=0.1, help="Stiffness for pseudo-edges")
-    parser.add_argument("--lamb", type=float, default=0.1, help="Radius anchor strength (volume control)")
+    parser.add_argument("--lamb", type=float, default=0.1, help="Base radius anchor strength")
+    parser.add_argument("--freeze_radius", action="store_true", help="Explicitly freeze radius (for Stage B/C)")
+    
+    # PID Control Arguments
+    parser.add_argument("--pid", action="store_true", help="Enable PID Radius Control")
+    parser.add_argument("--target_r", type=float, default=0.8, help="Target mean radius for PID")
+    parser.add_argument("--kp", type=float, default=1.0, help="PID Proportional gain")
+    parser.add_argument("--ki", type=float, default=0.01, help="PID Integral gain")
+    parser.add_argument("--kd", type=float, default=0.1, help="PID Derivative gain")
+    
+    # Hybrid Cooling Arguments (Phase XXIII)
+    parser.add_argument("--cooling_start", type=int, default=1500, help="Step to start cooling PID")
+    parser.add_argument("--cooling_end", type=int, default=2500, help="Step to end cooling (PID->0, Frozen)")
+    parser.add_argument("--target_lamb", type=float, default=1.0, help="Target stiffness after cooling")
     
     args = parser.parse_args()
     
@@ -94,6 +113,18 @@ def main():
     N = ds.num_nodes
     dim = 5
     
+    # 4. Integrate PID Controller
+    controller = None
+    if args.pid:
+        controller = RadiusPIDController(
+            target_r=args.target_r,
+            Kp=args.kp,
+            Ki=args.ki,
+            Kd=args.kd,
+            base_lamb=args.lamb
+        )
+        print(f">>> Enabled PID Radius Control (Target R={args.target_r}, Kp={args.kp})")
+
     if args.checkpoint:
         print(f"Loading checkpoint from {args.checkpoint}...")
         with open(args.checkpoint, 'rb') as f:
@@ -127,7 +158,12 @@ def main():
     effective_k_struct = args.k_struct * 0.1 if args.triplet else args.k_struct
     print(f"Structural Stiffness: {effective_k_struct}")
     
-    pot_struct = SpringPotential(edges_struct_t, k=effective_k_struct, l0=0.0)
+    pot_struct = None
+    if args.robust:
+        print(f">>> Using RobustSpringPotential (k={effective_k_struct}, delta={args.delta})")
+        pot_struct = RobustSpringPotential(edges_struct_t, k=effective_k_struct, l0=0.0, delta=args.delta)
+    else:
+        pot_struct = SpringPotential(edges_struct_t, k=effective_k_struct, l0=0.0)
     potentials.append(pot_struct)
     
     # Semantic (Optional)
@@ -144,7 +180,7 @@ def main():
                 print(f"    Soft Positive Weight: {args.soft_weight}")
                 # Assume k_sem is irrelevant for Triplet or use implicit 1.0
                 # Triplet doesn't use k, but relies on grad magnitude.
-                pot_sem = SemanticTripletPotential(sem_t, margin=0.1, num_candidates=args.num_candidates,
+                pot_sem = SemanticTripletPotential(sem_t, k=args.k_sem, margin=0.1, num_candidates=args.num_candidates,
                                                      mining_mode=args.mining_mode, local_pool=args.local_pool,
                                                      radius_tolerance=args.radius_tolerance, bank_size=args.bank_size,
                                                      soft_weight=args.soft_weight)
@@ -179,7 +215,8 @@ def main():
     # Volume Control
     depths = torch.tensor(ds.depths, dtype=torch.float32, device=device)
     target_radii = 0.5 + depths * 0.5
-    potentials.append(RadiusAnchorPotential(target_radii, lamb=args.lamb))
+    pot_vol = RadiusAnchorPotential(target_radii, lamb=args.lamb)
+    potentials.append(pot_vol)
     
     # Repulsion (Gated / Short-Range)
     # Epsilon should be related to local density.
@@ -226,7 +263,40 @@ def main():
             if pot_sem:
                  pot_sem.k = args.k_sem
                  
-        state = integrator.step(state, oracle)
+        # Update PID Control
+        if controller and i % 10 == 0:
+            avg_r = torch.mean(torch.acosh(torch.clamp(state.G[:, 0, 0], min=1.0+1e-7))).item()
+            new_lamb = controller.update(avg_r)
+            if pot_vol:
+                pot_vol.lamb = new_lamb
+            if i % 100 == 0:
+                diag = controller.get_diagnostics()
+                print(f"    [PID] Target: {controller.target_r}, Error: {diag['pid_error']:.4f}, Lambda: {new_lamb:.4f}")
+        
+        # Hybrid Cooling Schedule
+        effective_freeze = args.freeze_radius
+        if args.pid:
+            if i >= args.cooling_start and i < args.cooling_end:
+                 # Linear Interpolation
+                 progress = (i - args.cooling_start) / (args.cooling_end - args.cooling_start)
+                 
+                 # Decay PID Gains
+                 controller.Kp = args.kp * (1 - progress) + 0.1 * progress
+                 controller.Ki = args.ki * (1 - progress)
+                 controller.Kd = args.kd * (1 - progress)
+                 
+                 # Ramp Stiffness
+                 current_base_lamb = args.lamb + (args.target_lamb - args.lamb) * progress
+                 controller.base_lamb = current_base_lamb
+                 
+            elif i >= args.cooling_end:
+                 # Frozen Phase
+                 effective_freeze = True
+                 # Ensure stiffness is maxed
+                 if pot_vol: 
+                     pot_vol.lamb = args.target_lamb
+                 
+        state = integrator.step(state, oracle, freeze_radius=effective_freeze)
         
         if i % 100 == 0:
             avg_r = torch.mean(torch.acosh(state.x[:, 0])).item()

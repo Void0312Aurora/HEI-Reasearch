@@ -180,22 +180,8 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000, split="a
     active_node_list = list(active_nodes)
     print(f"Active Nodes for Evaluation: {len(active_node_list)}")
     
-    # Load depths for constrained sampling
-    # Assuming dataset has depths matching the embedding order
-    try:
-        from aurora.data import AuroraDataset
-        ds_temp = AuroraDataset("cilin", limit=None)
-        depths = np.array(ds_temp.depths)
-    except:
-        # Fallback: infer depths from radii if dataset unavailable
-        x0 = h_data[:, 0]
-        radii = np.arccosh(np.maximum(x0, 1.0 + 1e-7))
-        # Reverse-engineer depth from radius (assuming target_r = 0.5 + depth*0.5)
-        depths = np.clip((radii - 0.5) / 0.5, 0, 10)  # Rough approximation
-    
     ranks_active = []
     ranks_global = []
-    ranks_constrained = []  # New: same-depth only
     
     # Global distance calculation is expensive (N*N).
     # Use negative sampling: compare v against 100 random negatives.
@@ -223,6 +209,8 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000, split="a
         h_data[:, 1:] = h_data[:, 1:] * scale_factors
         h_data[:, 0] = target_x0
         
+    ranks_restricted = []
+    
     for u_idx, v_idx in tqdm(valid_pairs, desc=f"Semantic Rank (Norm={radius_norm})"):
         u_vec = h_data[u_idx]
         v_vec = h_data[v_idx]
@@ -240,7 +228,47 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000, split="a
         rank_act = np.sum(d_negs_act < d_pos) + 1
         ranks_active.append(rank_act)
         
-        # 2. Global Rank (Reference)
+        # 2. Restricted Active Rank (New Phase XX)
+        # Sample negatives ONLY from active_nodes within similar radius
+        # |r_neg - r_u| < 0.1
+        # To make this efficient, we can't loop all active nodes.
+        # But active_nodes list is small (~2k). We can just filter.
+        
+        # Current u radius
+        r_u = np.arccosh(max(u_vec[0], 1.0 + 1e-7))
+        
+        # We need r for all active nodes. Precompute if possible, or computing on fly is ok for 2k.
+        # Let's precompute globally once? No, u varies.
+        # Efficient way:
+        # Precompute active_radii array (M,)
+        if 'active_radii' not in locals():
+             active_indices_arr = np.array(active_node_list)
+             active_x0 = h_data[active_indices_arr, 0]
+             active_radii = np.arccosh(np.maximum(active_x0, 1.0 + 1e-7))
+        
+        # Find candidates
+        delta_r = np.abs(active_radii - r_u)
+        mask = delta_r < 0.1
+        valid_indices = np.where(mask)[0]
+        
+        if len(valid_indices) >= 100:
+             chosen_indices = np.random.choice(valid_indices, 100, replace=False)
+             # map back to global index
+             neg_indices_rest = active_indices_arr[chosen_indices]
+             
+             neg_vecs_rest = h_data[neg_indices_rest]
+             inner_rest = minkowski_inner_np(neg_vecs_rest, u_vec)
+             inner_rest = np.minimum(inner_rest, -1.0 - 1e-7)
+             d_negs_rest = np.arccosh(-inner_rest)
+             
+             rank_rest = np.sum(d_negs_rest < d_pos) + 1
+             ranks_restricted.append(rank_rest)
+        else:
+             # Not enough candidates, skip or penalize?
+             # For now, skip to ensure metric purity
+             pass
+
+        # 3. Global Rank (Reference)
         neg_indices_glob = np.random.randint(0, N, size=100)
         neg_vecs_glob = h_data[neg_indices_glob]
         
@@ -251,34 +279,13 @@ def eval_semantic_rank(h_data, semantic_path, vocab, sample_limit=1000, split="a
         rank_glob = np.sum(d_negs_glob < d_pos) + 1
         ranks_global.append(rank_glob)
         
-        # 3. Constrained Rank (Same-Depth Only) - Phase XX diagnostic
-        # Sample negatives only from nodes with similar depth (|Δdepth| ≤ 1)
-        u_depth = depths[u_idx]
-        # Find candidates within depth tolerance
-        depth_diff = np.abs(depths - u_depth)
-        valid_candidates = np.where(depth_diff <= 1)[0]
-        
-        if len(valid_candidates) >= 100:
-            neg_indices_const = np.random.choice(valid_candidates, size=100, replace=False)
-        else:
-            # Fallback: sample with replacement if not enough candidates
-            neg_indices_const = np.random.choice(valid_candidates, size=100, replace=True)
-            
-        neg_vecs_const = h_data[neg_indices_const]
-        inner_const = minkowski_inner_np(neg_vecs_const, u_vec)
-        inner_const = np.minimum(inner_const, -1.0 - 1e-7)
-        d_negs_const = np.arccosh(-inner_const)
-        
-        rank_const = np.sum(d_negs_const < d_pos) + 1
-        ranks_constrained.append(rank_const)
-        
     mean_rank_active = np.mean(ranks_active)
+    mean_rank_restricted = np.mean(ranks_restricted) if ranks_restricted else -1.0
     mean_rank_global = np.mean(ranks_global)
-    mean_rank_constrained = np.mean(ranks_constrained)
     
     print(f">>> Active Subgraph Mean Rank: {mean_rank_active:.2f} (Primary)")
-    print(f">>> Global Mean Rank: {mean_rank_global:.2f} (Reference)")
-    print(f">>> Constrained Mean Rank (Same-Depth): {mean_rank_constrained:.2f} (Angular-Only)")
+    print(f">>> Restricted Active Rank:    {mean_rank_restricted:.2f} (Phase XX - De-bias)")
+    print(f">>> Global Mean Rank:          {mean_rank_global:.2f} (Reference)")
     
     return mean_rank_active
 

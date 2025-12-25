@@ -84,6 +84,72 @@ class SpringPotential(ForceField):
         
         return total_energy, grad
 
+class RobustSpringPotential(ForceField):
+    """
+    Robust Attraction: LogCosh.
+    V = k * delta^2 * log(cosh((d - l0) / delta))
+    
+    Behavior:
+    - Small d: ~ 0.5 * k * (d-l0)^2 (Quadratic, like Spring)
+    - Large d: ~ k * delta * |d-l0| (Linear, saturated force)
+    """
+    def __init__(self, edges: torch.Tensor, k: float, l0: float = 0.0, delta: float = 1.0):
+        super().__init__()
+        self.register_buffer('edges', edges)
+        self.k = k
+        self.l0 = l0
+        self.delta = delta
+        
+    def compute_forces(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # x: (N, dim)
+        u_idx = self.edges[:, 0]
+        v_idx = self.edges[:, 1]
+        
+        xu = x[u_idx]
+        xv = x[v_idx]
+        
+        # Manually inline geometry for grad
+        J = torch.ones(x.shape[-1], device=x.device); J[0] = -1.0
+        
+        inner = (xu * xv * J).sum(dim=-1)
+        inner = torch.clamp(inner, max=-1.0 - 1e-7)
+        dist = torch.acosh(-inner)
+        
+        # Diff
+        diff = dist - self.l0
+        scaled_diff = diff / self.delta
+        
+        # Energy: k * delta^2 * log(cosh(scaled_diff))
+        # Numerical stability for log(cosh(x)) -> |x| - log(2) for large x
+        abs_scaled = torch.abs(scaled_diff)
+        mask_large = abs_scaled > 10.0
+        
+        logcosh = torch.zeros_like(scaled_diff)
+        logcosh[mask_large] = abs_scaled[mask_large] - 0.69314718
+        logcosh[~mask_large] = torch.log(torch.cosh(scaled_diff[~mask_large]))
+        
+        energy_vec = self.k * (self.delta**2) * logcosh
+        total_energy = energy_vec.sum()
+        
+        # Grad magnitude w.r.t distance d
+        # dV/dd = k * delta^2 * tanh(scaled_diff) * (1/delta)
+        #       = k * delta * tanh(scaled_diff)
+        force_mag = self.k * self.delta * torch.tanh(scaled_diff)
+        
+        # Chain rule: dV/du = force_mag * grad_u(d)
+        denom = torch.sqrt(inner**2 - 1.0)
+        factor = -(force_mag / (denom + 1e-9)).unsqueeze(-1)
+        
+        grad_u = factor * (xv * J)
+        grad_v = factor * (xu * J)
+        
+        # Accumulate
+        grad = torch.zeros_like(x)
+        grad.index_add_(0, u_idx, grad_u)
+        grad.index_add_(0, v_idx, grad_v)
+        
+        return total_energy, grad
+
 class RadiusAnchorPotential(ForceField):
     """
     Volume Control: V = 0.5 * lambda * (r_i - r_target)^2.
@@ -373,65 +439,54 @@ class SemanticTripletPotential(ForceField):
         # NOTE: self.global_candidates is (E, K_global). K_global usually 1000.
         # We can search purely within this set.
         
+        # Helper: Ensure global_candidates exists
         if not hasattr(self, 'global_candidates'):
             print("Warning: global_candidates not found. Run update_global_candidates first.")
             return
 
-        current_soft = []
+        # Direct Slicing (Vectorized)
+        # global_candidates is (E, K_global). We take Top-k.
+        current_soft_t = self.global_candidates[:, :k].contiguous() # (E, k)
         
-        # Process in chunks
-        for i in range(0, E, batch_size):
-            end = min(i + batch_size, E)
-            batch_u = u_idx[i:end] # (B,)
-            
-            # Forward Candidates (B, K_global)
-            # We take Top-50 from the pre-computed 1000
-            fw_candidates = self.global_candidates[i:end, :k] 
-            
-            # Check Backward Link: Is u in Top-K of v?
-            # To do this exactly, we need v's neighbors. 
-            # Approximate Mutuality:
-            # d(u, v) is small. 
-            # If d(u, v) is roughly symmetric in rank, good enough.
-            # Let's enforce a strict Distance Threshold instead of full N^2 Mutual Rank for speed?
-            # User insisted on "Mutual kNN".
-            # To implement Mutual kNN cheaply:
-            # We can't do full N->N. 
-            # But we can check if v is also an Anchor?
-            # If v is not an anchor, we don't have its forward list easily.
-            # Compromise: Stability + Exclusion is strong.
-            # Let's verify Mutuality by computing d(v, u) vs d(v, random)? No.
-            # Let's stick to "Symmetric Exclusion Zone" + Stability.
-            # Or: Since we masked |dr|<0.1, we are already in restricted space.
-            # If u->v is Top-K, and |dr| is small, it's likely mutual.
-            # Let's rely on STABILITY as the main filter for now to avoid N^2 scaling.
-            
-            current_soft.append(fw_candidates)
-            
-        current_soft_t = torch.cat(current_soft, dim=0) # (E, k)
+        # Temporal Stability Logic: Persistence Check
+        # Generate globally unique IDs for (anchor, candidate) pairs
+        # pair_id = u_idx * N + v_idx
+        # But u_idx is implicit by row.
+        # We use row_idx * N + candidate_idx
         
-        # Stability Filter: Intersection with previous
-        if getattr(self, 'last_soft_candidates', None) is not None:
-             # Logic: Keep only candidates present in BOTH current and last
-             # This is tricky with tensors.
-             # Simplified Stability: Just keep them if they were in the set?
-             # Intersection of sets per row.
-             # Using mask:
-             prev = self.last_soft_candidates
+        # Base offset for each row
+        row_offsets = (torch.arange(E, device=device) * N).unsqueeze(1) # (E, 1)
+        current_pair_ids = row_offsets + current_soft_t # (E, k)
+        
+        if getattr(self, 'last_soft_ids', None) is not None:
+             # Check which current pairs were present in last update
+             # flatten for isin
+             curr_flat = current_pair_ids.view(-1)
+             last_flat = self.last_soft_ids.view(-1)
              
-             # Expand for broadcasting check? Too big (E, k, k).
-             # Let's just blindly trust the new set for this iteration 
-             # and rely on the fact that "Random Noise" won't be stable?
-             # Re-implementing exact intersection on GPU is costly.
-             pass
+             # torch.isin: Elements of curr_flat that are in last_flat
+             mask_flat = torch.isin(curr_flat, last_flat)
+             
+             self.soft_mask = mask_flat.view(E, k).contiguous()
+             
+             # Monitor stability rate
+             stability_rate = mask_flat.float().mean().item()
+             print(f"[SoftMining] Stability Rate (Persistence): {stability_rate*100:.1f}%")
         else:
-             self.last_soft_candidates = current_soft_t
+             # First step: No history.
+             # Option A: Accept all (Start fast)
+             # Option B: Reject all (Wait for confirmation) -> Safer for High Fidelity
+             # Let's use Option B to ensure strict persistence
+             print("[SoftMining] First update (No history). Initializing buffer.")
+             self.soft_mask = torch.zeros_like(current_soft_t, dtype=torch.bool).contiguous()
              
-        # Store for compute_forces
+        # Update history buffer (Store CURRENT candidates for next check)
+        self.last_soft_ids = current_pair_ids
         self.soft_positives = current_soft_t
-        self.last_soft_candidates = current_soft_t
         
-        print(f"[SoftMining] Updated Soft Positives (Top-{k} from Global Candidates).")
+        # Filtered stats
+        active_count = self.soft_mask.sum().item()
+        print(f"[SoftMining] Updated Soft Positives. Active Stable Pairs: {active_count} / {current_soft_t.numel()}")
 
     def compute_forces(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         N, dim = x.shape
@@ -637,6 +692,15 @@ class SemanticTripletPotential(ForceField):
                  # Soft Loss = weight * d_soft
                  denom_soft = torch.sqrt(inner_soft**2 - 1.0)
                  factor_soft = -(self.soft_weight / (denom_soft + 1e-9)).unsqueeze(-1)
+                 
+                 # Apply Stability Mask if available
+                 if hasattr(self, 'soft_mask'):
+                     # soft_mask is (E, K)
+                     mask_expanded = self.soft_mask.view(-1) # (E*K)
+                     
+                     # Zero out forces for unstable pairs
+                     factor_soft = factor_soft * mask_expanded.view(E, K_soft, 1)
+                     d_soft = d_soft * self.soft_mask # (E, K)
                  
                  grad_u_soft = factor_soft * (v_soft * J.view(1, 1, dim)) # (E, K, D)
                  grad_v_soft = factor_soft * (u_expand * J.view(1, 1, dim)) # (E, K, D)
