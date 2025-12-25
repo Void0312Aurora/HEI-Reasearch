@@ -263,15 +263,16 @@ def main():
             if pot_sem:
                  pot_sem.k = args.k_sem
                  
-        # Update PID Control
+        # Update PID Control (now controls target_radii scale, not lambda)
         if controller and i % 10 == 0:
             avg_r = torch.mean(torch.acosh(torch.clamp(state.G[:, 0, 0], min=1.0+1e-7))).item()
-            new_lamb = controller.update(avg_r)
+            radii_scale = controller.update(avg_r)
             if pot_vol:
-                pot_vol.lamb = new_lamb
+                # Scale the base target_radii (stored during init)
+                pot_vol.target_radii = pot_vol.base_target_radii * radii_scale
             if i % 100 == 0:
                 diag = controller.get_diagnostics()
-                print(f"    [PID] Target: {controller.target_r}, Error: {diag['pid_error']:.4f}, Lambda: {new_lamb:.4f}")
+                print(f"    [PID] Target: {controller.target_r}, Error: {diag['pid_error']:.4f}, Scale: {radii_scale:.4f}")
         
         # Hybrid Cooling Schedule
         effective_freeze = args.freeze_radius

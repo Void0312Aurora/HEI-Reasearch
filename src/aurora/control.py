@@ -21,26 +21,28 @@ class RadiusPIDController:
         
     def update(self, current_mean_r: float, dt: float = 1.0) -> float:
         """
-        Updates the control state and returns the new lambda value.
+        Updates the control state and returns the new radii_scale for target_radii.
+        Instead of controlling lambda, we scale the target radii distribution.
         """
         error = current_mean_r - self.target_r
         
-        # Integral with simple anti-windup (only accumulate if output not saturated)
-        # Note: In our case, higher r means we need higher lambda to pull it back. 
-        # So it's a negative feedback loop where u = Kp * error...
+        # Integral with anti-windup
         self.integral += error * dt
         
         # Derivative
         derivative = (error - self.prev_error) / dt
         
-        # Output: Adjustment to base_lamb
-        adjustment = self.Kp * error + self.Ki * self.integral + self.Kd * derivative
+        # Output: Scale factor for target_radii (not lambda adjustment)
+        # If current < target (error negative), we need to INCREASE radii -> scale > 1
+        # So we use NEGATIVE feedback: adjustment = -Kp * error
+        adjustment = -self.Kp * error - self.Ki * self.integral - self.Kd * derivative
         
-        new_lamb = self.base_lamb + adjustment
-        new_lamb = max(min(new_lamb, self.max_lamb), self.min_lamb)
+        # radii_scale = 1.0 + adjustment (centered at 1.0, can go 0.5 to 2.0)
+        radii_scale = 1.0 + adjustment
+        radii_scale = max(min(radii_scale, 2.0), 0.5)  # Clamp to reasonable range
         
         self.prev_error = error
-        return new_lamb
+        return radii_scale
 
     def get_diagnostics(self):
         return {

@@ -156,7 +156,8 @@ class RadiusAnchorPotential(ForceField):
     """
     def __init__(self, targets: torch.Tensor, lamb: float = 1.0):
         super().__init__()
-        self.targets = targets
+        self.base_target_radii = targets.clone()  # Store base for PID scaling
+        self.target_radii = targets  # Mutable, can be scaled by PID
         self.lamb = lamb
         
     def compute_forces(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -166,7 +167,7 @@ class RadiusAnchorPotential(ForceField):
         x0_safe = torch.clamp(x0, min=1.0 + 1e-7)
         r = torch.acosh(x0_safe)
         
-        delta = r - self.targets
+        delta = r - self.target_radii
         energy = 0.5 * self.lamb * (delta**2).sum()
         
         # Grad

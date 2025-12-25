@@ -273,8 +273,9 @@ class ContactIntegrator:
                 # Scale spatial: x_s_new = x_s_curr * (sinh_t / sinh_c)
                 scale = (sinh_t / (sinh_c + 1e-9)).unsqueeze(-1)
                 
-                # Modify G_next column 0 in place
-                G_next[..., 0, 1:] *= scale
+                # Modify G_next column 0 (position vector) - spatial components are rows 1:
+                # scale is (N, 1), broadcasts correctly to (N, 4) - do NOT squeeze
+                G_next[..., 1:, 0] *= scale
                 G_next[..., 0, 0] = torch.cosh(r_old)
                 
                 # Renormalize to fix orthogonality
