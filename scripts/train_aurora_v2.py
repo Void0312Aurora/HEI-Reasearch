@@ -154,8 +154,8 @@ def main():
     # Structural
     edges_struct_t = torch.tensor(ds.edges_struct, dtype=torch.long, device=device)
     
-    # If Fine-Tuning (Triplet), use Relaxed Structure by default
-    effective_k_struct = args.k_struct * 0.1 if args.triplet else args.k_struct
+    # If Fine-Tuning (Triplet), we used to relax structure. Now we keep it explicit.
+    effective_k_struct = args.k_struct
     print(f"Structural Stiffness: {effective_k_struct}")
     
     pot_struct = None
