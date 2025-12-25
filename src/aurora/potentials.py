@@ -602,24 +602,35 @@ class SemanticTripletPotential(ForceField):
             min_vals, min_indices = torch.min(d_neg_k_selected, dim=1)
             d_neg = d_neg_k.gather(1, min_indices.unsqueeze(1)).squeeze(1)
         elif self.mining_mode == "trusted" or self.mining_mode == "global":
-            # Trusted Negative Mining (Strict Filter)
-            # 1. Reject False Negatives: d_neg < d_pos
-            # 2. Prefer Semi-Hard: d_pos < d_neg < d_pos + m
-            # 3. Fallback: If no Semi-Hard, pick Hardest Valid (which implies Easy d_neg > d_pos + m)
+            # PU Learning: Three-Zone Negative Sampling (temp-09.md)
+            # Zone 1 (Exclusion): d_neg < d_pos - τ_excl → Discard (likely unlabeled positives)
+            # Zone 2 (Hard-Negative): d_pos - τ_excl <= d_neg <= d_pos + margin → Sample
+            # Zone 3 (Easy-Negative): d_neg > d_pos + margin → Mix in a few
             
             d_pos_exp = d_pos.unsqueeze(1)
+            tau_excl = 0.05  # Exclusion zone margin (tunable)
             
-            # Mask out False Negatives (too close)
-            # We treat them as 'inf' so they are not selected as 'min'
-            valid_mask = d_neg_k > d_pos_exp
+            # Define zones
+            exclusion_mask = d_neg_k < (d_pos_exp - tau_excl)  # Too close, discard
+            hard_negative_mask = (d_neg_k >= d_pos_exp - tau_excl) & (d_neg_k <= d_pos_exp + self.margin)
+            easy_negative_mask = d_neg_k > (d_pos_exp + self.margin)
             
-            d_neg_k_filtered = d_neg_k.clone()
-            d_neg_k_filtered[~valid_mask] = float('inf')
+            # Set exclusion zone to inf
+            d_neg_k_pu = d_neg_k.clone()
+            d_neg_k_pu[exclusion_mask] = float('inf')
             
-            # Select Hardest Valid (Smallest Distance)
-            # If all are inf (all false negatives), min returns inf. Loss=0. Correct.
-            min_vals, min_indices = torch.min(d_neg_k_filtered, dim=1)
-            d_neg = min_vals
+            # Prefer hard-negatives, but if none available, use easy
+            # If ALL are in exclusion zone, fallback to random (avoid gradient death)
+            has_valid = ~exclusion_mask.all(dim=1)
+            
+            if not has_valid.any():
+                # Complete gradient death scenario: fallback to random selection
+                min_indices = torch.randint(0, self.num_candidates, (E,), device=device)
+                d_neg = d_neg_k.gather(1, min_indices.unsqueeze(1)).squeeze(1)
+            else:
+                # Normal case: select from hard or easy zones
+                min_vals, min_indices = torch.min(d_neg_k_pu, dim=1)
+                d_neg = min_vals
         else:
             raise ValueError(f"Unknown mining_mode: {self.mining_mode}")
         
@@ -628,10 +639,19 @@ class SemanticTripletPotential(ForceField):
         xw_hard = x[w_idx]
         inner_neg = inner_neg_k.gather(1, min_indices.unsqueeze(1)).squeeze(1)
         
-        # 3. Loss Calculation
-        # L = relu(d_pos - d_neg + margin)
+        # 3. Loss Calculation: SMOOTH TRIPLET (Softplus instead of ReLU)
+        # Old: L = relu(d_pos - d_neg + margin)
+        # New: L = softplus(beta * (d_pos - d_neg + margin)) / beta
+        # where beta controls smoothness (higher = closer to ReLU)
+        beta = 10.0  # Smoothness parameter (tunable)
         loss_val = d_pos - d_neg + self.margin
-        mask = loss_val > 0
+        
+        # Softplus(x) = (1/beta) * log(1 + exp(beta*x))
+        loss_smooth = torch.nn.functional.softplus(beta * loss_val) / beta
+        
+        # Since Softplus is always positive, we apply a soft threshold
+        # to determine "violation" for logging purposes
+        mask = loss_val > -self.margin * 0.5  # Softer threshold for logging
         
         # [NEW] Metric Logging: Violation Rate
         self.last_violation_rate = mask.float().mean().item()
