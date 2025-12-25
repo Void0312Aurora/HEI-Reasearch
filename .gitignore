@@ -10,3 +10,7 @@ docs/temp/*
 docs/report/*
 *.log
 logs/*
+docs/report/*
+docs/plan/*
+configs/*
+
