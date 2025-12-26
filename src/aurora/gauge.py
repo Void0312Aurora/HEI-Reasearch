@@ -477,4 +477,63 @@ class GaugeField(nn.Module):
         J_new = torch.matmul(U_op, J.unsqueeze(-1)).squeeze(-1)
         return J_new
 
-
+    def compute_spin_interaction(self, J: torch.Tensor) -> torch.Tensor:
+        """
+        Compute Spin Interaction Generator (Heisenberg/XY alignment).
+        Generates rotation to align J_i with neighbors.
+        
+        B_i = sum_{j} U_{ij} J_j
+        A_spin = J_i ^ B_i = J_i B_i^T - B_i J_i^T
+        
+        Args:
+            J: (N, k)
+        Returns:
+            A_spin: (N, k, k) skew-symmetric
+        """
+        # 1. Gather Neighbors and Transport
+        start = self.edges[:, 0]
+        end = self.edges[:, 1]
+        
+        # Outgoing edges: u->v. Neighbor is v at u.
+        # J_neighbor = U_{uv} J_v ???
+        # Strictly: U_{uv} transports vector from u to v.
+        # So J_v is at v. To bring to u, we need U_{vu} = U_{uv}^{-1}.
+        # Wait. U_{uv} maps T_u -> T_v.
+        # We need map T_v -> T_u.
+        # So we need U_{uv}^T (for SO).
+        
+        # J at u: 
+        # Contributions from neighbors v (via edge u,v): U_{uv}^T J_v
+        # Contributions from neighbors w (via edge w,u): U_{wu} J_w (straight, since U_{wu} maps w->u)
+        
+        N = J.shape[0]
+        k = self.logical_dim
+        B = torch.zeros(N, k, device=J.device)
+        
+        U_all = self.get_U() # (E, k, k)
+        
+        # 1a. Neighbors v (via u->v edges)
+        # We are at u. Neighbor v.
+        # J_v_at_u = U_{uv}^T J_v
+        J_v = J[end] # (E, k)
+        U_transpose = U_all.transpose(1, 2)
+        J_v_transported = torch.matmul(U_transpose, J_v.unsqueeze(-1)).squeeze(-1)
+        B.index_add_(0, start, J_v_transported)
+        
+        # 1b. Neighbors w (via w->u edges)
+        # We are at u. Neighbor w.
+        # J_w_at_u = U_{wu} J_w
+        J_w = J[start]
+        J_w_transported = torch.matmul(U_all, J_w.unsqueeze(-1)).squeeze(-1)
+        B.index_add_(0, end, J_w_transported)
+        
+        # 2. Compute Generator A = J B^T - B J^T
+        # J: (N, k). B: (N, k)
+        J_exp = J.unsqueeze(-1) # (N, k, 1)
+        B_exp = B.unsqueeze(1)  # (N, 1, k)
+        
+        JB = torch.matmul(J_exp, B_exp) # (N, k, k) -> J * B^T
+        
+        A_spin = JB - JB.transpose(1, 2)
+        
+        return A_spin

@@ -417,6 +417,15 @@ def main():
                     if v_rate < 0.05 and is_hard:
                         pot_sem.margin += 0.05
                         print(f"    >>> Margin Up! New Margin: {pot_sem.margin:.2f}")
+                        print(f"    >>> Margin Up! New Margin: {pot_sem.margin:.2f}")
+            
+        # [CRITICAL] Detach State to prevent Computational Graph explosion (OOM Fix)
+        # Since we use 'Online Learning' (Snapshot Loss) and not BPTT, we must detach history.
+        state.G = state.G.detach()
+        state.M = state.M.detach()
+        state.z = state.z.detach()
+        if state.J is not None:
+            state.J = state.J.detach()
             
     end_t = time.time()
     print(f"Done. {args.steps} steps in {end_t - start_t:.1f}s")
@@ -444,9 +453,11 @@ def main():
             'num_candidates': args.num_candidates,
             'seed': args.seed,
             'steps': args.steps,
-            'split': args.split
+            'split': args.split,
+            'dataset': args.dataset # Save dataset name!
         },
-        'recipe': 'aurora_recipe_v1'  # Reference to configs/aurora_recipe_v1.yaml
+        'recipe': 'aurora_recipe_v1',
+        'gauge_field': gauge_field.state_dict() if gauge_field is not None else None
     }
     
     with open(save_path, 'wb') as f:

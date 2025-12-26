@@ -114,7 +114,20 @@ class ContactIntegrator:
         z = state.z
         J = state.J
         x = G[..., 0]
-        dt = self.config.dt # Simplified for v2.0 MVP (Fixed dt first)
+        J = state.J
+        x = G[..., 0]
+        
+        # Adaptive Time-Stepping
+        if self.config.adaptive:
+             # Estimate velocity xi
+             xi = self.inertia.inverse(M, x)
+             xi_norm = torch.max(torch.norm(xi, dim=-1)).item()
+             # We don't have current torque cheaply. Use 0.0 or last stored?
+             # For safety, let's just limit by velocity and max_dt
+             dt = self._compute_adaptive_dt(xi_norm, 0.0)
+        else:
+             dt = self.config.dt
+
         
         # Capture old radius if freezing
         r_old = None
@@ -133,7 +146,16 @@ class ContactIntegrator:
              v_embed = torch.matmul(M, x.unsqueeze(-1)).squeeze(-1)
              
              # Compute Connection A(v)
-             A_eff = gauge_field.compute_connection(x, v_embed) # (N, k, k)
+             A_geom = gauge_field.compute_connection(x, v_embed) # (N, k, k)
+             
+             # Compute Spin Interaction (Alignment Torque)
+             # Adds term to rotate J towards neighbors
+             A_spin = gauge_field.compute_spin_interaction(J)
+             
+             # Total Effective Connection
+             # A_eff = A_geom + lambda * A_spin
+             # Using lambda=5.0 to enforce strong semantic alignment
+             A_eff = A_geom + 5.0 * A_spin
              
              # Evolve J (Precession)
              # dJ/dt = -[A, J].
