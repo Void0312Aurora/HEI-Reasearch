@@ -17,14 +17,18 @@ import numpy as np
 import pickle
 import argparse
 from sklearn.metrics import roc_auc_score, average_precision_score
+import subprocess
 
 # Add src
 sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
+# Add scripts to path to import eval_semantic_truth
+sys.path.append(os.path.dirname(__file__))
 
 from aurora.data import AuroraDataset
 from aurora.gauge import GaugeField
 from aurora.geometry import dist_hyperbolic
 from aurora.dynamics import PhysicsState
+from eval_semantic_truth import build_parent_map, get_synonym_group
 
 def compute_scores(u, v, x, J, gauge_field, batch_size=1000, device='cuda'):
     """
@@ -169,6 +173,31 @@ def main():
     print(f"Gauge-Enhanced AUC:      {auc_gauge:.4f}")
     print(f"Improvement:             {auc_gauge - auc_hyp:+.4f}")
     
+    # 5b. Hard Subset AUC (Discordant Regime)
+    # Define "Hard": Hyperbolic Distance > 3.0 (or P80) on Hyberbolic Baseline
+    # Filter y_true and score based on y_hyp (scores are negative distance)
+    # So "Hard" is y_hyp < -3.0
+    
+    threshold_hard = -3.0
+    mask_hard = y_hyp < threshold_hard 
+    
+    if mask_hard.sum() > 100:
+        y_true_hard = y_true[mask_hard]
+        y_hyp_hard = y_hyp[mask_hard]
+        y_gauge_hard = y_gauge[mask_hard]
+        
+        # Only compute if we have both classes
+        if len(np.unique(y_true_hard)) > 1:
+            auc_hyp_h = roc_auc_score(y_true_hard, y_hyp_hard)
+            auc_gauge_h = roc_auc_score(y_true_hard, y_gauge_hard)
+            print(f"\n--- Hard Subset (Dist > {-threshold_hard}) N={mask_hard.sum()} ---")
+            print(f"Hyperbolic AUC: {auc_hyp_h:.4f}")
+            print(f"Gauge AUC:      {auc_gauge_h:.4f}")
+            print(f"Improvement:    {auc_gauge_h - auc_hyp_h:+.4f}")
+        else:
+            print(f"\n--- Hard Subset N={mask_hard.sum()} ---")
+            print("Skipping AUC (Only one class present in subset).")
+            
     # 6. Qualitative: "Wormhole" Detection
     # Look for Positives where Hyp is Low (Bad) but Gauge is High (Good).
     # Hyp Low means dist is LARGE.
@@ -186,11 +215,47 @@ def main():
     align_threshold = np.percentile(align_p, 50) # Better than median assumption
     
     wormholes = []
+    # Build parent map for Truth Check
+    parent_map = build_parent_map(ds)
+    
+    strict_hit = 0
+    soft_hit = 0
+    total_wh = 0
+    
     for i in range(num_pos):
         d = dist_p[i]
         a = align_p[i]
         if d > dist_threshold and a > align_threshold:
-            wormholes.append((i, d, a))
+            u_i = pos_u[i].item()
+            v_i = pos_v[i].item()
+            wormholes.append((i, d, a, u_i, v_i))
+            
+            # Truth Check (Inline)
+            parent_u = get_synonym_group(u_i, parent_map, ds.nodes)
+            parent_v = get_synonym_group(v_i, parent_map, ds.nodes)
+            
+            total_wh += 1
+            is_strict = False
+            is_soft = False
+            
+            if parent_u and parent_v:
+                if parent_u == parent_v:
+                    is_strict = True
+                    is_soft = True
+                else:
+                    grand_u = get_synonym_group(parent_u, parent_map, ds.nodes)
+                    grand_v = get_synonym_group(parent_v, parent_map, ds.nodes)
+                    if grand_u and grand_v and grand_u == grand_v:
+                         is_soft = True
+                    else:
+                         code_u = ds.nodes[parent_u]
+                         code_v = ds.nodes[parent_v]
+                         if code_u.startswith("Code:") and code_v.startswith("Code:"):
+                             if code_u.split(":")[1][:2] == code_v.split(":")[1][:2]:
+                                 is_soft = True
+            
+            if is_strict: strict_hit += 1
+            if is_soft: soft_hit += 1
             
     # Sort by "Surprise" (High Dist + High Align)
     wormholes.sort(key=lambda item: item[2] * item[1], reverse=True)
@@ -201,11 +266,10 @@ def main():
     print("-" * 70)
     
     for k in range(min(10, len(wormholes))):
-        idx, d, a = wormholes[k]
-        u_idx = pos_u[idx].item()
-        v_idx = pos_v[idx].item()
-        w_u = ds.nodes[u_idx]
-        w_v = ds.nodes[v_idx]
+        idx, d, a, u_i, v_i = wormholes[k]
+        
+        w_u = ds.nodes[u_i]
+        w_v = ds.nodes[v_i]
         
         # Clean words (Code:Word:Id -> Word)
         if "C:" in w_u: w_u = w_u.split(":")[1]
@@ -215,6 +279,9 @@ def main():
 
     print("-" * 70)
     print(f"Found {len(wormholes)} potential wormholes (High Dist, High Align).")
+    if total_wh > 0:
+        print(f"Wormhole Strict Precision: {strict_hit}/{total_wh} ({strict_hit/total_wh*100:.2f}%)")
+        print(f"Wormhole Soft Precision:   {soft_hit}/{total_wh} ({soft_hit/total_wh*100:.2f}%)")
 
 if __name__ == "__main__":
     main()

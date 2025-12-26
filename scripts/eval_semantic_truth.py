@@ -65,33 +65,68 @@ def validate_edges(edges, dataset):
     
     print(f"Validating {len(edges)} edges against Cilin Ontology...")
     
+    strict_matches = 0
+    soft_matches = 0
+    
     for item in edges:
         u, v = item[0], item[1]
         
-        # Determine Synonym Groups
-        group_u = get_synonym_group(u, parent_map, dataset.nodes)
-        group_v = get_synonym_group(v, parent_map, dataset.nodes)
+        # Determine Synonym Groups (Parents)
+        # For Cilin, Parent IS the 'Small Category' (e.g., Code:Aa01)
+        parent_u = get_synonym_group(u, parent_map, dataset.nodes)
+        parent_v = get_synonym_group(v, parent_map, dataset.nodes)
         
-        if group_u is None or group_v is None:
+        if parent_u is None or parent_v is None:
             missed_info += 1
             continue
             
         total += 1
         
-        # Validation Logic:
-        # Strict: Same Group ID
-        if group_u == group_v:
-            matches += 1
+        # 1. Strict: Same Parent
+        if parent_u == parent_v:
+            strict_matches += 1
+            soft_matches += 1 # Strict implies Soft
+        else:
+            # 2. Soft: Same Grandparent OR Same Code Prefix
+            # Check Grandparents
+            grand_u = get_synonym_group(parent_u, parent_map, dataset.nodes)
+            grand_v = get_synonym_group(parent_v, parent_map, dataset.nodes)
             
+            if grand_u is not None and grand_v is not None and grand_u == grand_v:
+                soft_matches += 1
+            else:
+                # Check Code String Similarity
+                # Cilin format: Code:Aa01...
+                # If they share first 5 chars (Code:Aa), they are in same 'Middle Category'
+                code_u = dataset.nodes[parent_u]
+                code_v = dataset.nodes[parent_v]
+                if code_u.startswith("Code:") and code_v.startswith("Code:"):
+                    # Code:Aa01 -> prefix 'Code:Aa'
+                    # Actually standard length.
+                    # Let's check first 2 letters of code (Big Category)
+                    # "Code:Aa" vs "Code:Ab"
+                    # Just split by ':'
+                    p_u_parts = code_u.split(":")
+                    p_v_parts = code_v.split(":")
+                    if len(p_u_parts) > 1 and len(p_v_parts) > 1:
+                        # Extract 'Aa01'
+                        c_u = p_u_parts[1]
+                        c_v = p_v_parts[1]
+                        # Check first 2 chars (Aa == Aa)
+                        if c_u[:2] == c_v[:2]:
+                            soft_matches += 1
+
     if total == 0:
         return 0.0
         
-    precision = matches / total
-    print(f"Analyzed {total} pairs (skipped {missed_info} root/orphan nodes).")
-    print(f"Matches (Shared Parent): {matches}")
-    print(f"Precision: {precision:.4f}")
+    strict_prec = strict_matches / total
+    soft_prec = soft_matches / total
     
-    return precision
+    print(f"Analyzed {total} pairs (skipped {missed_info} root/orphan nodes).")
+    print(f"Strict Matches (Same Parent):      {strict_matches} ({strict_prec*100:.2f}%)")
+    print(f"Soft Matches (Same Category/GP):   {soft_matches} ({soft_prec*100:.2f}%)")
+    
+    return strict_prec
 
 def main():
     parser = argparse.ArgumentParser()
