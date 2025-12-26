@@ -166,14 +166,37 @@ def main():
     M = torch.zeros(N, dim, dim, device=device)
     z = torch.zeros(N, device=device)
     
+    # Semantic Edges (Load Early for Gauge topology)
+    pot_sem = None
+    sem_t = None
+    if args.semantic_path:
+        sem_edges = ds.load_semantic_edges(args.semantic_path, split=args.split)
+        if sem_edges:
+            sem_indices = [(u, v) for u, v, w in sem_edges]
+            sem_t = torch.tensor(sem_indices, dtype=torch.long, device=device)
+            print(f">>> Loaded {len(sem_indices)} Semantic Edges for Topology.")
+
     # Gauge Field (Connection)
     gauge_field = None
     if args.enable_logic:
         print(f">>> Enabling Logical Dynamics (Layer C). Logical Dim: {args.logical_dim}")
-        # Initialize Gauge Field on Structural Edges
+        # Initialize Gauge Field on Union of Structural and Semantic Edges
+        # This creates loops (triangles) necessary for Curvature Physics.
         edges_struct_t = torch.tensor(ds.edges_struct, dtype=torch.long, device=device)
-        edges_struct_t = torch.tensor(ds.edges_struct, dtype=torch.long, device=device)
-        gauge_field = GaugeField(edges_struct_t, args.logical_dim, group='SO').to(device)
+        
+        if sem_t is not None:
+             # Merge edges
+             edges_all = torch.cat([edges_struct_t, sem_t], dim=0)
+             # Unique? GaugeField handles edge list, but duplicate edges just mean parallel transport.
+             # Ideally we uniqueness it?
+             # For performance, let's keep it simple. Duplicate edges are fine (parallel springs/links).
+             # Actually, parallel edges with DIFFERENT types are distinct in current Physics?
+             # GaugeField treats them as indexable.
+             gauge_field = GaugeField(edges_all, args.logical_dim, group='SO').to(device)
+             print(f">>> Gauge Topology: {edges_struct_t.shape[0]} Struct + {sem_t.shape[0]} Sem = {edges_all.shape[0]} Edges.")
+        else:
+             gauge_field = GaugeField(edges_struct_t, args.logical_dim, group='SO').to(device)
+             print(">>> WARNING: Gauge Topology limited to Structure (Tree?). Expect 0 Curvature.")
     
     # Optimizer for Gauge Field
     optimizer_gauge = None
@@ -203,11 +226,10 @@ def main():
     
     # Semantic (Optional)
     pot_sem = None
-    if args.semantic_path:
-        sem_edges = ds.load_semantic_edges(args.semantic_path, split=args.split)
-        if sem_edges:
-            sem_indices = [(u, v) for u, v, w in sem_edges]
-            sem_t = torch.tensor(sem_indices, dtype=torch.long, device=device)
+    # Semantic Potential Construction
+    if sem_t is not None:
+            if args.triplet:
+                print(f">>> Using SemanticTripletPotential (Margin=0.1, Candidates={args.num_candidates})")
             
             if args.triplet:
                 print(f">>> Using SemanticTripletPotential (Margin=0.1, Candidates={args.num_candidates})")
@@ -333,10 +355,12 @@ def main():
                  if pot_vol: 
                      pot_vol.lamb = args.target_lamb
                  
-                 if pot_vol: 
+        if pot_vol: 
                      pot_vol.lamb = args.target_lamb
                   
-        state = integrator.step(state, oracle, gauge_field=gauge_field, freeze_radius=effective_freeze)
+        with torch.no_grad():
+            state = integrator.step(state, oracle, gauge_field=gauge_field, freeze_radius=effective_freeze)
+
         
         # [Phase 3] Learn Gauge Field (Alignment Optimization)
         if optimizer_gauge is not None and i % 10 == 0:
@@ -346,10 +370,9 @@ def main():
              
              optimizer_gauge.zero_grad()
              
-             # 1. Get Edges (u, v) from dataset structure
-             # Use sample or all? For small dataset all is fine.
-             u = edges_struct_t[:, 0]
-             v = edges_struct_t[:, 1]
+             # 1. Get Edges (u, v) from Gauge Topology (Struct + Sem)
+             u = gauge_field.edges[:, 0]
+             v = gauge_field.edges[:, 1]
              
              # 2. Get Transport U_uv
              # gauge_field.get_U() returns U ordered by edges

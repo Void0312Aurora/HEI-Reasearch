@@ -26,6 +26,7 @@ from aurora.geometry import minkowski_inner
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoint", type=str, help="Path to .pkl checkpoint")
+    parser.add_argument("--semantic_path", type=str, default=None, help="Path to semantic edges (must match training)")
     parser.add_argument("--device", type=str, default="cpu")
     args = parser.parse_args()
     
@@ -50,11 +51,22 @@ def main():
     dataset_name = data['config'].get('dataset', 'cilin')
     print(f"Loading Dataset {dataset_name} for Structural Edges...")
     ds = AuroraDataset(dataset_name, limit=data['config'].get('limit'))
-    edges = torch.tensor(ds.edges_struct, dtype=torch.long, device=device)
+    edges_struct = torch.tensor(ds.edges_struct, dtype=torch.long, device=device)
     
-    # 2. Reconstruct GaugeField
+    # 2. Reconstruct GaugeField Topology (Union)
+    sem_path = args.semantic_path
+    edges_all = edges_struct
+    
+    if sem_path:
+        sem_edges = ds.load_semantic_edges(sem_path, split=data['config'].get('split', 'all'))
+        if sem_edges:
+            sem_indices = [(u, v) for u, v, w in sem_edges]
+            sem_t = torch.tensor(sem_indices, dtype=torch.long, device=device)
+            edges_all = torch.cat([edges_struct, sem_t], dim=0)
+            print(f"Loaded {len(sem_indices)} semantic edges. Total Gauge Edges: {edges_all.shape[0]}")
+            
     logical_dim = data['config'].get('logical_dim', 3)
-    gauge_field = GaugeField(edges, logical_dim, group='SO').to(device)
+    gauge_field = GaugeField(edges_all, logical_dim, group='SO').to(device)
     
     if 'gauge_field' in data and data['gauge_field'] is not None:
         print("Loading Gauge Field parameters from checkpoint...")
@@ -65,8 +77,8 @@ def main():
     # 3. Compute Alignment Score
     # Alignment = Mean <J_v, U_uv J_u>
     with torch.no_grad():
-        u = edges[:, 0]
-        v = edges[:, 1]
+        u = edges_all[:, 0]
+        v = edges_all[:, 1]
         U_all = gauge_field.get_U()
         
         J_u = J[u]
