@@ -138,13 +138,27 @@ class NeuralBackend(GaugeConnectionBackend):
     Continuous MLP (Predictive Engine).
     omega_uv = MLP(x_u, x_v, x_u - x_v)
     """
-    def __init__(self, input_dim: int, logical_dim: int, hidden_dim: int = 64):
+    def __init__(self, input_dim: int, logical_dim: int, hidden_dim: int = 64, num_relations: int = 1, relation_dim: int = 0):
         super().__init__(logical_dim)
-        # Input: x_u (dim), x_v (dim), delta (dim) -> 3*dim
+        
+        self.num_relations = num_relations
+        self.relation_dim = relation_dim
+        
+        # Relation Embedding (if needed)
+        if num_relations > 1 and relation_dim > 0:
+            self.rel_embed = nn.Embedding(num_relations, relation_dim)
+            input_size = 3 * input_dim + relation_dim
+        else:
+            self.rel_embed = None
+            input_size = 3 * input_dim
+            
+        # Input: x_u (dim), x_v (dim), delta (dim), [rel (dim)] -> input_size
         self.net = nn.Sequential(
-            nn.Linear(3 * input_dim, hidden_dim),
+            nn.Linear(input_size, hidden_dim),
             nn.Tanh(), # Tanh for smooth curvature
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim * 2), # Deeper
+            nn.Tanh(),
+            nn.Linear(hidden_dim * 2, hidden_dim),
             nn.Tanh(),
             nn.Linear(hidden_dim, logical_dim * logical_dim)
         )
@@ -154,7 +168,8 @@ class NeuralBackend(GaugeConnectionBackend):
             self.net[-1].weight *= 0.01
             self.net[-1].bias *= 0.01
 
-    def forward(self, edge_indices: Optional[torch.Tensor] = None, x: Optional[torch.Tensor] = None, edges_uv: Optional[torch.Tensor] = None):
+    def forward(self, edge_indices: Optional[torch.Tensor] = None, x: Optional[torch.Tensor] = None, 
+                edges_uv: Optional[torch.Tensor] = None, relation_ids: Optional[torch.Tensor] = None):
         if x is None:
             raise ValueError("NeuralBackend requires x (node coordinates).")
             
@@ -162,13 +177,9 @@ class NeuralBackend(GaugeConnectionBackend):
         if edges_uv is not None:
              u, v = edges_uv[:, 0], edges_uv[:, 1]
         elif edge_indices is not None:
-             # We need access to GaugeField.edges?
-             # Backend doesn't store edges.
              # Caller must provide edges_uv!
              raise ValueError("NeuralBackend requires edges_uv, not just indices.")
         else:
-             # Caller wants ALL edges? Impossible to know which.
-             # We assume caller passes edges_uv.
              raise ValueError("NeuralBackend requires edges_uv.")
              
         # Canonical Ordering for Inverse Consistency
@@ -186,7 +197,18 @@ class NeuralBackend(GaugeConnectionBackend):
         
         # Features: (xu, xv, log_map(xu, xv))
         v_uv = log_map(xu, xv)
-        feat = torch.cat([xu, xv, v_uv], dim=-1)
+        
+        # Relation Handling
+        if self.rel_embed is not None:
+            if relation_ids is None:
+                # Default to 0? Or error?
+                # Default to 0 for backward compat
+                relation_ids = torch.zeros_like(u, dtype=torch.long)
+            
+            r_emb = self.rel_embed(relation_ids)
+            feat = torch.cat([xu, xv, v_uv, r_emb], dim=-1)
+        else:
+            feat = torch.cat([xu, xv, v_uv], dim=-1)
         
         # 3. Compute Omega Canonical
         out = self.net(feat) # (Batch, k*k)
@@ -207,9 +229,9 @@ class NeuralBackend(GaugeConnectionBackend):
         
         return omega_canon * negation
         
-    def get_omega(self, edges: torch.Tensor, x: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def get_omega(self, edges: torch.Tensor, x: Optional[torch.Tensor] = None, relation_ids: Optional[torch.Tensor] = None) -> torch.Tensor:
         # Wrapper for interface
-        return self.forward(x=x, edges_uv=edges)
+        return self.forward(x=x, edges_uv=edges, relation_ids=relation_ids)
 
 
 class GaugeField(nn.Module):
@@ -320,7 +342,7 @@ class GaugeField(nn.Module):
 
     # --- Physics Interfaces (Updated) ---
 
-    def get_U(self, x: Optional[torch.Tensor] = None, edges: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def get_U(self, x: Optional[torch.Tensor] = None, edges: Optional[torch.Tensor] = None, relation_ids: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Compute U for specific edges.
         If edges is None, return U for ALL self.edges (Topology).
@@ -333,13 +355,14 @@ class GaugeField(nn.Module):
                  omega = self.backend(edge_indices=None)
             else:
                  # NeuralBackend needs edges_uv and x
-                 omega = self.backend(edges_uv=edges, x=x)
+                 # For curvature, we usually don't have relations, or use default
+                 omega = self.backend(edges_uv=edges, x=x, relation_ids=relation_ids)
         else:
              # Specific query
              if self.backend_type == 'table':
                  omega = self.backend(edges_uv=edges) # Will return zeros for Table if not implemented logic
              else:
-                 omega = self.backend(edges_uv=edges, x=x)
+                 omega = self.backend(edges_uv=edges, x=x, relation_ids=relation_ids)
                  
         U = torch.matrix_exp(omega)
         return U
