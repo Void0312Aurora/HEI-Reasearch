@@ -104,7 +104,8 @@ class ContactIntegrator:
         dt = max(dt, cfg.min_dt)
         return dt
 
-    def step(self, state: PhysicsState, potentials: Any, gauge_field: Optional[Any] = None, freeze_radius: bool = False, lambda_spin: float = 5.0) -> PhysicsState:
+    def step(self, state: PhysicsState, potentials: Any, gauge_field: Optional[Any] = None, 
+             freeze_radius: bool = False, lambda_spin: float = 5.0, spin_edges: Optional[torch.Tensor] = None) -> PhysicsState:
         """
         Perform one integration step with Advection and Geometric Forces.
         [UPDATED v2.0] Implements Strang Splitting for Layer C -> B -> A.
@@ -134,8 +135,8 @@ class ContactIntegrator:
              # Compute Connection A(v)
              A_geom = gauge_field.compute_connection(x, v_embed) # (N, k, k)
              
-             # Compute Spin Interaction (Alignment Torque)
-             A_spin = gauge_field.compute_spin_interaction(x, J)
+             # Compute Spin Interaction (Alignment Torque) with optional edge decoupling
+             A_spin = gauge_field.compute_spin_interaction(x, J, edges=spin_edges)
              
              # Total Effective Connection
              # A_eff = A_geom + lambda * A_spin

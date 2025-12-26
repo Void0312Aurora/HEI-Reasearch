@@ -424,15 +424,24 @@ class GaugeField(nn.Module):
         
         return A
 
-    def compute_spin_interaction(self, x: torch.Tensor, J: torch.Tensor) -> torch.Tensor:
+    def compute_spin_interaction(self, x: torch.Tensor, J: torch.Tensor, edges: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Spin Interaction.
-        Updated to accept x.
-        """
-        start = self.edges[:, 0]
-        end = self.edges[:, 1]
         
-        U_all = self.get_U(x, self.edges)
+        Args:
+            x: Node coordinates (N, dim)
+            J: Logical vectors (N, k)
+            edges: Optional edge set for spin interaction. If None, uses self.edges.
+                   This allows decoupled training (e.g., spin on structural, gauge on semantic).
+        """
+        # Use provided edges or fall back to self.edges
+        edge_set = edges if edges is not None else self.edges
+        
+        start = edge_set[:, 0]
+        end = edge_set[:, 1]
+        
+        # Get U for these specific edges
+        U_all = self.get_U(x, edge_set)
         
         N = J.shape[0]
         k = self.logical_dim

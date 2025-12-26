@@ -34,7 +34,7 @@ def compute_alignment_stats(gauge_field, J, edge_indices, name="Edges"):
 
 def compute_alignment_stats(gauge_field, J, edge_indices, x, name="Edges"):
     """
-    Compute alignment stats for a subset of edges.
+    Compute alignment stats for a subset of edges WITH stratified analysis by raw correlation.
     """
     if len(edge_indices) == 0:
         print(f"--- {name}: No edges found ---")
@@ -44,16 +44,6 @@ def compute_alignment_stats(gauge_field, J, edge_indices, x, name="Edges"):
     v = gauge_field.edges[edge_indices, 1]
     
     # Transport matrices
-    # For Neural, we need to query SPECIFIC edges defined by edge_indices?
-    # Or just get all and slice?
-    # Neural backend get_U(x, edges) returns U for those edges.
-    # If we call get_U(x) with no edges, it computes for self.edges.
-    
-    # Optimization: If Neural, we can just compute for the batch!
-    # But get_U(x) returns (E_total, ...). Slicing is fine.
-    # NOTE: If E_total is huge, this is wasteful. 
-    # But for 18k edges it's fast.
-    
     U_all = gauge_field.get_U(x=x)
     U_sub = U_all[edge_indices]
     
@@ -67,7 +57,7 @@ def compute_alignment_stats(gauge_field, J, edge_indices, x, name="Edges"):
     J_u_trans = torch.matmul(U_sub, J_u.unsqueeze(-1)).squeeze(-1)
     gauge_align = torch.sum(J_v * J_u_trans, dim=-1)
     
-    # Stats
+    # Overall Stats
     raw_mean = torch.mean(raw_align).item()
     gauge_mean = torch.mean(gauge_align).item()
     gain = gauge_mean - raw_mean
@@ -77,7 +67,73 @@ def compute_alignment_stats(gauge_field, J, edge_indices, x, name="Edges"):
     print(f"  Gauge Alignment:    {gauge_mean:.4f}")
     print(f"  Gauge Gain:         {gain:+.4f}")
     
+    # Stratified Analysis (avoid high-raw masking)
+    if len(edge_indices) >= 100:  # Only for sufficient samples
+        print(f"\n  **Stratified Analysis by Raw Correlation**:")
+        
+        # Quantiles
+        p10 = torch.quantile(raw_align, 0.1).item()
+        p50 = torch.quantile(raw_align, 0.5).item()
+        p90 = torch.quantile(raw_align, 0.9).item()
+        print(f"  Raw Distribution: P10={p10:.4f}, P50={p50:.4f}, P90={p90:.4f}")
+        
+        # Buckets: [0, 0.3), [0.3, 0.6), [0.6, 0.9), [0.9, 1.0]
+        buckets = [(0.0, 0.3), (0.3, 0.6), (0.6, 0.9), (0.9, 1.0)]
+        
+        for low, high in buckets:
+            mask = (raw_align >= low) & (raw_align < high)
+            count = mask.sum().item()
+            
+            if count == 0:
+                continue
+                
+            raw_bucket = raw_align[mask].mean().item()
+            gauge_bucket = gauge_align[mask].mean().item()
+            gain_bucket = gauge_bucket - raw_bucket
+            
+            print(f"  [{low:.1f}, {high:.1f}): N={count:4d}, Raw={raw_bucket:.4f}, Gauge={gauge_bucket:.4f}, Gain={gain_bucket:+.4f}")
+    
     return raw_mean, gauge_mean, gain
+
+def analyze_field_nontriviality(gauge_field, x, edge_indices, name="Edges"):
+    """
+    Analyze if the learned field is non-trivial (U != I).
+    Computes ||omega|| and ||U-I|| distributions.
+    """
+    if len(edge_indices) == 0:
+        return
+    
+    print(f"\n  **Field Non-Triviality Analysis ({name})**:")
+    
+    # Get omega (Lie algebra) for these edges
+    edges_subset = gauge_field.edges[edge_indices]
+    
+    if gauge_field.backend_type == 'neural':
+        omega = gauge_field.backend.get_omega(edges_subset, x=x)  # (E, k, k)
+    else:
+        # Table backend
+        omega = gauge_field.backend.omega_params[edge_indices]
+    
+    # Compute ||omega||_F (Frobenius norm)
+    omega_norms = torch.norm(omega.reshape(omega.shape[0], -1), dim=1)
+    
+    # Get U = exp(omega)
+    U = torch.matrix_exp(omega)
+    
+    # Compute ||U - I||_F
+    I = torch.eye(gauge_field.logical_dim, device=U.device).unsqueeze(0).expand(U.shape[0], -1, -1)
+    U_deviation = torch.norm((U - I).reshape(U.shape[0], -1), dim=1)
+    
+    print(f"  ||omega|| (Lie algebra): Mean={omega_norms.mean():.4f}, P50={torch.median(omega_norms):.4f}, P90={torch.quantile(omega_norms, 0.9):.4f}")
+    print(f"  ||U-I|| (deviation): Mean={U_deviation.mean():.4f}, P50={torch.median(U_deviation):.4f}, P90={torch.quantile(U_deviation, 0.9):.4f}")
+    
+    # Non-triviality check
+    if omega_norms.mean() < 0.01:
+        print(f"  ⚠️ WARNING: Small omega norms suggest field is near-identity (U≈I degenerate solution)")
+    else:
+        print(f"  ✓ Non-trivial field detected (omega magnitudes significant)")
+    
+    return omega_norms, U_deviation
 
 def main():
     parser = argparse.ArgumentParser()
@@ -231,6 +287,9 @@ def main():
     print("\n=== Alignment Analysis per Edge Type ===")
     compute_alignment_stats(gauge_field, J, indices_struct, x, "Structural Edges (Tree)")
     compute_alignment_stats(gauge_field, J, indices_sem_train, x, "Semantic Edges (Train)")
+    
+    # Non-Triviality Analysis for Semantic Edges (key for V12 validation)
+    analyze_field_nontriviality(gauge_field, x, indices_sem_train, name="Semantic Train")
     
     # 6. Out-of-Sample Evaluation (Test Set)
     # These edges are NOT in gauge_field.edges.

@@ -75,6 +75,8 @@ def main():
     parser.add_argument("--learn_gauge", action="store_true", help="Enable Learning of Gauge Connection (Phase 3)")
     parser.add_argument('--gauge_mode', type=str, default='table', choices=['table', 'neural'], help='Gauge field backend')
     parser.add_argument('--curvature_reg', type=float, default=0.0, help='Curvature regularization weight (0=off)')
+    parser.add_argument('--spin_edges_mode', type=str, default='both', choices=['structural', 'semantic', 'both'], 
+                        help='Which edges to use for spin interaction (decoupling fix)')
     parser.add_argument("--lr_gauge", type=float, default=0.01, help="Learning Rate for Gauge Field")
     parser.add_argument("--lambda_schedule", action="store_true", help="Enable annealing for spin interaction (0.1 -> 5.0)")
     
@@ -181,6 +183,7 @@ def main():
 
     # Gauge Field (Connection)
     gauge_field = None
+    spin_edges = None  # Track edges used for spin interaction
     if args.enable_logic:
         print(f">>> Enabling Logical Dynamics (Layer C). Logical Dim: {args.logical_dim}")
         # Initialize Gauge Field on Union of Structural and Semantic Edges
@@ -190,18 +193,25 @@ def main():
         if sem_t is not None:
              # Merge edges
              edges_all = torch.cat([edges_struct_t, sem_t], dim=0)
-             # Unique? GaugeField handles edge list, but duplicate edges just mean parallel transport.
-             # Ideally we uniqueness it?
-             # For performance, let's keep it simple. Duplicate edges are fine (parallel springs/links).
-             # Actually, parallel edges with DIFFERENT types are distinct in current Physics?
-             # GaugeField treats them as indexable.
              gauge_field = GaugeField(edges_all, args.logical_dim, group='SO', 
                                       backend_type=args.gauge_mode, input_dim=dim).to(device)
              print(f">>> Gauge Topology: {edges_struct_t.shape[0]} Struct + {sem_t.shape[0]} Sem = {edges_all.shape[0]} Edges.")
+             
+             # Determine spin edges based on mode
+             if args.spin_edges_mode == 'structural':
+                 spin_edges = edges_struct_t
+                 print(f">>> Spin Interaction: Structural edges ONLY (N={len(spin_edges)}) - Decoupled from gauge training")
+             elif args.spin_edges_mode == 'semantic':
+                 spin_edges = sem_t
+                 print(f">>> Spin Interaction: Semantic edges ONLY (N={len(spin_edges)})")
+             else:  # 'both'
+                 spin_edges = None  # Use gauge_field.edges (default behavior)
+                 print(f">>> Spin Interaction: All edges (Struct + Sem) - Coupled training")
         else:
              gauge_field = GaugeField(edges_struct_t, args.logical_dim, group='SO',
                                       backend_type=args.gauge_mode, input_dim=dim).to(device)
              print(">>> WARNING: Gauge Topology limited to Structure (Tree?). Expect 0 Curvature.")
+             spin_edges = None  # Use all structural edges
     
     # Optimizer for Gauge Field
     optimizer_gauge = None
@@ -368,23 +378,25 @@ def main():
         # If schedule on:
         #   Use 0.1 until stage B starts (args.stage_ratio).
         #   Then ramp from 0.1 to 5.0 over until 90% steps.
-        #   Then hold 5.0.
-        lambda_val = 5.0 # Default
+        lambda_spin = 5.0  # Default value
         if args.lambda_schedule:
             bbox_start = args.steps * args.stage_ratio
             if i < bbox_start:
-                lambda_val = 0.1 # Weak coupling during expansion
+                lambda_spin = 0.1 # Weak coupling during expansion
             else:
                 # Ramp phase
                 bbox_end = args.steps * 0.9 # Reach max at 90%
                 if i >= bbox_end:
-                    lambda_val = 5.0
+                    lambda_spin = 5.0
                 else:
                     progress = (i - bbox_start) / (bbox_end - bbox_start)
-                    lambda_val = 0.1 + progress * (5.0 - 0.1)
+                    lambda_spin = 0.1 + progress * (5.0 - 0.1)
 
         with torch.no_grad():
-            state = integrator.step(state, oracle, gauge_field=gauge_field, freeze_radius=effective_freeze, lambda_spin=lambda_val)
+             # Step the integration (inside no_grad context)
+             state = integrator.step(state, oracle, gauge_field=gauge_field, 
+                                    freeze_radius=effective_freeze, lambda_spin=lambda_spin,
+                                    spin_edges=spin_edges)
 
         
         # [Phase 3] Learn Gauge Field (Alignment Optimization)
