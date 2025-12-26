@@ -174,13 +174,17 @@ class NeuralBackend(GaugeConnectionBackend):
         xu = x[u]
         xv = x[v]
         
-        # Features: (xu, xv, xu-xv)
-        # Note: xu-xv in embedding space is a secant, serves as direction.
-        # Better: Log map? 
-        # For MLP, raw coord diff is okay.
-        feat = torch.cat([xu, xv, xu - xv], dim=-1)
+        # Features: (xu, xv, log_map(xu, xv))
+        # Use log_map for tangent space consistency
+        v_uv = log_map(xu, xv)
+        feat = torch.cat([xu, xv, v_uv], dim=-1)
         
         out = self.net(feat) # (Batch, k*k)
+        
+        # Output Constraint: Tanh to prevent explosion
+        # Scale factor 2.0 allows rotations up to ~2 rad (approx pi/2)
+        out = 3.0 * torch.tanh(out)
+        
         out = out.view(-1, self.logical_dim, self.logical_dim)
         
         # Skew symmetry
@@ -205,6 +209,11 @@ class GaugeField(nn.Module):
             input_dim: Dimension of embedding (required for neural)
         """
         super().__init__()
+        
+        # Deduplicate Edges to ensure 1-to-1 mapping in edge_map
+        # This prevents training loss (on all edges) diverging from curvature (on unique edges)
+        edges = torch.unique(edges, dim=0)
+        
         self.register_buffer('edges', edges)
         self.logical_dim = logical_dim
         self.E = edges.shape[0]

@@ -202,8 +202,23 @@ def main():
     # 0 .. num_struct-1 : Structural
     # num_struct .. num_struct+num_train-1 : Semantic Train
     
-    indices_struct = torch.arange(num_struct, device=device)
-    indices_sem_train = torch.arange(num_struct, num_struct + sem_train.shape[0], device=device)
+    # 5. Evaluate Subsets
+    # Indices in gauge_field.edges might differ due to deduplication.
+    # We must lookup using edge_map.
+    
+    def get_indices(edge_list, edge_map):
+        indices = []
+        for u, v in edge_list.cpu().numpy():
+            if (u, v) in edge_map:
+                idx, _ = edge_map[(u, v)]
+                indices.append(idx)
+            elif (v, u) in edge_map:
+                idx, _ = edge_map[(v, u)]
+                indices.append(idx)
+        return torch.tensor(indices, dtype=torch.long, device=device)
+        
+    indices_struct = get_indices(edges_struct, gauge_field.edge_map)
+    indices_sem_train = get_indices(sem_train, gauge_field.edge_map)
     
     print("\n=== Alignment Analysis per Edge Type ===")
     compute_alignment_stats(gauge_field, J, indices_struct, x, "Structural Edges (Tree)")
