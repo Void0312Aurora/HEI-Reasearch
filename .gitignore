@@ -13,4 +13,5 @@ logs/*
 docs/report/*
 docs/plan/*
 configs/*
-
+*.pkl
+closed_loop_workspace/*
