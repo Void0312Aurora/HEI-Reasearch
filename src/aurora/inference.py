@@ -26,6 +26,10 @@ class InferenceEngine:
             if v not in self.adj: self.adj[v] = set()
             self.adj[u].add(v)
             self.adj[v].add(u) # Undirected for common neighbor check
+        
+        # Debug Stats
+        degrees = [len(nbrs) for nbrs in self.adj.values()]
+        print(f"Graph Stats: Nodes={len(self.adj)}, Edges={len(edges)}, Avg Degree={sum(degrees)/len(degrees):.2f}")
             
     def generate_candidates_knn(self, k: int = 20, batch_size: int = 1000) -> torch.Tensor:
         """

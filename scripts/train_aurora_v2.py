@@ -73,7 +73,8 @@ def main():
 
     parser.add_argument("--enable_logic", action="store_true", help="Enable Logical Dynamics (Layer C)")
     parser.add_argument("--learn_gauge", action="store_true", help="Enable Learning of Gauge Connection (Phase 3)")
-    parser.add_argument("--gauge_mode", type=str, default="table", choices=["table", "neural"], help="Gauge Backend: table (Discrete) or neural (MLP)")
+    parser.add_argument('--gauge_mode', type=str, default='table', choices=['table', 'neural'], help='Gauge field backend')
+    parser.add_argument('--curvature_reg', type=float, default=0.0, help='Curvature regularization weight (0=off)')
     parser.add_argument("--lr_gauge", type=float, default=0.01, help="Learning Rate for Gauge Field")
     parser.add_argument("--lambda_schedule", action="store_true", help="Enable annealing for spin interaction (0.1 -> 5.0)")
     
@@ -417,13 +418,29 @@ def main():
              alignment = torch.sum(J_v * J_u_trans, dim=-1) # (E,)
              
              # Loss = 1 - mean(alignment)
-             loss_gauge = 1.0 - torch.mean(alignment)
+             loss_align = 1.0 - torch.mean(alignment)
+             
+             # Curvature Regularization (Optional)
+             loss_curv = torch.tensor(0.0, device=loss_align.device)
+             if args.curvature_reg > 0 and len(gauge_field.triangles) > 0:
+                 # Compute curvature for all triangles
+                 # This might be expensive; consider sampling triangles if too slow
+                 Omega, _, _ = gauge_field.compute_curvature(state.x)
+                 # Omega: (T, k, k) where T = num triangles
+                 # Penalty: ||Omega||_F^2 (Frobenius norm squared)
+                 curv_norms = torch.norm(Omega.reshape(Omega.shape[0], -1), dim=1)
+                 loss_curv = args.curvature_reg * torch.mean(curv_norms ** 2)
+             
+             loss_gauge = loss_align + loss_curv
              
              loss_gauge.backward()
              optimizer_gauge.step()
              
              if i % 100 == 0:
-                 print(f"    [Gauge Learn] Loss: {loss_gauge.item():.4e}, Mean Align: {torch.mean(alignment).item():.4f}")
+                 if args.curvature_reg > 0:
+                     print(f"    [Gauge Learn] Loss: {loss_gauge.item():.4e}, Align: {torch.mean(alignment).item():.4f}, Curv: {loss_curv.item():.4e}")
+                 else:
+                     print(f"    [Gauge Learn] Loss: {loss_gauge.item():.4e}, Mean Align: {torch.mean(alignment).item():.4f}")
         
         
         if i % 100 == 0:

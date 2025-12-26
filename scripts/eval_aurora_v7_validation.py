@@ -179,11 +179,19 @@ def main():
     # Training looked at: Struct + Sem_Train
     edges_train_all = torch.cat([edges_struct, sem_train], dim=0)
     
-    # Determine backend
+    # Determine backend from state_dict keys
     backend = args.gauge_mode
     if backend is None:
-         backend = ckpt.get('config', {}).get('gauge_mode', 'table')
-         
+         # Auto-detect from checkpoint
+         gauge_dict = ckpt.get('gauge_field', {})
+         if any('backend.net' in k for k in gauge_dict.keys()):
+             backend = 'neural'
+         elif 'backend.omega_params' in gauge_dict.keys():
+             backend = 'table'
+         else:
+             # Fallback to config or default
+             backend = ckpt.get('config', {}).get('gauge_mode', 'table')
+          
     print(f"Initializing GaugeField with backend={backend}...")
     gauge_field = GaugeField(edges_train_all, logical_dim=3, group='SO',
                              backend_type=backend,

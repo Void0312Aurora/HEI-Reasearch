@@ -171,25 +171,41 @@ class NeuralBackend(GaugeConnectionBackend):
              # We assume caller passes edges_uv.
              raise ValueError("NeuralBackend requires edges_uv.")
              
-        xu = x[u]
-        xv = x[v]
+        # Canonical Ordering for Inverse Consistency
+        # We enforce u < v for MLP input. If u > v, we compute omega(v, u) and negate it.
+        
+        # 1. Identify pairs needing swap
+        swap_mask = u > v
+        
+        # 2. Create canonical inputs
+        u_canon = torch.where(swap_mask, v, u)
+        v_canon = torch.where(swap_mask, u, v)
+        
+        xu = x[u_canon]
+        xv = x[v_canon]
         
         # Features: (xu, xv, log_map(xu, xv))
-        # Use log_map for tangent space consistency
         v_uv = log_map(xu, xv)
         feat = torch.cat([xu, xv, v_uv], dim=-1)
         
+        # 3. Compute Omega Canonical
         out = self.net(feat) # (Batch, k*k)
         
-        # Output Constraint: Tanh to prevent explosion
-        # Scale factor 2.0 allows rotations up to ~2 rad (approx pi/2)
+        # Tanh constraint
         out = 3.0 * torch.tanh(out)
         
-        out = out.view(-1, self.logical_dim, self.logical_dim)
+        out = out.view(-1, self.logical_dim, self.logical_dim) # (B, k, k)
+        omega_canon = 0.5 * (out - out.transpose(1, 2))
         
-        # Skew symmetry
-        omega = 0.5 * (out - out.transpose(1, 2))
-        return omega
+        # 4. Restore for original pairs
+        # If swapped, omega(u, v) = -omega(v, u)
+        # We need to broadcast swap_mask to (B, k, k)
+        # Note: -omega = omega.T for skew symmetric, but simple negation is clearer for algebra
+        
+        # swap_mask: (B,) -> (B, 1, 1)
+        negation = torch.where(swap_mask, -1.0, 1.0).view(-1, 1, 1)
+        
+        return omega_canon * negation
         
     def get_omega(self, edges: torch.Tensor, x: Optional[torch.Tensor] = None) -> torch.Tensor:
         # Wrapper for interface

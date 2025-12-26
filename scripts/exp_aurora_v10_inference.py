@@ -100,6 +100,29 @@ def main():
     # 1. Generate Candidates
     candidates = engine.generate_candidates_knn(k=args.knn_k)
     
+    # 1.5 Verify Inverse Consistency (New Check)
+    print("\nVerifying Inverse Consistency of Neural Gauge Field...")
+    # Pick random edges
+    check_idx = torch.randperm(len(candidates))[:100]
+    check_edges = candidates[check_idx]
+    
+    U_uv = gauge_field.get_U(x=x, edges=check_edges)
+    
+    # Flip edges (v, u)
+    check_edges_vu = torch.stack([check_edges[:, 1], check_edges[:, 0]], dim=1)
+    U_vu = gauge_field.get_U(x=x, edges=check_edges_vu)
+    
+    # Check U_uv @ U_vu approx Identity
+    prod = torch.bmm(U_uv, U_vu)
+    I = torch.eye(logical_dim, device=device).unsqueeze(0).expand(100, -1, -1)
+    
+    diff = torch.norm(prod - I, dim=(1,2)).mean()
+    print(f"Inverse Consistency Error (Mean Norm(U_uv*U_vu - I)): {diff:.6f}")
+    if diff > 1e-3:
+        print("WARNING: Inverse Consistency Poor! Model might be failing to learn group structure or backend bug.")
+    else:
+        print("Inverse Consistency Validated.")
+
     # 2. Filter Edges
     print("\nfiltering Edges (Selective Inference)...")
     accepted_edges = engine.filter_edges(candidates, k_accept=args.accept_k, w_energy=1.0, w_curve=0.5)
