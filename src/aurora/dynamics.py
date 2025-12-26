@@ -104,7 +104,7 @@ class ContactIntegrator:
         dt = max(dt, cfg.min_dt)
         return dt
 
-    def step(self, state: PhysicsState, potentials: Any, gauge_field: Optional[Any] = None, freeze_radius: bool = False) -> PhysicsState:
+    def step(self, state: PhysicsState, potentials: Any, gauge_field: Optional[Any] = None, freeze_radius: bool = False, lambda_spin: float = 5.0) -> PhysicsState:
         """
         Perform one integration step with Advection and Geometric Forces.
         [UPDATED v2.0] Implements Strang Splitting for Layer C -> B -> A.
@@ -118,13 +118,37 @@ class ContactIntegrator:
         x = G[..., 0]
         
         # Adaptive Time-Stepping
+        # Estimate velocity xi
+        xi = self.inertia.inverse(M, x)
+        xi_norm = torch.max(torch.norm(xi, dim=-1)).item()
+
+        # Logic / Torque Estimation
+        logic_omega_max = 0.0
+        A_eff = None
+        v_embed = None
+        
+        if J is not None and gauge_field is not None:
+             # v = M @ x.unsqueeze(-1) -> (N, dim, 1) -> squeeze
+             v_embed = torch.matmul(M, x.unsqueeze(-1)).squeeze(-1)
+             
+             # Compute Connection A(v)
+             A_geom = gauge_field.compute_connection(x, v_embed) # (N, k, k)
+             
+             # Compute Spin Interaction (Alignment Torque)
+             A_spin = gauge_field.compute_spin_interaction(J)
+             
+             # Total Effective Connection
+             # A_eff = A_geom + lambda * A_spin
+             A_eff = A_geom + lambda_spin * A_spin
+             
+             # Max Angular Velocity
+             # Frobenius norm as upper bound
+             norms = torch.norm(A_eff.view(x.shape[0], -1), dim=1)
+             logic_omega_max = torch.max(norms).item()
+
         if self.config.adaptive:
-             # Estimate velocity xi
-             xi = self.inertia.inverse(M, x)
-             xi_norm = torch.max(torch.norm(xi, dim=-1)).item()
-             # We don't have current torque cheaply. Use 0.0 or last stored?
-             # For safety, let's just limit by velocity and max_dt
-             dt = self._compute_adaptive_dt(xi_norm, 0.0)
+             # Use logic_omega_max as angular velocity limit (torque_norm param)
+             dt = self._compute_adaptive_dt(xi_norm, logic_omega_max)
         else:
              dt = self.config.dt
 
@@ -136,31 +160,9 @@ class ContactIntegrator:
 
         # --- Substep 1: Layer C (Logical Dynamics) ---
         # Update J (Precession) and p (Lorentz Force)
-        # Only if J and GaugeField are present
-        if J is not None and gauge_field is not None:
-             # Logic 1/2 step (or full step if Strang splitting structure allows)
-             # Current v needed for A_mu v^mu
-             # In our formulation, M acts on x to give v in embedding space
-             # x: (N, dim), M: (N, dim, dim)
-             # v = M @ x.unsqueeze(-1) -> (N, dim, 1) -> squeeze
-             v_embed = torch.matmul(M, x.unsqueeze(-1)).squeeze(-1)
-             
-             # Compute Connection A(v)
-             A_geom = gauge_field.compute_connection(x, v_embed) # (N, k, k)
-             
-             # Compute Spin Interaction (Alignment Torque)
-             # Adds term to rotate J towards neighbors
-             A_spin = gauge_field.compute_spin_interaction(J)
-             
-             # Total Effective Connection
-             # A_eff = A_geom + lambda * A_spin
-             # Using lambda=5.0 to enforce strong semantic alignment
-             A_eff = A_geom + 5.0 * A_spin
-             
+        if A_eff is not None:
              # Evolve J (Precession)
-             # dJ/dt = -[A, J].
-             # Solution J(t) = exp(-A t) J(0) (for SO(3) vector rep)
-             # Use Matrix Exponential for stability and norm preservation
+             # dJ/dt = -[A, J]
              U_local = torch.matrix_exp(-A_eff * dt)
              J = torch.matmul(U_local, J.unsqueeze(-1)).squeeze(-1)
              

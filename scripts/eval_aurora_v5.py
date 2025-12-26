@@ -102,7 +102,7 @@ def main():
     # 4. Compute Curvature (Holonomy)
     print(f"\n--- Curvature Analysis ---")
     with torch.no_grad():
-        Omega, triangles = gauge_field.compute_curvature()
+        Omega, triangles, _ = gauge_field.compute_curvature()
         if triangles.shape[0] > 0:
             omega_norms = torch.norm(Omega.reshape(Omega.shape[0], -1), dim=-1)
             print(f"Triangles Found: {triangles.shape[0]}")

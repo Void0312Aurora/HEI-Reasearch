@@ -74,6 +74,7 @@ def main():
     parser.add_argument("--enable_logic", action="store_true", help="Enable Logical Dynamics (Layer C)")
     parser.add_argument("--learn_gauge", action="store_true", help="Enable Learning of Gauge Connection (Phase 3)")
     parser.add_argument("--lr_gauge", type=float, default=0.01, help="Learning Rate for Gauge Field")
+    parser.add_argument("--lambda_schedule", action="store_true", help="Enable annealing for spin interaction (0.1 -> 5.0)")
     
     # Phase IX Args: Advanced Hard Mining
     parser.add_argument("--mining_mode", type=str, default="hard", choices=["hard", "semi-hard", "curriculum", "trusted", "global"],
@@ -358,8 +359,28 @@ def main():
         if pot_vol: 
                      pot_vol.lamb = args.target_lamb
                   
+        # Lambda Spin Schedule
+        # Target: 5.0. 
+        # If schedule on:
+        #   Use 0.1 until stage B starts (args.stage_ratio).
+        #   Then ramp from 0.1 to 5.0 over until 90% steps.
+        #   Then hold 5.0.
+        lambda_val = 5.0 # Default
+        if args.lambda_schedule:
+            bbox_start = args.steps * args.stage_ratio
+            if i < bbox_start:
+                lambda_val = 0.1 # Weak coupling during expansion
+            else:
+                # Ramp phase
+                bbox_end = args.steps * 0.9 # Reach max at 90%
+                if i >= bbox_end:
+                    lambda_val = 5.0
+                else:
+                    progress = (i - bbox_start) / (bbox_end - bbox_start)
+                    lambda_val = 0.1 + progress * (5.0 - 0.1)
+
         with torch.no_grad():
-            state = integrator.step(state, oracle, gauge_field=gauge_field, freeze_radius=effective_freeze)
+            state = integrator.step(state, oracle, gauge_field=gauge_field, freeze_radius=effective_freeze, lambda_spin=lambda_val)
 
         
         # [Phase 3] Learn Gauge Field (Alignment Optimization)

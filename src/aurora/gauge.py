@@ -52,6 +52,7 @@ class GaugeField(nn.Module):
         # Precompute triangles (plaquettes)
         self.triangles = self._build_triangles(edges)
         print(f"GaugeField: Found {self.triangles.shape[0]} triangles.")
+        self._precompute_batch_indices()
 
     def _build_index_map(self, edges: torch.Tensor):
         edge_map = {}
@@ -60,6 +61,67 @@ class GaugeField(nn.Module):
             edge_map[(u, v)] = (idx, 1) # Canonical
             edge_map[(v, u)] = (idx, -1) # Inverse
         return edge_map
+        
+    def _precompute_batch_indices(self):
+        """
+        Precompute indices for batch gather in compute_curvature/force.
+        Populates self.tri_edge_idx (T, 3) and self.tri_edge_sign (T, 3).
+        """
+        if self.triangles.shape[0] == 0:
+            self.register_buffer('tri_edge_idx', torch.zeros(0, 3, dtype=torch.long))
+            self.register_buffer('tri_edge_sign', torch.zeros(0, 3, dtype=torch.float))
+            return
+
+        t_list = self.triangles.cpu().numpy()
+        indices = []
+        signs = []
+        
+        for u, v, w in t_list:
+             # u->v
+             i1, s1 = self.edge_map.get((u, v))
+             # v->w
+             i2, s2 = self.edge_map.get((v, w))
+             # w->u
+             i3, s3 = self.edge_map.get((w, u))
+             
+             if i1 is None or i2 is None or i3 is None:
+                 print(f"Warning: Triangle ({u},{v},{w}) has missing edges! Skipping.")
+                 # This shouldn't happen if built from edges
+                 i1, i2, i3 = 0, 0, 0
+                 s1, s2, s3 = 1, 1, 1
+             
+             indices.append([i1, i2, i3])
+             signs.append([s1, s2, s3])
+             
+        self.register_buffer('tri_edge_idx', torch.tensor(indices, dtype=torch.long, device=self.edges.device))
+        self.register_buffer('tri_edge_sign', torch.tensor(signs, dtype=torch.float, device=self.edges.device))
+        
+    @staticmethod
+    def log_so3(R: torch.Tensor) -> torch.Tensor:
+        """
+        Compute Logarithm of SO(3) matrix: R -> Omega (skew-symmetric).
+        Omega = theta / (2*sin(theta)) * (R - R^T)
+        """
+        # Trace: R_ii
+        trace = R.diagonal(dim1=-2, dim2=-1).sum(-1)
+        # Cos theta
+        cos_theta = (trace - 1.0) / 2.0
+        cos_theta = torch.clamp(cos_theta, -1.0 + 1e-6, 1.0 - 1e-6)
+        theta = torch.acos(cos_theta)
+        
+        # Sinc factor: theta / (2*sin(theta))
+        # Limit theta->0 is 0.5
+        sin_theta = torch.sin(theta)
+        factor = theta / (2.0 * sin_theta)
+        
+        # Identify small angles
+        mask_small = theta < 1e-4
+        factor[mask_small] = 0.5 + (theta[mask_small]**2) / 12.0
+        
+        factor = factor.unsqueeze(-1).unsqueeze(-1)
+        
+        Omega = factor * (R - R.transpose(-2, -1))
+        return Omega
         
     def _build_node_to_triangles(self, triangles: torch.Tensor, N: int):
         """
@@ -75,6 +137,8 @@ class GaugeField(nn.Module):
         # Precompute triangles (plaquettes)
         self.triangles = self._build_triangles(edges)
         print(f"GaugeField: Found {self.triangles.shape[0]} triangles.")
+        self._precompute_batch_indices()
+
 
     def _build_triangles(self, edges: torch.Tensor) -> torch.Tensor:
         """
@@ -123,78 +187,54 @@ class GaugeField(nn.Module):
             tri_indices: (T, 3) triangle nodes
         """
         if self.triangles.shape[0] == 0:
-            return torch.zeros(0, self.logical_dim, self.logical_dim, device=self.edges.device), self.triangles
+            return torch.zeros(0, self.logical_dim, self.logical_dim, device=self.edges.device), self.triangles, (None, None, None)
             
-        U = self.get_U() # (E, k, k)
+        # Use cached indices
+        if not hasattr(self, 'tri_edge_idx'):
+            self._precompute_batch_indices()
+            
+        idx = self.tri_edge_idx # (T, 3)
+        sign = self.tri_edge_sign # (T, 3)
         
-        # Gather U for each side of triangle (u,v,w)
-        # Loop: u->v->w->u
-        t_list = self.triangles.cpu().numpy()
-        
-        # Collect indices and signs for batch gathering
-        # We process in Python loop for now (Precompute this later for speed!)
-        # Optimization: Move this index lookup to __init__
-        
-        # Doing it on the fly is slow.
-        # Let's assume for prototype we run it.
-        # To make it differentiable, we need to gather from U tensor.
-        
-        indices_list = []
-        signs_list = []
-        
-        for u, v, w in t_list:
-             # u->v
-             idx1, s1 = self.edge_map[(u, v)]
-             # v->w
-             idx2, s2 = self.edge_map[(v, w)]
-             # w->u
-             idx3, s3 = self.edge_map[(w, u)]
-             
-             indices_list.append([idx1, idx2, idx3])
-             signs_list.append([s1, s2, s3])
-             
-        indices = torch.tensor(indices_list, device=U.device, dtype=torch.long)
-        signs = torch.tensor(signs_list, device=U.device, dtype=torch.float)
+        U_all = self.get_U() # (E, k, k)
         
         # Gather U
-        # shapes: indices (T, 3). U (E, k, k)
-        U1 = U[indices[:, 0]]
-        U2 = U[indices[:, 1]]
-        U3 = U[indices[:, 2]]
+        # U_edges has shape (T, 3, k, k)
+        U_edges = U_all[idx] 
         
-        # Apply inversion if sign is -1 (transpose)
-        # sign is (T,), U is (T, k, k). 
-        # If sign=-1, we want U.t(). 
-        # Trick: U_inv = U.transpose(-2, -1) if SO(k)
+        # Clone to separate for manipulation
+        U1 = U_edges[:, 0].clone()
+        U2 = U_edges[:, 1].clone()
+        U3 = U_edges[:, 2].clone()
         
-        def apply_sign(U_in, s):
-            # s: (T,)
-            # U_in: (T, k, k)
-            # If s=-1, swap dims. 
-            # We can use mask.
-            mask = (s < 0)
-            U_out = U_in.clone()
-            U_out[mask] = U_in[mask].transpose(-2, -1)
-            return U_out
-            
-        U1 = apply_sign(U1, signs[:, 0])
-        U2 = apply_sign(U2, signs[:, 1])
-        U3 = apply_sign(U3, signs[:, 2])
+        # Apply signs (Transpose if sign is -1)
+        # We use explicit transpose for masked elements
         
-        # Holonomy: H = U3 @ U2 @ U1 (u->v->w->u)
-        # Order matters! J_next = U J_prev.
-        # u->v: J_v = U1 J_u
-        # v->w: J_w = U2 J_v = U2 U1 J_u
-        # w->u: J_u_new = U3 J_w = U3 U2 U1 J_u
+        # Mask where sign < 0
+        mask_inv = (sign < 0) # (T, 3)
+        
+        # In-place transpose for inverted edges
+        if torch.any(mask_inv[:, 0]):
+            U1[mask_inv[:, 0]] = U1[mask_inv[:, 0]].transpose(-2, -1)
+        if torch.any(mask_inv[:, 1]):
+            U2[mask_inv[:, 1]] = U2[mask_inv[:, 1]].transpose(-2, -1)
+        if torch.any(mask_inv[:, 2]):
+            U3[mask_inv[:, 2]] = U3[mask_inv[:, 2]].transpose(-2, -1)
+        
+        # Holonomy H = U3 @ U2 @ U1 (Chain rule: u->v->w->u)
+        # Note: Order depends on definition.
+        # U1: u->v. U2: v->w. U3: w->u.
+        # J_u_new = U3 (U2 (U1 J_u)).
         H = torch.matmul(U3, torch.matmul(U2, U1))
         
-        # Extract Algebra element Omega
-        # Omega approx log(H)
-        # For small curvature, H approx I + Omega
-        # Omega = (H - H^T)/2
-        Omega = 0.5 * (H - H.transpose(-2, -1))
-        
-        return Omega, self.triangles
+        # Exact Logarithm for Curvature
+        if self.logical_dim == 3:
+            Omega = self.log_so3(H)
+        else:
+             # Fallback
+            Omega = 0.5 * (H - H.transpose(-2, -1))
+            
+        return Omega, self.triangles, (U1, U2, U3)
         
     def compute_connection(self, x: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
         """
@@ -303,8 +343,9 @@ class GaugeField(nn.Module):
         if self.triangles.shape[0] == 0:
             return torch.zeros(x.shape[0], device=x.device), torch.zeros_like(x)
             
-        # 1. Compute Curvature
-        Omega, _ = self.compute_curvature() # (T, k, k)
+        # 1. Compute Curvature and Transports
+        Omega, _, (U_ij, U_jk, U_ki) = self.compute_curvature() # (T, k, k)
+
         
         # 2. Geometry vectors
         # Triangle (i, j, k)
@@ -373,72 +414,89 @@ class GaugeField(nn.Module):
             Omega_vec = torch.stack([o0, o1, o2], dim=1)
             
             # Coupling
+            # Coupling Charge and Force for Node I
             Ji = J[idx_i]
             # q = J dot Omega_vec
-            q = torch.sum(Ji * Omega_vec, dim=-1).unsqueeze(-1) # (T, 1)
-            
-            # Force on i
-            Fi_contrib = q * L_vec
-            
-            # Accumulate info global Force tensor
-            # Scatter add
+            q_i = torch.sum(Ji * Omega_vec, dim=-1).unsqueeze(-1) # (T, 1)
             F_total = torch.zeros_like(x)
-            F_total.index_add_(0, idx_i, Fi_contrib)
+            F_total.index_add_(0, idx_i, q_i * L_vec)
             
-            # Todo: Symmetry? 
-            # Force should also act on j and k?
-            # Or we sum over cyclic permutations?
-            # compute_curvature iterates all triangles?
-            # _build_triangles iterates unique triplets (u,v,w).
-            # It does NOT generate permutations (v,w,u) etc usually.
-            # My _build_triangles ensures u < v < w?
-            # Yes: checks `u < v` and `v < w`.
-            # So we only have ONE entry per triangle.
-            # We must compute force for i, j, and k explicitly.
+            # --- Symmetric Forces on J and K ---
+            # To preserve symmetry, force must act on all vertices of the flux loop.
+            # Transport Omega to J and K to find local force.
             
-            # Force on j: Cyclic permutation i->j->k->i
-            # Omega_{jki} = U_{ij} Omega_{ijk} U_{ij}^{-1} (Adjoint transport)
-            # Or just recompute local geometry?
-            # Easier: Just reuse Omega but transport J?
-            # Actually, $F_{logic}^\mu = \langle J, F^{\mu\nu} \rangle v$.
-            # $F^{\mu\nu}$ is global field.
-            # We calculated $F$ at $i$.
-            # We need to calculate $F$ at $j$ and $k$ too.
-            # Re-using the same triangle loop logic for j and k.
+            # Node J: Omega_j = U_ij^T @ Omega_i @ U_ij
+            # U_ij is available as U_ij (from curvature return)
+            # Actually compute_curvature returns U1, U2, U3 oriented along cycle u->v->w->u
+            # So U_ij transports i -> j? Or j -> i?
+            # Convention: U1 corresponds to edge (u, v).
+            # In gauge field, U_uv transports v -> u (vector at v to vector at u).
+            # So v_u = U_uv v_v.
+            # Thus U1 transforms from J to I.
+            # So Omega_i (at I) transforms to Omega_j (at J) via Adjoint of U_ij^-1 = U_ij^T?
+            # v_j = U_ij^T v_i.
+            # A_j = U_ij^T A_i U_ij.
+            # Yes.
             
-            # For j:
-            # Base j. Neighbors k, i.
-            # u' = Log_j(k), w' = Log_j(i).
-            # Omega at j? Transport Omega_i to j?
-            # Omega_j = U_{ji} Omega_i U_{ij}.
+            # Omega_j
+            U_ji = U_ij.transpose(-2, -1)
+            Omega_j_mat = torch.matmul(U_ji, torch.matmul(Omega, U_ij))
             
-            # Calculation for J:
+            # Omega_k
+            # Omega_k = U_ki @ Omega_i @ U_ki^T ?
+            # U3 corresponds to edge (w, u) i.e. (k, i).
+            # U_ki transports i -> k?
+            # U3 transports from u (i) to w (k)? No, edge is (w, u).
+            # U_wu transports u -> w (i to k).
+            # So U3 = U_ki.  v_k = U_ki v_i.
+            # So Omega_k = U_ki Omega_i U_ki^T.
             
-            # Let's wrap this in a loop over the 3 vertices to cover all forces?
+            Omega_k_mat = torch.matmul(U_ki, torch.matmul(Omega, U_ki.transpose(-2, -1)))
+
+            # Vectors
+            def mat_to_vec(M):
+                return torch.stack([M[:, 2, 1], M[:, 0, 2], M[:, 1, 0]], dim=1)
+
+            Omega_j_vec = mat_to_vec(Omega_j_mat)
+            Omega_k_vec = mat_to_vec(Omega_k_mat)
             
-            # Term for j
-            inv_Uij = self.get_U()[self.edge_map[(idx_i[0].item(), idx_j[0].item())][0]].transpose(-2,-1) 
-            # No, map lookup inside tensor op is bad.
-            # We need batch transport.
+            # Charges
+            q_j = torch.sum(J[idx_j] * Omega_j_vec, dim=-1).unsqueeze(-1)
+            q_k = torch.sum(J[idx_k] * Omega_k_vec, dim=-1).unsqueeze(-1)
             
-            # PROPOSAL:
-            # Only compute force on 'i' (base) for all triangles provided by _build_triangles?
-            # No, _build_triangles only gives unique ones.
-            # We should probably augment _build_triangles to return ALL permutations? 
-            # Or just duplicate logic here.
+            # Geometric Factors for J and K
+            # L_j: Tangent vectors at j. u_j = Log_j(k), w_j = Log_j(i).
+            # Note: Approximating geometric term as "Transported L_i" is risky (curvature).
+            # Safe way: Recompute L_vec locally at j and k.
             
-            # To keep it simple: F_total accumulates contributions for i, j, k.
-            # We need Omega at j and k.
-            # Omega_j approx U_{ji} @ Omega_i @ U_{ij}.
+            # Precompute pairwise Logs for all sides?
+            # We computed u=Log_i(j) and w=Log_i(k).
+            # For j: u' = Log_j(k), w' = Log_j(i).
+            # Log_j(i) = - ParallelTransport(Log_i(j)) approx -u.
+            # Let's do explicit computation, it's safer.
             
-            # For now (MVP Phase 2): Just apply force to 'base' node i.
-            # This is physically incomplete (symmetry breaking), but tests the force magnitude/direction.
-            # Wait, if we only push 'i', we break Newton's 3rd law (conservation of momentum).
-            # But we have damping, so strict conservation isn't critical for 'Stability Check', but is for 'Dynamics'.
-            # Better: In `_build_triangles`, return ALL permutations.
-            # Or `compute_curvature` handles alignment.
+            # Tangents at J
+            t_jk = log_map(xj, xk)
+            t_ji = log_map(xj, xi)
+            vj = v[idx_j]
+            vw_j = minkowski_inner(vj, t_ji).unsqueeze(-1) # v_j . ji
+            vu_j = minkowski_inner(vj, t_jk).unsqueeze(-1) # v_j . jk
+            L_j = vw_j * t_jk - vu_j * t_ji # (v x (jk ^ ji)) ?? Check cyclic order
+            
+            # Tangents at K
+            t_ki = log_map(xk, xi)
+            t_kj = log_map(xk, xj)
+            vk = v[idx_k]
+            vw_k = minkowski_inner(vk, t_kj).unsqueeze(-1)
+            vu_k = minkowski_inner(vk, t_ki).unsqueeze(-1)
+            L_k = vw_k * t_ki - vu_k * t_kj
+
+            # Accumulate
+            F_total.index_add_(0, idx_j, q_j * L_j)
+            F_total.index_add_(0, idx_k, q_k * L_k)
             
             return torch.zeros(x.shape[0], device=x.device), F_total
+
         else:
             return torch.zeros(x.shape[0], device=x.device), torch.zeros_like(x)
             
