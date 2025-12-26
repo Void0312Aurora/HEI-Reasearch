@@ -36,6 +36,11 @@ from aurora import (
     RobustSpringPotential
 )
 from aurora.geometry import random_hyperbolic_init
+from aurora.gauge import GaugeField # [NEW v2.0]
+# Use WongIntegrator (which is ContactIntegrator + logic)
+# Actually we updated ContactIntegrator directly in dynamics, so we can just use it.
+# But for clarity let's check if we exported WongIntegrator.
+from aurora.dynamics import WongIntegrator # [NEW v2.0]
 
 def main():
     parser = argparse.ArgumentParser()
@@ -62,6 +67,10 @@ def main():
     parser.add_argument("--split", type=str, default="train", choices=["train", "all"], help="Semantic Edge Split")
     parser.add_argument("--seed", type=int, default=None, help="Random Seed")
     parser.add_argument("--save_path", type=str, default="checkpoints/aurora_v2_final.pkl", help="Checkpoint Output Path")
+    
+    # CCD v2.0 (Theory 5) Args
+    parser.add_argument("--logical_dim", type=int, default=3, help="Dimension of Logical Fiber (e.g. 3 for SO(3))")
+    parser.add_argument("--enable_logic", action="store_true", help="Enable Logical Dynamics (Layer C)")
     
     # Phase IX Args: Advanced Hard Mining
     parser.add_argument("--mining_mode", type=str, default="hard", choices=["hard", "semi-hard", "curriculum", "trusted", "global"],
@@ -132,9 +141,17 @@ def main():
         x_init = torch.tensor(ckpt['x'], device=device) # (N, dim)
         if x_init.shape[0] != N:
             raise ValueError(f"Checkpoint size {x_init.shape[0]} != Dataset size {N}")
+        # Load J if present (v2.0 checkpoint)
+        J_init = None
+        if 'J' in ckpt and ckpt['J'] is not None:
+             J_init = torch.tensor(ckpt['J'], device=device)
+             print("Loaded Logical Charge J from checkpoint.")
         print("Checkpoint loaded.")
     else:
-        x_init = random_hyperbolic_init(N, dim, scale=0.1, device=device)
+        # User ds.generate_initial_conditions for v2.0
+        x_init, J_init = ds.generate_initial_conditions(dim, args.logical_dim, device=device)
+        if not args.enable_logic:
+             J_init = None # Disable logic if not requested
         
     G = torch.zeros(N, dim, dim, device=device)
     G[..., 0] = x_init
@@ -146,7 +163,15 @@ def main():
     M = torch.zeros(N, dim, dim, device=device)
     z = torch.zeros(N, device=device)
     
-    state = PhysicsState(G=G, M=M, z=z)
+    # Gauge Field (Connection)
+    gauge_field = None
+    if args.enable_logic:
+        print(f">>> Enabling Logical Dynamics (Layer C). Logical Dim: {args.logical_dim}")
+        # Initialize Gauge Field on Structural Edges
+        edges_struct_t = torch.tensor(ds.edges_struct, dtype=torch.long, device=device)
+        gauge_field = GaugeField(edges_struct_t, args.logical_dim, group='SO').to(device)
+    
+    state = PhysicsState(G=G, M=M, z=z, J=J_init)
     
     # 3. Potentials
     potentials = []
@@ -229,7 +254,8 @@ def main():
     # 4. Integrator
     inertia = RadialInertia(alpha=5.0)
     config = PhysicsConfig(dt=0.05, gamma=0.5, adaptive=True, solver_iters=10)
-    integrator = ContactIntegrator(config, inertia)
+    # Use WongIntegrator (alias in dynamics.py)
+    integrator = WongIntegrator(config, inertia)
  
     # 5. Loop
     print(f"Starting Simulation (Steps={args.steps}, StageRatio={args.stage_ratio})...")
@@ -297,7 +323,10 @@ def main():
                  if pot_vol: 
                      pot_vol.lamb = args.target_lamb
                  
-        state = integrator.step(state, oracle, freeze_radius=effective_freeze)
+                 if pot_vol: 
+                     pot_vol.lamb = args.target_lamb
+                  
+        state = integrator.step(state, oracle, gauge_field=gauge_field, freeze_radius=effective_freeze)
         
         if i % 100 == 0:
             avg_r = torch.mean(torch.acosh(state.x[:, 0])).item()
@@ -353,6 +382,7 @@ def main():
         'version': '1.0',  # Checkpoint schema version
         'timestamp': datetime.datetime.now().isoformat(),
         'x': state.x.detach().cpu().numpy(),
+        'J': state.J.detach().cpu().numpy() if state.J is not None else None,
         # 'v' is implicitly stored in M (angular momentum), not separately needed for eval.
         'vocab': ds.vocab.word_to_id, # Save vocab mapping!
         'nodes': ds.nodes,

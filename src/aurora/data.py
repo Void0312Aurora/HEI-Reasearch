@@ -67,6 +67,34 @@ class AuroraDataset:
                     if raw_word not in self.raw_map:
                         self.raw_map[raw_word] = idx
                         
+    def generate_initial_conditions(self, dim: int, logical_dim: int, device='cpu'):
+        """
+        Generate initial x (Hyperbolic) and J (Logical Charge).
+        
+        Args:
+            dim: Semantic embedding dimension (R^d -> H^{d-1})
+            logical_dim: Logical fiber dimension (Lie Algebra dim)
+            device: torch device
+        
+        Returns:
+            x: (N, dim)
+            J: (N, logical_dim)
+        """
+        import torch
+        from .geometry import random_hyperbolic_init
+        
+        # 1. Semantic Position x
+        x = random_hyperbolic_init(self.num_nodes, dim, scale=0.1, device=device)
+        
+        # 2. Logical Charge J
+        # Initialize as random unit vectors in Lie Algebra
+        # For SO(k), algebra is skew-symmetric matrices.
+        # But here we treat J as vector in R^k_dim (isomorphic to algebra)
+        J = torch.randn(self.num_nodes, logical_dim, device=device)
+        J = torch.nn.functional.normalize(J, p=2, dim=-1)
+        
+        return x, J
+                        
     def _load_cilin(self):
         # Re-implement simple loader or import?
         # Let's import the legacy loader to save space, but wrap result

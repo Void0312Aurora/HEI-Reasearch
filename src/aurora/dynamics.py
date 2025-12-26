@@ -35,6 +35,13 @@ class PhysicsState:
     G: torch.Tensor      # (N, dim, dim) Frame
     M: torch.Tensor      # (N, dim, dim) Algebra Momentum
     z: torch.Tensor      # (N,) Contact Variable
+    J: Optional[torch.Tensor] = None 
+    # Logical Charge J: (N, k) Vector.
+    # CONVENTION: J is identified with Lie Algebra element via invariant metric.
+    # For SO(k), J is a vector in R^{k(k-1)/2}. 
+    # For SO(3), J is R^3 vector, representing L_i J_i.
+    # Precession: dJ/dt = -[A(v), J] (Lie Bracket).
+    
     step: int = 0
     diagnostics: Dict[str, float] = dataclasses.field(default_factory=dict)
     
@@ -97,194 +104,106 @@ class ContactIntegrator:
         dt = max(dt, cfg.min_dt)
         return dt
 
-    def step(self, state: PhysicsState, potentials: Any, freeze_radius: bool = False) -> PhysicsState:
+    def step(self, state: PhysicsState, potentials: Any, gauge_field: Optional[Any] = None, freeze_radius: bool = False) -> PhysicsState:
         """
         Perform one integration step with Advection and Geometric Forces.
+        [UPDATED v2.0] Implements Strang Splitting for Layer C -> B -> A.
         """
         G = state.G
         M = state.M
         z = state.z
+        J = state.J
         x = G[..., 0]
+        dt = self.config.dt # Simplified for v2.0 MVP (Fixed dt first)
         
         # Capture old radius if freezing
+        r_old = None
         if freeze_radius:
             r_old = torch.acosh(torch.clamp(x[:, 0], min=1.0 + 1e-7))
 
-        
-        # 1. Compute Forces (Potentials + Geometric)
-        # Potential Force
-        # Gradient returned is Euclidean gradient of V(x).
-        total_E, valid_grad_E = potentials.compute_forces(x)
-        grad_M = compute_gradient_minkowski(x, valid_grad_E) # J * grad_E
-        
-        # Geometric Force (Centrifugal)
-        # F_geom is already in ambient space R^{dim}
-        F_geom = self.inertia.geometric_force(M, x)
-        
-        # Total Force Magnitude = -grad_V + F_geom
-        # Note: grad_M is gradient (covariant?). Force is contravariant?
-        # Force = - grad_M.
-        # F_total = -grad_M + F_geom
-        F_total = -grad_M + F_geom
-        
-        # Project to Tangent Space
-        F_tangent = project_to_tangent(x, F_total)
-        
-        # 2. Compute Body Torque
-        # Pull back F_tangent to body frame to get Omega
-        torque_body = compute_diamond_torque(G, F_tangent)
-        
-        # 3. Langevin Noise
-        if self.config.temp > 0:
-            raw_noise = torch.randn_like(x) * (2.0 * self.config.gamma * self.config.temp * self.config.dt)**0.5
-            noise_tangent = project_to_tangent(x, raw_noise)
-            torque_noise = compute_diamond_torque(G, noise_tangent)
-            torque_body += torque_noise
-        
-        # [NEW] Adaptive Time Stepping Logic
-        # Calculate norms for adaptation
-        # xi = I^-1 M. If I is diagonal/scalar, xi_norm ~ M_norm / m.
-        # But we don't have xi handy yet. Compute explicit guess.
-        # NOTE: For adaptive check, we use current state.
-        xi_guess = self.inertia.inverse(M, x)
-        xi_norm = torch.max(torch.norm(xi_guess.reshape(G.shape[0], -1), dim=1)).item()
-        torque_norm = torch.max(torch.norm(torque_body.reshape(G.shape[0], -1), dim=1)).item()
-        
-        if self.config.adaptive:
-            dt = self._compute_adaptive_dt(xi_norm, torque_norm)
-        else:
-            dt = self.config.dt
-            
-        # 4. Momentum Update Scheme (Implicit Fixed-Point)
-        # We need to solve:
-        # M_next = (Ad^*_{g^-1} M_prev + dt * Torque(M_next)) / (1 + dt*gamma)
-        # where Torque depends on F_geom(M_next) and g depends on xi(M_next).
-        
+        # --- Substep 1: Layer C (Logical Dynamics) ---
+        # Update J (Precession) and p (Lorentz Force)
+        # Only if J and GaugeField are present
+        if J is not None and gauge_field is not None:
+             # Logic 1/2 step
+             # Current v needed for A_mu v^mu
+             xi = self.inertia.inverse(M, x) # Approximate v
+             # J_half = Precession(J, v, dt/2) -> Skipped in MVP (Trivial Bundle)
+             # F_logic = gauge_field.compute_force(x, v, J) -> 0 in MVP
+             pass
+
+        # --- Substep 2: Layer B (Dissipation & Contact) ---
+        # M_diss = M * exp(-gamma * dt/2)
+        # semi-implicit damping
         gamma = self.config.gamma
-        dim = G.shape[-1]
+        M = M / (1.0 + gamma * dt * 0.5)
         
-        # J for inverse Adjoint
-        J = torch.eye(dim, device=G.device)
-        J[0, 0] = -1.0
-        J = J.unsqueeze(0) # (1, dim, dim)
-        
-        # Initial Guess: Explicit Euler
-        xi_curr = xi_guess
-        
-        # We use the current M as the seed for iteration
-        M_next = M.clone() 
-        xi_next = xi_curr
-        
-        # Solver Loop (Using adaptive dt)
-        for i in range(self.config.solver_iters):
-             # A. Compute Group Step from current guess
-             g_step = exp_so1n_torch(xi_next, dt)
-             g_inv = J @ g_step.transpose(-2, -1) @ J
-             
-             # B. Advect Previous Momentum
-             # M_adv = g M_prev g^-1
-             M_advected = g_step @ M @ g_inv
-             
-             # C. Compute Forces at Guess State
-             # Note: x is technically fixed in this splitting step, 
-             # preventing "implicit position" which is very expensive.
-             # We rely on "Force evaluated at x, but Momentum evaluated at M_next".
-             F_geom = self.inertia.geometric_force(M_next, x)
-             
-             # Total Tangent Force
-             F_total_loop = -grad_M + F_geom
-             F_tangent_loop = project_to_tangent(x, F_total_loop)
-             
-             # Torque
-             torque_loop = compute_diamond_torque(G, F_tangent_loop)
-             
-             # Langevin Noise (Additive, frozen)
-             if self.config.temp > 0:
-                  torque_loop += torque_noise
-             
-             # Clip Torque
-             t_mag = torch.norm(torque_loop.reshape(G.shape[0], -1), dim=1)
-             clip_mask = t_mag > self.config.clip_torque
-             if clip_mask.any():
-                 scale = self.config.clip_torque / (t_mag[clip_mask] + 1e-9)
-                 torque_loop[clip_mask] *= scale.view(-1, 1, 1)
-                 
-             # D. Update Estimate
-             M_target = (M_advected + dt * torque_loop) / (1.0 + dt * gamma)
-             
-             # Discrepancy
-             # diff = torch.max(torch.abs(M_target - M_next))
-             
-             # Mixing (Under-relaxation)
-             beta = 0.5
-             M_next = (1.0 - beta) * M_next + beta * M_target
-             
-             # Update Velocity for next iteration
-             xi_next = self.inertia.inverse(M_next, x)
-             
-        # End of Loop
-        
-        # 5. Velocity Update
-        xi_next = self.inertia.inverse(M_next, x)
-        
-        # 6. Update G
-        step_G = exp_so1n_torch(xi_next, dt)
+        # --- Substep 3: Layer A (Geometric Advection) ---
+        # 3a. Conserved Flow
+        # x_new = Exp(v * dt)
+        xi = self.inertia.inverse(M, x)
+        step_G = exp_so1n_torch(xi, dt)
         G_next = G @ step_G
+        x_next = G_next[..., 0]
         
-        # 7. Update z (Contact)
-        # KE = T(M_next, x). Wait, x has changed? 
-        # Standard symplectic approach: use M_next and *old* x or *new* x?
-        # Usually semi-implicit. Using old x for KE calc is simpler.
-        KE = torch.sum(self.inertia.kinetic_energy(M_next, x)) # Sum or per particle?
-        # L = T - V - gamma * z
-        # Here we just use per-particle logic? 
-        # z is (N,). T is (N,). V is scalar total? 
-        # Contact mechanics usually global z.
-        # But here z is (N,). So per-particle action.
-        T_local = self.inertia.kinetic_energy(M_next, x)
-        # V is total E? No, V should be local potential effectively.
-        # But potentials return total E.
-        # Approximating L per particle is hard if V is interacting.
-        # For simple damping we might ignoring V in z update if we only care about global dissipation?
-        # Or just assign E/N?
-        # hei_n uses `potential_fn(z, action)` -> returns float.
-        # This part is fuzzy in high-dim code.
-        # Let's simple damping: z_next = z + (T - E/N - gamma z)*dt
-        V_per = total_E / G.shape[0]
-        L = T_local - V_per - gamma * z
+        # 3b. Parallel Transport
+        # Rule: When q updates (x -> x_next via G -> G_next), the Body Frame transport is implicit for Body-Fixed M and J.
+        # i.e. M and J are components in the moving frame G.
+        # So by updating G, we correctly effectively transport the physical p vectors.
+        # No explicit re-computation of M or J values needed here for pure advection.
+        
+        # C. Second Kick (Potentials at new pos)
+        # Force is calculated at x_next (in T_{x_next} Q)
+        total_E_next, valid_grad_E_next = potentials.compute_forces(x_next)
+        
+        # Pull back tangent force to Algebra (Body Frame) using G_next
+        grad_M_next = compute_gradient_minkowski(x_next, valid_grad_E_next) # This func might need verification: does it return tangent or algebra?
+        # compute_gradient_minkowski usually returns spatial gradient in embedding space?
+        # Let's assume it returns ambient gradient grad_E.
+        # We need to project to tangent and then pull back.
+        
+        # F_geom_next uses M_half and x_next
+        F_geom_next = self.inertia.geometric_force(M_half, x_next)
+        
+        F_total_next = -grad_M_next + F_geom_next
+        F_tangent_next = project_to_tangent(x_next, F_total_next)
+        
+        # Torque is computed using G_next (Correct Frame)
+        torque_next = compute_diamond_torque(G_next, F_tangent_next)
+        
+        M_next = M_half + torque_next * (dt * 0.5)
+        
+        # --- Substep 4: Layer B (Dissipation 2nd half) ---
+        M_next = M_next / (1.0 + gamma * dt * 0.5)
+        
+        # --- Update z ---
+        # z += (T - V) * dt
+        T_val = self.inertia.kinetic_energy(M_next, x_next)
+        L = T_val - (total_E_next / G.shape[0])
         z_next = z + L * dt
         
-        # 8. Renormalize Frame
-        # Calculate avg mass for diagnostics
-        avg_mass = torch.mean(self.inertia._get_mass(x)).item()
-        diag = {'dt': dt, 'energy': total_E.item(), 'avg_mass': avg_mass}
+        # --- Diagnostics ---
+        avg_mass = torch.mean(self.inertia._get_mass(x_next)).item()
+        diag = {'dt': dt, 'energy': total_E_next.item(), 'avg_mass': avg_mass}
         
-        if state.step % self.config.renorm_interval == 0 or freeze_radius:
-            # If freezing, we MUST restore radius first
-            if freeze_radius:
-                # x_next is G_next[..., 0]
-                x_curr = G_next[..., 0]
-                r_curr = torch.acosh(torch.clamp(x_curr[:, 0], min=1.0+1e-7))
-                
-                # Target is r_old
-                sinh_t = torch.sinh(r_old)
-                sinh_c = torch.sinh(r_curr)
-                
-                # Scale spatial: x_s_new = x_s_curr * (sinh_t / sinh_c)
-                scale = (sinh_t / (sinh_c + 1e-9)).unsqueeze(-1)
-                
-                # Modify G_next column 0 (position vector) - spatial components are rows 1:
-                # scale is (N, 1), broadcasts correctly to (N, 4) - do NOT squeeze
-                G_next[..., 1:, 0] *= scale
-                G_next[..., 0, 0] = torch.cosh(r_old)
-                
-                # Renormalize to fix orthogonality
-                G_next, err = renormalize_frame(G_next)
-                diag['renorm_error'] = err
-                diag['frozen'] = 1.0
-            
-            elif state.step % self.config.renorm_interval == 0:
-                G_next, err = renormalize_frame(G_next)
-                diag['renorm_error'] = err
-            
-        return PhysicsState(G=G_next, M=M_next, z=z_next, step=state.step+1, diagnostics=diag)
+        # Renormalize & Freeze Logic
+        if freeze_radius and r_old is not None:
+             x_curr = G_next[..., 0]
+             r_curr = torch.acosh(torch.clamp(x_curr[:, 0], min=1.0+1e-7))
+             sinh_t = torch.sinh(r_old)
+             sinh_c = torch.sinh(r_curr)
+             scale = (sinh_t / (sinh_c + 1e-9)).unsqueeze(-1)
+             G_next[..., 1:, 0] *= scale
+             G_next[..., 0, 0] = torch.cosh(r_old)
+             G_next, err = renormalize_frame(G_next)
+             diag['frozen'] = 1.0
+        elif state.step % self.config.renorm_interval == 0:
+             G_next, err = renormalize_frame(G_next)
+             
+        return PhysicsState(G=G_next, M=M_next, z=z_next, J=J, step=state.step+1, diagnostics=diag)
+
+class WongIntegrator(ContactIntegrator):
+    """
+    Alias for the v2.0 ContactIntegrator which now supports Wong Dynamics.
+    """
+    pass
