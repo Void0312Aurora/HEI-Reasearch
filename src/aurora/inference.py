@@ -224,24 +224,40 @@ class InferenceEngine:
         
         return scores
 
-    def filter_edges(self, candidates: torch.Tensor, k_accept: int = 1000, 
-                     w_energy: float = 1.0, w_curve: float = 1.0) -> torch.Tensor:
+    def filter_edges_robust(self, candidates: torch.Tensor, k_accept: int = 1000,
+                            w_energy: float = 1.0, w_curve: float = 1.0, 
+                            curvature_threshold_p99: float = 5.0) -> torch.Tensor:
         """
-        Filter candidates based on combined score.
-        Score = w_energy * E + w_curve * Curvature
-        Lower is better.
+        Gate A: Geometric Control.
+        Filters edges and REJECTS batch if curvature spikes.
         """
         metrics = self.evaluate_candidates(candidates)
         
-        score = w_energy * metrics['energy'] + w_curve * metrics.get('curvature', 0.0)
+        # 1. Safety Check (Gate A)
+        curvatures = metrics.get('curvature', torch.tensor([0.0], device=self.device))
+        p99_curve = torch.quantile(curvatures, 0.99).item()
         
-        # Top-K lowest score
+        print(f"  [Gate A Monitor] Candidate Curvature P99: {p99_curve:.4f}")
+        
+        if p99_curve > curvature_threshold_p99:
+            print(f"  [Gate A REJECTION] P99 Curvature {p99_curve:.4f} > Threshold {curvature_threshold_p99}")
+            print("  Rejection: Batch candidates are geometrically dangerous.")
+            # Return empty or fallback?
+            # For now return empty to signal rejection
+            return torch.tensor([], dtype=torch.long, device=self.device)
+            
+        # 2. Score and Select
+        score = w_energy * metrics['energy'] + w_curve * curvatures
         vals, indices = torch.topk(score, k_accept, largest=False)
-        
         accepted = candidates[indices]
         
-        print(f"Accepted {k_accept} edges.")
-        print(f"  Avg Energy: {metrics['energy'][indices].mean():.4f}")
-        print(f"  Avg Curvature: {metrics.get('curvature', torch.tensor(0))[indices].mean():.4f}")
-        
+        print(f"  [Gate A Accepted] {accepted.shape[0]} edges.")
         return accepted
+
+    def filter_edges(self, candidates: torch.Tensor, k_accept: int = 1000, 
+                     w_energy: float = 1.0, w_curve: float = 1.0) -> torch.Tensor:
+        """
+        Legacy filter. Use filter_edges_robust for safe inference.
+        """
+        return self.filter_edges_robust(candidates, k_accept, w_energy, w_curve, curvature_threshold_p99=999.0)
+
