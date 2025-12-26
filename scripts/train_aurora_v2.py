@@ -73,6 +73,7 @@ def main():
 
     parser.add_argument("--enable_logic", action="store_true", help="Enable Logical Dynamics (Layer C)")
     parser.add_argument("--learn_gauge", action="store_true", help="Enable Learning of Gauge Connection (Phase 3)")
+    parser.add_argument("--gauge_mode", type=str, default="table", choices=["table", "neural"], help="Gauge Backend: table (Discrete) or neural (MLP)")
     parser.add_argument("--lr_gauge", type=float, default=0.01, help="Learning Rate for Gauge Field")
     parser.add_argument("--lambda_schedule", action="store_true", help="Enable annealing for spin interaction (0.1 -> 5.0)")
     
@@ -193,10 +194,12 @@ def main():
              # For performance, let's keep it simple. Duplicate edges are fine (parallel springs/links).
              # Actually, parallel edges with DIFFERENT types are distinct in current Physics?
              # GaugeField treats them as indexable.
-             gauge_field = GaugeField(edges_all, args.logical_dim, group='SO').to(device)
+             gauge_field = GaugeField(edges_all, args.logical_dim, group='SO', 
+                                      backend_type=args.gauge_mode, input_dim=dim).to(device)
              print(f">>> Gauge Topology: {edges_struct_t.shape[0]} Struct + {sem_t.shape[0]} Sem = {edges_all.shape[0]} Edges.")
         else:
-             gauge_field = GaugeField(edges_struct_t, args.logical_dim, group='SO').to(device)
+             gauge_field = GaugeField(edges_struct_t, args.logical_dim, group='SO',
+                                      backend_type=args.gauge_mode, input_dim=dim).to(device)
              print(">>> WARNING: Gauge Topology limited to Structure (Tree?). Expect 0 Curvature.")
     
     # Optimizer for Gauge Field
@@ -396,8 +399,10 @@ def main():
              v = gauge_field.edges[:, 1]
              
              # 2. Get Transport U_uv
+             # 2. Get Transport U_uv
              # gauge_field.get_U() returns U ordered by edges
-             U_all = gauge_field.get_U() # (E, k, k)
+             # Neural backend needs x
+             U_all = gauge_field.get_U(x=state.x) # (E, k, k)
              
              # 3. Transport J_u -> J_u_transported
              J = state.J.detach() # Treat J as fixed targets

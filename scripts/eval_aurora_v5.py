@@ -66,11 +66,35 @@ def main():
             print(f"Loaded {len(sem_indices)} semantic edges. Total Gauge Edges: {edges_all.shape[0]}")
             
     logical_dim = data['config'].get('logical_dim', 3)
-    gauge_field = GaugeField(edges_all, logical_dim, group='SO').to(device)
+    # Checkpoint backward compatibility
+    # Try to infer backend logic or just default to table (since old checkpoints are table)
+    # Neural backend checkpoints will have 'backend.net...' keys.
+    # We can inspect the state dict before init? No, init needs args.
+    # Default to 'table'. If we see 'backend.net', assume neural? Not easy.
+    # Let's check config if available.
+    if 'config' in data and 'gauge_mode' in data['config']:
+        backend = data['config']['gauge_mode']
+    else:
+        backend = 'table'
+        
+    gauge_field = GaugeField(edges_all, logical_dim, group='SO', 
+                             backend_type=backend, input_dim=5).to(device)
     
     if 'gauge_field' in data and data['gauge_field'] is not None:
         print("Loading Gauge Field parameters from checkpoint...")
-        gauge_field.load_state_dict(data['gauge_field'])
+        state_dict = data['gauge_field']
+        # Migration: exact match or migrate 'omega_params' -> 'backend.omega_params'
+        if 'omega_params' in state_dict and 'backend.omega_params' not in state_dict:
+             print("Migrating legacy checkpoint (v1 -> v2 backend)...")
+             new_dict = {}
+             for k, v in state_dict.items():
+                 if k == 'omega_params':
+                     new_dict['backend.omega_params'] = v
+                 else:
+                     new_dict[k] = v
+             state_dict = new_dict
+             
+        gauge_field.load_state_dict(state_dict, strict=False)
     else:
         print("WARNING: Checkpoint missing 'gauge_field' state. Using random initialization.")
     
@@ -79,7 +103,7 @@ def main():
     with torch.no_grad():
         u = edges_all[:, 0]
         v = edges_all[:, 1]
-        U_all = gauge_field.get_U()
+        U_all = gauge_field.get_U(x=x)
         
         J_u = J[u]
         J_v = J[v]
@@ -102,7 +126,7 @@ def main():
     # 4. Compute Curvature (Holonomy)
     print(f"\n--- Curvature Analysis ---")
     with torch.no_grad():
-        Omega, triangles, _ = gauge_field.compute_curvature()
+        Omega, triangles, _ = gauge_field.compute_curvature(x=x)
         if triangles.shape[0] > 0:
             omega_norms = torch.norm(Omega.reshape(Omega.shape[0], -1), dim=-1)
             print(f"Triangles Found: {triangles.shape[0]}")

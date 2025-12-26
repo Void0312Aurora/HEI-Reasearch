@@ -135,7 +135,7 @@ class ContactIntegrator:
              A_geom = gauge_field.compute_connection(x, v_embed) # (N, k, k)
              
              # Compute Spin Interaction (Alignment Torque)
-             A_spin = gauge_field.compute_spin_interaction(J)
+             A_spin = gauge_field.compute_spin_interaction(x, J)
              
              # Total Effective Connection
              # A_eff = A_geom + lambda * A_spin
