@@ -70,7 +70,10 @@ def main():
     
     # CCD v2.0 (Theory 5) Args
     parser.add_argument("--logical_dim", type=int, default=3, help="Dimension of Logical Fiber (e.g. 3 for SO(3))")
+
     parser.add_argument("--enable_logic", action="store_true", help="Enable Logical Dynamics (Layer C)")
+    parser.add_argument("--learn_gauge", action="store_true", help="Enable Learning of Gauge Connection (Phase 3)")
+    parser.add_argument("--lr_gauge", type=float, default=0.01, help="Learning Rate for Gauge Field")
     
     # Phase IX Args: Advanced Hard Mining
     parser.add_argument("--mining_mode", type=str, default="hard", choices=["hard", "semi-hard", "curriculum", "trusted", "global"],
@@ -169,7 +172,14 @@ def main():
         print(f">>> Enabling Logical Dynamics (Layer C). Logical Dim: {args.logical_dim}")
         # Initialize Gauge Field on Structural Edges
         edges_struct_t = torch.tensor(ds.edges_struct, dtype=torch.long, device=device)
+        edges_struct_t = torch.tensor(ds.edges_struct, dtype=torch.long, device=device)
         gauge_field = GaugeField(edges_struct_t, args.logical_dim, group='SO').to(device)
+    
+    # Optimizer for Gauge Field
+    optimizer_gauge = None
+    if args.learn_gauge and gauge_field is not None:
+        print(f">>> Enabling Gauge Learning (Adam, lr={args.lr_gauge})")
+        optimizer_gauge = torch.optim.Adam(gauge_field.parameters(), lr=args.lr_gauge)
     
     state = PhysicsState(G=G, M=M, z=z, J=J_init)
     
@@ -327,6 +337,45 @@ def main():
                      pot_vol.lamb = args.target_lamb
                   
         state = integrator.step(state, oracle, gauge_field=gauge_field, freeze_radius=effective_freeze)
+        
+        # [Phase 3] Learn Gauge Field (Alignment Optimization)
+        if optimizer_gauge is not None and i % 10 == 0:
+             # Loss: Minimize misalignment between J_u and J_v transported
+             # L = \sum_{edges} (1 - <J_v, U_{uv} J_u>)
+             # Standard "XY Model" or "Synchronization" loss.
+             
+             optimizer_gauge.zero_grad()
+             
+             # 1. Get Edges (u, v) from dataset structure
+             # Use sample or all? For small dataset all is fine.
+             u = edges_struct_t[:, 0]
+             v = edges_struct_t[:, 1]
+             
+             # 2. Get Transport U_uv
+             # gauge_field.get_U() returns U ordered by edges
+             U_all = gauge_field.get_U() # (E, k, k)
+             
+             # 3. Transport J_u -> J_u_transported
+             J = state.J.detach() # Treat J as fixed targets
+             J_u = J[u] # (E, k)
+             J_v = J[v] # (E, k)
+             
+             # J_u_trans = U @ J_u
+             J_u_trans = torch.matmul(U_all, J_u.unsqueeze(-1)).squeeze(-1)
+             
+             # 4. Alignment = <J_v, J_u_trans>
+             # Dot product per edge
+             alignment = torch.sum(J_v * J_u_trans, dim=-1) # (E,)
+             
+             # Loss = 1 - mean(alignment)
+             loss_gauge = 1.0 - torch.mean(alignment)
+             
+             loss_gauge.backward()
+             optimizer_gauge.step()
+             
+             if i % 100 == 0:
+                 print(f"    [Gauge Learn] Loss: {loss_gauge.item():.4e}, Mean Align: {torch.mean(alignment).item():.4f}")
+        
         
         if i % 100 == 0:
             avg_r = torch.mean(torch.acosh(state.x[:, 0])).item()

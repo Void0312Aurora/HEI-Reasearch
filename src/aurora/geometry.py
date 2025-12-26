@@ -167,6 +167,44 @@ def random_hyperbolic_init(N: int, dim: int, scale: float = 0.1, device='cpu') -
     
     return x
 
+def log_map(x: torch.Tensor, y: torch.Tensor, eps: float = 1e-7) -> torch.Tensor:
+    """
+    Compute Logarithmic Map Log_x(y) on H^n.
+    Returns tangent vector u in T_x H^n such that Exp_x(u) = y.
+    
+    Formula:
+        u = theta / sinh(theta) * (y + <x, y>_M * x)
+        where theta = dist(x, y) = acosh(-<x,y>_M)
+        
+    Args:
+        x: Base point (..., dim)
+        y: Target point (..., dim)
+        
+    Returns:
+        u: Tangent vector (..., dim)
+    """
+    inner = minkowski_inner(x, y)
+    inner = torch.clamp(inner, max=-1.0 - eps)
+    
+    theta = torch.acosh(-inner)
+    
+    # y_perp = y + <x,y>x
+    y_perp = y + inner.unsqueeze(-1) * x
+    
+    # Factor = theta / sinh(theta)
+    # Using Taylor expansion for small theta to avoid 0/0
+    sinh_theta = torch.sinh(theta)
+    
+    # Safe division
+    factor = theta / (sinh_theta + 1e-9)
+    
+    # If theta is very small (< 1e-4), factor -> 1.0. 
+    # y_perp norm is sinh(theta). 
+    # Vector u is theta * normalized(y_perp).
+    
+    u = factor.unsqueeze(-1) * y_perp
+    return u
+
 def compute_gradient_minkowski(x: torch.Tensor, euc_grad: torch.Tensor) -> torch.Tensor:
     """
     Convert Euclidean gradient of a function f(x) to Minkowski gradient (?)

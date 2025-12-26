@@ -125,23 +125,54 @@ class ContactIntegrator:
         # Update J (Precession) and p (Lorentz Force)
         # Only if J and GaugeField are present
         if J is not None and gauge_field is not None:
-             # Logic 1/2 step
+             # Logic 1/2 step (or full step if Strang splitting structure allows)
              # Current v needed for A_mu v^mu
-             xi = self.inertia.inverse(M, x) # Approximate v
-             # J_half = Precession(J, v, dt/2) -> Skipped in MVP (Trivial Bundle)
-             # F_logic = gauge_field.compute_force(x, v, J) -> 0 in MVP
-             pass
+             # In our formulation, M acts on x to give v in embedding space
+             # x: (N, dim), M: (N, dim, dim)
+             # v = M @ x.unsqueeze(-1) -> (N, dim, 1) -> squeeze
+             v_embed = torch.matmul(M, x.unsqueeze(-1)).squeeze(-1)
+             
+             # Compute Connection A(v)
+             A_eff = gauge_field.compute_connection(x, v_embed) # (N, k, k)
+             
+             # Evolve J (Precession)
+             # dJ/dt = -[A, J].
+             # Solution J(t) = exp(-A t) J(0) (for SO(3) vector rep)
+             # Use Matrix Exponential for stability and norm preservation
+             U_local = torch.matrix_exp(-A_eff * dt)
+             J = torch.matmul(U_local, J.unsqueeze(-1)).squeeze(-1)
+             
+             # Add Wong Force (Particle Dynamics)
+             # F_logic currently placeholder (returns 0)
+             # But if implemented, we add it to forces?
+             _, F_logic = gauge_field.compute_force_wong(x, v_embed, J)
+        else:
+             F_logic = torch.zeros_like(x)
 
         # --- Substep 2: Layer B (Dissipation & Contact) ---
         # M_diss = M * exp(-gamma * dt/2)
         # semi-implicit damping
         gamma = self.config.gamma
-        M = M / (1.0 + gamma * dt * 0.5)
+        
+        # --- Pre-Kick (Layer A - First Half) ---
+        # 1. Update M with forces at current position x
+        total_E, valid_grad_E = potentials.compute_forces(x)
+        grad_M = compute_gradient_minkowski(x, valid_grad_E)
+        
+        F_geom = self.inertia.geometric_force(M, x)
+        F_total = -grad_M + F_geom + F_logic # Add Logic Force
+        F_tangent = project_to_tangent(x, F_total)
+        torque = compute_diamond_torque(G, F_tangent)
+        
+        M_half = M + torque * (dt * 0.5)
+        
+        # 2. Dissipate First Half
+        M_half = M_half / (1.0 + gamma * dt * 0.5)
         
         # --- Substep 3: Layer A (Geometric Advection) ---
         # 3a. Conserved Flow
         # x_new = Exp(v * dt)
-        xi = self.inertia.inverse(M, x)
+        xi = self.inertia.inverse(M_half, x) # Use M_half for advection velocity
         step_G = exp_so1n_torch(xi, dt)
         G_next = G @ step_G
         x_next = G_next[..., 0]
@@ -165,7 +196,17 @@ class ContactIntegrator:
         # F_geom_next uses M_half and x_next
         F_geom_next = self.inertia.geometric_force(M_half, x_next)
         
-        F_total_next = -grad_M_next + F_geom_next
+        # Recompute Logic Force at next state?
+        # Requires J at next state (we have new J), x_next. 
+        # v_next approx determined by M_half?
+        # v_embed_next = M_half @ x_next
+        if J is not None and gauge_field is not None:
+             v_embed_next = torch.matmul(M_half, x_next.unsqueeze(-1)).squeeze(-1)
+             _, F_logic_next = gauge_field.compute_force_wong(x_next, v_embed_next, J)
+        else:
+             F_logic_next = torch.zeros_like(x_next)
+             
+        F_total_next = -grad_M_next + F_geom_next + F_logic_next
         F_tangent_next = project_to_tangent(x_next, F_total_next)
         
         # Torque is computed using G_next (Correct Frame)
