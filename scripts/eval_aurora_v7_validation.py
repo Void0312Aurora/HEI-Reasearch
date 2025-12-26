@@ -82,7 +82,8 @@ def compute_alignment_stats(gauge_field, J, edge_indices, x, name="Edges"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoint", type=str)
-    parser.add_argument("--semantic_path", type=str, required=True)
+    parser.add_argument("--semantic_path", type=str, required=True, help="Path for Training Semantic Edges")
+    parser.add_argument("--holdout_path", type=str, default=None, help="Path for Holdout Semantic Edges (Optional override)")
     parser.add_argument("--dataset", type=str, default="cilin")
     parser.add_argument("--limit", type=int, default=None, help="Dataset limit (must match training)")
     parser.add_argument("--gauge_mode", type=str, default=None, help="Force backend type (table/neural)")
@@ -111,8 +112,30 @@ def main():
     # 3. Load Semantic (Split)
     # Using dataset method to ensure consistent mapping and splitting with training
     print("Loading Semantic Edges via AuroraDataset...")
+    print("Loading Semantic Edges via AuroraDataset...")
     sem_train_list = ds.load_semantic_edges(args.semantic_path, split="train")
-    sem_test_list = ds.load_semantic_edges(args.semantic_path, split="holdout")
+    
+    holdout_file = args.holdout_path if args.holdout_path else args.semantic_path
+    
+    # If using dense file, we want strict holdout
+    sem_test_list = ds.load_semantic_edges(holdout_file, split="holdout")
+    
+    # If overriding holdout path, we treat all edges in it as test edges (since they are new)
+    if args.holdout_path:
+        # If we use a separate file, assume it's ALL holdout
+        sem_test_list = ds.load_semantic_edges(holdout_file, split="train") # "train" just means "load all" here from the list
+        # Actually ds.load_semantic_edges splits by index.
+        # If we want ALL edges from the dense file:
+        with open(holdout_file, 'rb') as f:
+             raw_edges = pickle.load(f)
+        # Convert to list
+        sem_test_list = []
+        w2i = ds.vocab.word_to_id
+        for u, v, w in raw_edges:
+             if u in w2i and v in w2i:
+                 sem_test_list.append((w2i[u], w2i[v], w))
+             
+    # Convert to tensors
     
     # Convert to tensors
     sem_train = torch.tensor([(u, v) for u, v, w in sem_train_list], dtype=torch.long, device=device)
@@ -135,6 +158,21 @@ def main():
         return
         
     print("Indices Valid.")
+
+    # Placeholder for Curvature Analysis (if it were present before)
+    # For now, we'll just add the holdout curvature section.
+    # If there was a previous curvature analysis, its output would be here.
+    # Example of what might have been here:
+    # if tri_h.shape[0] > 0:
+    #     norms_h = torch.norm(Omega_h.reshape(Omega_h.shape[0], -1), dim=1)
+    #     p99 = torch.quantile(norms_h, 0.99).item()
+    #     max_val = torch.max(norms_h).item()
+    #     print(f"  P99:  {p99:.4f}")
+    #     print(f"  Max:  {max_val:.4f}")
+    # else:
+    #     print("No Triangles found (check topology).")
+            
+
     
     # 4. Reconstruct Gauge Field
     # Gauge Field must match Training Topology exactly to load weights.
@@ -232,9 +270,17 @@ def main():
     # The existing `compute_connection` takes (x, v).
     # We can generate x, v for all test edges.
     
-    X = torch.tensor(ckpt['x'], device=device) # (N, dim)
     u_test = sem_test[:, 0]
     v_test = sem_test[:, 1]
+    
+    J_u = J[u_test]
+    J_v = J[v_test]
+    
+    # Raw Alignment
+    raw_align = torch.sum(J_v * J_u, dim=-1)
+    raw_mean = torch.mean(raw_align).item()
+    
+    X = torch.tensor(ckpt['x'], device=device) # (N, dim)
     
     x_u = X[u_test]
     x_v = X[v_test]
@@ -317,6 +363,48 @@ def main():
          A_u = A_nodes[u_idx]
          A_val = torch.sum(v_vec.unsqueeze(-1).unsqueeze(-1) * A_u, dim=1)
          U_pred = torch.matrix_exp(A_val)
+    
+    # Transport
+    J_u_trans = torch.matmul(U_pred, J_u.unsqueeze(-1)).squeeze(-1)
+    gauge_align = torch.sum(J_v * J_u_trans, dim=-1)
+    gauge_mean = torch.mean(gauge_align).item()
+    
+    gain = gauge_mean - raw_mean
+    
+    print(f"--- Holdout Generalization (N={sem_test.shape[0]}) ---")
+    print(f"  Raw Correlation:    {raw_mean:.4f}")
+    print(f"  Gauge Alignment:    {gauge_mean:.4f}")
+    print(f"  Gauge Gain:         {gain:+.4f}")
+
+    # Holdout Curvature Analysis
+    # We construct a temporary GaugeField with Struct + Holdout to see induced curvature
+    print("\n=== Holdout Subgraph Curvature Analysis ===")
+    edges_holdout_all = torch.cat([edges_struct, sem_test], dim=0)
+    gauge_holdout = GaugeField(edges_holdout_all, logical_dim=3, group='SO',
+                               backend_type=backend, input_dim=5).to(device)
+    # Share weights
+    # Share weights (manually to avoid buffer mismatch)
+    # Filter state dict to only backend parameters
+    source_state = gauge_field.state_dict()
+    target_state = {}
+    for k, v in source_state.items():
+        if k.startswith("backend."):
+            target_state[k] = v
+            
+    gauge_holdout.load_state_dict(target_state, strict=False) 
+    
+    if backend == 'neural':
+        gauge_holdout.eval()
+        with torch.no_grad():
+            Omega_h, tri_h, _ = gauge_holdout.compute_curvature(x=x)
+            print(f"Holdout Triangles: {tri_h.shape[0]}")
+            if tri_h.shape[0] > 0:
+                norms_h = torch.norm(Omega_h.reshape(Omega_h.shape[0], -1), dim=1)
+                print(f"  Mean: {torch.mean(norms_h).item():.4f}")
+                print(f"  P50:  {torch.quantile(norms_h, 0.5).item():.4f}")
+                print(f"  P90:  {torch.quantile(norms_h, 0.9).item():.4f}")
+    else:
+        print("Skipping Holdout Curvature (Table Backend cannot predict new edges).")
 
 if __name__ == "__main__":
     main()

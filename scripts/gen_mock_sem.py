@@ -12,17 +12,24 @@ import pickle
 sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 
 from aurora.data import AuroraDataset
+import argparse
 
 def main():
-    print("Loading Cilin dataset...")
-    ds = AuroraDataset('cilin')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--count", type=int, default=20000)
+    parser.add_argument("--output", type=str, default="data/cilin_sem_mock.pkl")
+    args = parser.parse_args()
+
+    print(f"Loading Cilin dataset (limit={args.limit})...")
+    ds = AuroraDataset('cilin', limit=args.limit)
     nodes = ds.nodes
     print(f"Nodes: {len(nodes)}")
     
     # Generate random edges to simulate 'semantic shortcuts'
     # These create strong frustration (loops) which is perfect for testing Gauge Learning.
-    num_edges = 20000
-    print(f"Generating {num_edges} random semantic edges...")
+    num_edges = args.count
+    print(f"Generating {num_edges} random semantic edges within {len(nodes)} nodes...")
     
     print(f"Generating {num_edges} Triangle-Closing semantic edges...")
 
@@ -93,7 +100,7 @@ def main():
             
     print(f"Generated {len(edges)} triangle-closing edges.")
     
-    out_path = "data/cilin_sem_mock.pkl"
+    out_path = args.output
     with open(out_path, 'wb') as f:
         pickle.dump(edges, f)
         
