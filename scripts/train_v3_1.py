@@ -13,6 +13,7 @@ import sys
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import logging
 from tqdm import tqdm
 import argparse
@@ -29,17 +30,17 @@ from aurora.engine.rheology import RheologicalOptimizer
 from aurora.engine.memory import HyperbolicMemory
 from aurora.engine.readout import ReadoutMechanism
 
-# Experiment 6 Config
-DIM = 5
+# Experiment 9 Config: Increased Dimension for Better Separation
+DIM = 16
 EMBED_DIM = 32
 HIDDEN_DIM = 64
 LR = 0.01
 YIELD_STRESS = 0.001 
 ELASTIC_K = 0.0001
-MAX_ATOMS = 1000 # Buffer (Working Memory)
-CONTEXT_K = 10 # Neighbors per particle
+MAX_ATOMS = 256 # Reduced for DIM=16
+CONTEXT_K = 5 # Reduced for memory
 MEMORY_SIZE = 20000 # LTM Capacity
-BATCH_SIZE = 700 # Safe GPU Batch Size
+BATCH_SIZE = 128 # Reduced for DIM=16
 
 
 def eval_probe(injector, entropy_stats, id_to_char, ff, prompt="你好", dim=DIM, device='cpu'):
@@ -136,6 +137,9 @@ def train(args):
     # Exp 7: Landau Stabilization (mu=1.0, lambda=0.01) + Kac Scaling
     ff = ForceField(G=1.0, lambda_gauge=1.5, k_geo=1.0, mu=1.0, lambda_quartic=0.01)
     ltm = HyperbolicMemory(DIM, MEMORY_SIZE, device=device).to(device)
+    
+    # Readout for Contrastive Loss (Experiment 10)
+    readout = ReadoutMechanism(injector, entropy_stats, id_to_char)
     
     # Optimizer
     rheo_opt = RheologicalOptimizer(injector.parameters(), lr=LR, yield_stress=YIELD_STRESS, elastic_k=ELASTIC_K)
@@ -238,25 +242,37 @@ def train(args):
             r_curr = torch.norm(q_batch, dim=-1) # (B)
             loss_r = torch.mean((r_curr - r_t.squeeze(1))**2)
             
-            # B. Flow Loss (Kinematic Momentum) - Phase 37
-            # Predict next token: Exp(q_t, p_t) -> q_{t+1}
-            # We use adjacent pairs in the batch
+            # B. Flow Loss (Kinematic Momentum) - Phase 37/39
+            # 核心：训练动量头，使 Exp(q_t, p_t) 逼近 q_{t+1}
+            # 关键修正：使用干净的 injector 输出作为目标（没有 noise）
             if BATCH_SIZE > 1:
-                q_t = q_batch[:-1]
+                # 获取原始（无噪声）的 q 作为目标
+                # q_rest 是原始 injector 输出
+                q_clean = q_rest.squeeze(1)  # (B, D) - 未加噪声
+                
+                # 构建时序对：q_t, p_t -> q_{t+1}
+                q_t = q_clean[:-1]
                 p_t = p_batch[:-1]
-                q_next_target = q_batch[1:].detach() # Target is fixed geom
+                q_next_target = q_clean[1:].detach()  # 目标固定，不参与梯度
                 
-                # dt = 1.0 (Unit Time Step per Token)
-                # q_pred = Exp_q(p)
-                q_pred = geometry.exp_map(q_t, p_t * 1.0)
+                # 动力学预测：q_pred = ExpMap(q_t, p_t)
+                q_pred = geometry.exp_map(q_t, p_t)
                 
+                # Flow Loss
                 loss_flow = torch.mean((q_pred - q_next_target)**2)
             else:
                 loss_flow = torch.tensor(0.0, device=device)
             
+            # C. Contrastive Loss (Experiment 10) - 深挖概率盆地
+            # L_contrast = -log P(c | q_c)
+            # 强迫模型：当站在字符c的坐标上时，必须以高概率读出c
+            probs = readout.read_prob(q_clean, beta=10.0)  # (B, V)
+            targets = cid_t.squeeze(1)  # (B,) - 真实字符ID
+            loss_contrast = F.cross_entropy(torch.log(probs + 1e-9), targets)
+            
             # Total Loss
-            # Exp 8: Flow Weight = 1.0
-            loss = loss_r + w_pot * E_pot + 1.0 * loss_flow
+            # 权重: Radius=1, Potential=0.01, Flow=5, Contrast=2
+            loss = loss_r + w_pot * E_pot + 5.0 * loss_flow + 2.0 * loss_contrast
             
             if torch.isnan(loss):
                 logger.warning(f"NaN Loss at step {step_cnt}. Resetting Buffer.")
@@ -272,7 +288,7 @@ def train(args):
             rheo_opt.step()
             
             loss_smooth = 0.9 * loss_smooth + 0.1 * loss.item()
-            pbar.set_description(f"L:{loss_smooth:.4f} Flow:{loss_flow.item():.4f}")
+            pbar.set_description(f"L:{loss_smooth:.4f} F:{loss_flow.item():.4f} C:{loss_contrast.item():.4f}")
             
             # Update Buffer & LTM
             if len(active_q) >= MAX_ATOMS // BATCH_SIZE: 
