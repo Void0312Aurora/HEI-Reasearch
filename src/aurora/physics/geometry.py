@@ -39,6 +39,9 @@ def mobius_add(x: torch.Tensor, y: torch.Tensor, c: float = 1.0) -> torch.Tensor
     num = (1 + 2*c*xy + c*y2) * x + (1 - c*x2) * y
     denom = 1 + 2*c*xy + c**2 * x2 * y2
     
+    # FIX: Patch A - Numerical Stability
+    denom = torch.clamp(denom, min=1e-5)
+    
     return num / (denom + EPS)
 
 def mobius_sub(x: torch.Tensor, y: torch.Tensor, c: float = 1.0) -> torch.Tensor:

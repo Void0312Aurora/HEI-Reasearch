@@ -61,21 +61,35 @@ class ForceField:
         diff = geometry.mobius_add(-q_i, q_j) 
         norm = torch.norm(diff, dim=-1)
         # d_ij = 2 atanh(norm)
-        d_ij = 2.0 * torch.atanh(torch.clamp(norm, max=1.0-1e-5))
+        norm_clamped = torch.clamp(norm, max=1.0 - 1e-4)
+        d_ij = 2.0 * torch.atanh(norm_clamped)
         
-        # Kernel
-        # Gaussian Kernel
+        # Gaussian Kernel (Attraction)
         sigma = 1.0
-        K = torch.exp(- (d_ij**2) / sigma)
+        K_att = torch.exp(- (d_ij**2) / sigma)
+
+        # FIX: Patch B - Mask distant interactions
+        mask_stable = d_ij < 5.0
+        K_att = K_att * mask_stable.float()
+        
+        # Hard Core Repulsion (Pauli Exclusion)
+        # Prevents "Black Hole" collapse.
+        # Short range, high energy.
+        sigma_core = 0.01
+        K_rep = torch.exp(- (d_ij**2) / sigma_core)
         
         # Mass product
         m_prod = m @ m.t() # (N, N)
         
-        E_mat = - self.G * m_prod * K
+        # V = - G * m_i m_j * K_att + G_core * K_rep
+        # Assume G_core = 10.0 * G (Strong repulsion at core)
+        G_core = 10.0 * self.G
         
-        # Mask diagonal
-        mask = torch.eye(N, device=q.device).bool()
-        E_mat.masked_fill_(mask, 0.0)
+        E_mat = (- self.G * m_prod * K_att) + (G_core * K_rep)
+        
+        # Mask diagonal (Self-interaction is 0)
+        mask_diag = torch.eye(N, device=q.device).bool()
+        E_mat.masked_fill_(mask_diag, 0.0)
         
         return 0.5 * E_mat.sum()
 
