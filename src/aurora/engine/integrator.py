@@ -1,134 +1,71 @@
 """
-Aurora Lie Group Integrator (CCD v3.1).
-=======================================
+Aurora Integrator (CCD v3.1)
+============================
 
-Evolves system state on TQ x g.
-q: Poincare Ball.
-p: Tangent Vector (Levi-Civita PT).
-J: Logic Charge (Gauge PT).
+Implements Axiom 2.4: Lie Group Integrator.
+Updates Dynamical State U(t) = (q, p, J, z) on the manifold.
 
-Ref: Axiom 2.4.1.
+Key Logic:
+1. q_{t+1} = Exp_q(v * dt)
+2. p_{t+1} = PT_{GM}(p_t) + F * dt  (Levi-Civita Transport)
+3. J_{t+1} = PT_{Gauge}(J_t)        (Wong Equation / Gauge Transport)
 """
 
 import torch
+import torch.nn as nn
 from ..physics import geometry
-from .forces import ForceField
 
 class LieIntegrator:
-    def __init__(self, force_field: ForceField):
-        self.forces = force_field
-        
-    def step(self, state: dict, dt: float = 0.01) -> dict:
+    def __init__(self, method='euler'):
+        self.method = method
+    
+    def step(self, q, p, J, m, force_field, dt=0.01):
         """
-        Perform one time step.
-        State: {
-            'q': (N, dim),
-            'p': (N, dim),
-            'J': (N, k, k),
-            'm': (N, 1)
-        }
+        Single step integration.
+        Args:
+            q: (B, D)
+            p: (B, D) Tangent vector at q
+            J: (B, D, D) Gauge charge
+            m: (B, 1) Mass
+            force_field: Module with .compute_forces() and .connection()
+            dt: Time step
+        Returns:
+            q_next, p_next, J_next
         """
-        q = state['q']
-        p = state['p']
-        J = state['J']
-        m = state['m']
+        # 1. Compute forces at current step (Gradient of Potential)
+        # F_tan = -Grad_R V
+        F_tan, _ = force_field.compute_forces(q, m, J)
         
-        # 1. Compute Forces at current step
-        # F_q: Tangent force
-        F_q, potential = self.forces.compute_forces(q, m, J)
+        # 2. Update Momentum (Symplectic-like: p += F * dt)
+        # Apply dissipative forces? F_diss = -gamma * p
+        gamma = 2.0 # Friction
+        p_star = p + (F_tan - gamma * p) * dt
         
-        # 2. Update Momentum (Half step for Euler, or Full for Euler)
-        # Simple Euler: p' = p + F * dt
-        p_new_est = p + F_q * dt
+        # 3. Update Position (Exponential Map)
+        # v = p / m? Or p is velocity?
+        # In current scaling, assume p is velocity-like (m=1 effective inertia) OR p_mass = p/m.
+        # Let's assume p is velocity direction (kinematic).
+        v = p_star # If p is velocity
         
-        # 3. Update Position
-        # q_next = Exp_q( dt * p )
-        # Must account for metric? ExpMap handles metric scaling inside.
-        # But 'p' is tangent vector. v = p? (Assuming mass=1 for kinematics, or v=p/m).
-        # Axiom: "Inertia term... by mass m".
-        # So v = p / m.
-        # Handling mass:
-        v = p_new_est / (m + 1e-4)
         q_next = geometry.exp_map(q, v * dt)
+        q_next = geometry.check_boundary(q_next)
         
-        # 4. Parallel Transport
-        # q -> q_next
+        # 4. Parallel Transport Momentum (Levi-Civita)
+        # Move p_star from T_q to T_{q_next}
+        p_next = geometry.parallel_transport(q, q_next, p_star)
         
-        # A. Momentum (Gyration)
-        # P_{q->q_next}(p) = Gyr[q_next, -q] p
-        p_transported = geometry.parallel_transport(q, q_next, p_new_est)
+        # 5. Parallel Transport Gauge Charge (Gauge Connection)
+        # J_next = PT_{gauge} J PT_{gauge}^T
+        # Compute relative movement for connection
+        # diff = -q (+) q_next
+        diff = geometry.mobius_add(-q, q_next)
         
-        # B. Charge (Gauge Transport)
-        # J_spatial = P(J) (Frame dragging)
-        J_spatial = state['J'] # Wait, J is attached to particle.
-        # It lives in fiber. Fiber is attached to base.
-        # If we move base, we must transport fiber frame.
-        # Assuming trivial bundle topology locally -> J values change by Gyration if they are vector-like?
-        # But J is in Lie Algebra. Is it a scalar (invariant) or vector in frame?
-        # Axiom 0.4: J \in g. Matrix.
-        # If it's in the tangent bundle (e.g. vector), it gyrates.
-        # If it's internal (isospin), it only changes via Gauge Field A.
-        # 3.1.2 says: "Logical charge J precession...".
-        # Let's assume J rotates with frame (Gyration) AND precesses (Wong).
-        # J acts on Tangent space vectors? Yes "Logic rotation".
-        # So J transforms like Tensor. J_new = R J R^T.
+        # Get matrix from connection net
+        pt_gauge = force_field.connection(diff) # (B, D, D)
         
-        # Gyrator R
-        # We need explicitly the rotation matrix of Gyration?
-        # Or just apply it to the basis?
-        # Only feasible if we implement `gyration_matrix`.
-        # For now, skip Gyration of J (assume scalar-like for prototype), 
-        # Focus on Wong Precession.
+        # Apply Adjoint action
+        # J: (B, D, D)
+        # PT: (B, D, D)
+        J_next = torch.matmul(pt_gauge, torch.matmul(J, pt_gauge.transpose(1, 2)))
         
-        # Wong: dJ/dt = -[A_eff, J]
-        # A_eff ~ sum_j PT(J_j)
-        # We compute A_eff
-        A_eff = self._compute_effective_A(q, J)
-        
-        # Commutator [A, J] = A J - J A
-        comm = torch.matmul(A_eff, J) - torch.matmul(J, A_eff)
-        
-        # Update J
-        # J_new = J - dt * comm
-        J_next = J - dt * comm
-        
-        return {
-            'q': geometry.check_boundary(q_next),
-            'p': p_transported,
-            'J': J_next,
-            'm': m,
-            'E': potential
-        }
-
-    def _compute_effective_A(self, q: torch.Tensor, J: torch.Tensor) -> torch.Tensor:
-        """
-        Approximate Effective Gauge Potential A seen by each particle.
-        A_i = sum_{j != i} PT_{j->i}(J_j) * K(d)
-        """
-        N = q.shape[0]
-        if N < 2: return torch.zeros_like(J)
-        
-        q_i = q.unsqueeze(1)
-        q_j = q.unsqueeze(0)
-        J_j = J.unsqueeze(0).expand(N, -1, -1, -1)
-        
-        # Transport J_j to i
-        # Using gyration approximation on each column of J?
-        # Too expensive.
-        # Prototype: Assume flat transport (A ~ sum J_j).
-        # Only valid locally.
-        
-        # Distance weight
-        diff = geometry.mobius_add(-q_i, q_j)
-        dist = torch.norm(diff, dim=-1, keepdim=True)
-        # Kernel
-        weight = torch.exp(-dist**2) # (N, N, 1)
-        
-        # Mask self
-        mask = torch.eye(N, device=q.device).unsqueeze(-1)
-        weight = weight * (1 - mask)
-        
-        # Weighted sum (N, N, 1, 1) * (1, N, k, k) -> (N, N, k, k) -> Sum over dim 1
-        weighted_J = weight.unsqueeze(-1) * J_j
-        A = weighted_J.sum(dim=1)
-        return A
+        return q_next, p_next, J_next

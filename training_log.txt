@@ -1,0 +1,401 @@
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] Loss: 0.4448 | R: 0.0000 P: -334.5555 Flow: 0.0324 Cons: 0.0278 Contr: 3.4893
+[Step 200] Loss: -79.2249 | R: 0.0000 P: -8438.4238 Flow: 0.0121 Cons: 0.0086 Contr: 5.0559
+[Step 300] Loss: -571.3208 | R: 0.0000 P: -57775.9062 Flow: 0.0046 Cons: 0.0012 Contr: 6.4093
+[Step 400] Loss: -1993.5266 | R: 0.0000 P: -200085.8438 Flow: 0.0041 Cons: 0.0022 Contr: 7.3000
+[Step 500] Loss: -5065.4731 | R: 0.0000 P: -507258.8750 Flow: 0.0048 Cons: 0.0102 Contr: 7.0404
+
+[Step 500] Probe: 好你你时外你与比、组不铃晓的米弥，金葱的
+[Step 600] Loss: -14445.9639 | R: 0.0000 P: -1445373.2500 Flow: 0.0094 Cons: 0.0195 Contr: 7.6244
+[Step 700] Loss: -41251.5859 | R: 0.0000 P: -4125913.7500 Flow: 0.0114 Cons: 0.0245 Contr: 7.3713
+[Step 800] Loss: -90020.0391 | R: 0.0000 P: -9002725.0000 Flow: 0.0103 Cons: 0.0252 Contr: 7.0346
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] Loss: -427.8339 | R: 0.0000 P: -43423.1484 Flow: 0.0058 Cons: 0.0024 Contr: 6.3564 | M: 0.7214
+[Step 200] Loss: -1381.6594 | R: 0.0000 P: -138870.1250 Flow: 0.0044 Cons: 0.0017 Contr: 7.0114 | M: 0.7245
+[Step 300] Loss: -4022.7324 | R: 0.0000 P: -403014.6562 Flow: 0.0047 Cons: 0.0077 Contr: 7.3520 | M: 0.7275
+[Step 400] Loss: -12097.1523 | R: 0.0000 P: -1210500.1250 Flow: 0.0065 Cons: 0.0196 Contr: 7.7184 | M: 0.7272
+[Step 500] Loss: -29159.1660 | R: 0.0000 P: -2916679.7500 Flow: 0.0099 Cons: 0.0271 Contr: 7.4467 | M: 0.7347
+
+[Step 500] Probe: 你日资你无、禅的阭阭的僐ǒ翻日跞跞激雅溴
+[Step 600] Loss: -78495.9922 | R: 0.0000 P: -7850401.0000 Flow: 0.0137 Cons: 0.0233 Contr: 7.8260 | M: 0.7289
+[Step 700] Loss: -202398.0625 | R: 0.0000 P: -20240574.0000 Flow: 0.0135 Cons: 0.0282 Contr: 7.4655 | M: 0.7391
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] Loss: 1.5881 | R: 0.0000 P: -267.4159 Flow: 0.0292 Cons: 0.0264 Contr: 3.9843 | M: 0.7003
+[Step 200] Loss: 1.3460 | R: 0.0000 P: -285.4897 Flow: 0.0264 Cons: 0.0258 Contr: 3.9401 | M: 0.6790
+[Step 300] Loss: 1.5964 | R: 0.0000 P: -276.3192 Flow: 0.0227 Cons: 0.0217 Contr: 4.1379 | M: 0.6642
+[Step 400] Loss: 1.2214 | R: 0.0000 P: -292.7780 Flow: 0.0220 Cons: 0.0215 Contr: 3.9315 | M: 0.6529
+[Step 500] Loss: 1.3532 | R: 0.0000 P: -290.0938 Flow: 0.0220 Cons: 0.0213 Contr: 4.0376 | M: 0.6414
+
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 600] Loss: 1.3529 | R: 0.0000 P: -295.2545 Flow: 0.0226 Cons: 0.0226 Contr: 4.0794 | M: 0.6230
+[Step 700] Loss: 1.2877 | R: 0.0000 P: -300.7383 Flow: 0.0223 Cons: 0.0225 Contr: 4.0710 | M: 0.6147
+[Step 800] Loss: 1.1918 | R: 0.0000 P: -304.1905 Flow: 0.0165 Cons: 0.0162 Contr: 4.0704 | M: 0.6134
+[Step 900] Loss: 1.2075 | R: 0.0000 P: -308.7570 Flow: 0.0213 Cons: 0.0212 Contr: 4.0829 | M: 0.6001
+[Step 1000] Loss: 1.1185 | R: 0.0000 P: -313.2271 Flow: 0.0222 Cons: 0.0227 Contr: 4.0261 | M: 0.5862
+
+[Step 1000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1100] Loss: 0.8234 | R: 0.0000 P: -323.6513 Flow: 0.0240 Cons: 0.0245 Contr: 3.8174 | M: 0.5822
+[Step 1200] Loss: 1.0884 | R: 0.0000 P: -331.0908 Flow: 0.0209 Cons: 0.0211 Contr: 4.1894 | M: 0.5738
+[Step 1300] Loss: 0.9013 | R: 0.0000 P: -333.0858 Flow: 0.0223 Cons: 0.0232 Contr: 4.0043 | M: 0.5687
+[Step 1400] Loss: 0.7892 | R: 0.0000 P: -335.4580 Flow: 0.0246 Cons: 0.0251 Contr: 3.8950 | M: 0.5596
+[Step 1500] Loss: 0.7584 | R: 0.0000 P: -347.2146 Flow: 0.0243 Cons: 0.0248 Contr: 3.9852 | M: 0.5568
+
+[Step 1500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1600] Loss: 0.7810 | R: 0.0000 P: -351.5509 Flow: 0.0173 Cons: 0.0179 Contr: 4.1205 | M: 0.5556
+[Step 1700] Loss: 0.7312 | R: 0.0000 P: -360.5674 Flow: 0.0214 Cons: 0.0222 Contr: 4.1190 | M: 0.5472
+[Step 1800] Loss: 0.5563 | R: 0.0000 P: -365.4062 Flow: 0.0208 Cons: 0.0214 Contr: 3.9991 | M: 0.5403
+[Step 1900] Loss: 0.3726 | R: 0.0000 P: -377.9710 Flow: 0.0169 Cons: 0.0176 Contr: 3.9796 | M: 0.5464
+[Step 2000] Loss: 0.1642 | R: 0.0000 P: -384.4482 Flow: 0.0226 Cons: 0.0231 Contr: 3.7800 | M: 0.5396
+
+[Step 2000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2100] Loss: 0.3771 | R: 0.0000 P: -389.2934 Flow: 0.0205 Cons: 0.0212 Contr: 4.0614 | M: 0.5362
+[Step 2200] Loss: 0.3045 | R: 0.0000 P: -399.2045 Flow: 0.0211 Cons: 0.0218 Contr: 4.0820 | M: 0.5340
+[Step 2300] Loss: 0.1716 | R: 0.0000 P: -400.4096 Flow: 0.0239 Cons: 0.0245 Contr: 3.9339 | M: 0.5325
+[Step 2400] Loss: 0.2052 | R: 0.0000 P: -407.4806 Flow: 0.0222 Cons: 0.0228 Contr: 4.0551 | M: 0.5315
+[Step 2500] Loss: 0.1038 | R: 0.0000 P: -409.4478 Flow: 0.0220 Cons: 0.0227 Contr: 3.9751 | M: 0.5330
+
+[Step 2500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2600] Loss: 0.2578 | R: 0.0000 P: -410.7126 Flow: 0.0203 Cons: 0.0211 Contr: 4.1580 | M: 0.5326
+[Step 2700] Loss: -0.0238 | R: 0.0000 P: -420.5472 Flow: 0.0195 Cons: 0.0200 Contr: 3.9839 | M: 0.5299
+[Step 2800] Loss: 0.0230 | R: 0.0000 P: -420.7636 Flow: 0.0238 Cons: 0.0244 Contr: 3.9896 | M: 0.5274
+[Step 2900] Loss: -0.1932 | R: 0.0000 P: -433.5595 Flow: 0.0234 Cons: 0.0240 Contr: 3.9052 | M: 0.5245
+[Step 3000] Loss: -0.1733 | R: 0.0000 P: -446.0826 Flow: 0.0214 Cons: 0.0219 Contr: 4.0711 | M: 0.5267
+
+[Step 3000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3100] Loss: -0.2093 | R: 0.0000 P: -444.4857 Flow: 0.0213 Cons: 0.0221 Contr: 4.0181 | M: 0.5238
+[Step 3200] Loss: -0.2460 | R: 0.0000 P: -454.9504 Flow: 0.0180 Cons: 0.0189 Contr: 4.1187 | M: 0.5237
+[Step 3300] Loss: -0.2386 | R: 0.0000 P: -461.9405 Flow: 0.0196 Cons: 0.0202 Contr: 4.1817 | M: 0.5234
+[Step 3400] Loss: -0.2968 | R: 0.0000 P: -459.1547 Flow: 0.0190 Cons: 0.0194 Contr: 4.1026 | M: 0.5246
+[Step 3500] Loss: -0.2196 | R: 0.0000 P: -464.3641 Flow: 0.0188 Cons: 0.0195 Contr: 4.2321 | M: 0.5296
+
+[Step 3500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3600] Loss: -0.2416 | R: 0.0000 P: -456.1207 Flow: 0.0184 Cons: 0.0187 Contr: 4.1341 | M: 0.5248
+[Step 3700] Loss: -0.3833 | R: 0.0000 P: -453.4299 Flow: 0.0246 Cons: 0.0253 Contr: 3.9019 | M: 0.5233
+[Step 3800] Loss: -0.3532 | R: 0.0000 P: -463.8144 Flow: 0.0226 Cons: 0.0233 Contr: 4.0557 | M: 0.5277
+[Step 3900] Loss: -0.5195 | R: 0.0000 P: -470.2383 Flow: 0.0231 Cons: 0.0236 Contr: 3.9492 | M: 0.5242
+[Step 4000] Loss: -0.3883 | R: 0.0000 P: -487.3920 Flow: 0.0192 Cons: 0.0197 Contr: 4.2912 | M: 0.5252
+
+[Step 4000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4100] Loss: -0.4055 | R: 0.0000 P: -477.9852 Flow: 0.0206 Cons: 0.0211 Contr: 4.1655 | M: 0.5294
+[Step 4200] Loss: -0.4424 | R: 0.0000 P: -466.0692 Flow: 0.0215 Cons: 0.0221 Contr: 4.0003 | M: 0.5289
+[Step 4300] Loss: -0.3344 | R: 0.0000 P: -471.2621 Flow: 0.0206 Cons: 0.0209 Contr: 4.1704 | M: 0.5309
+[Step 4400] Loss: -0.4164 | R: 0.0000 P: -453.7969 Flow: 0.0213 Cons: 0.0217 Contr: 3.9063 | M: 0.5327
+[Step 4500] Loss: -0.3736 | R: 0.0000 P: -455.7429 Flow: 0.0243 Cons: 0.0248 Contr: 3.9385 | M: 0.5310
+
+[Step 4500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4600] Loss: -0.3606 | R: 0.0000 P: -475.8747 Flow: 0.0195 Cons: 0.0202 Contr: 4.1993 | M: 0.5340
+[Step 4700] Loss: -0.2666 | R: 0.0000 P: -465.3389 Flow: 0.0197 Cons: 0.0203 Contr: 4.1868 | M: 0.5368
+[Step 4800] Loss: -0.3059 | R: 0.0000 P: -456.4967 Flow: 0.0216 Cons: 0.0222 Contr: 4.0403 | M: 0.5336
+[Step 4900] Loss: -0.2476 | R: 0.0000 P: -464.3747 Flow: 0.0210 Cons: 0.0216 Contr: 4.1829 | M: 0.5359
+[Step 5000] Loss: -0.2825 | R: 0.0000 P: -461.8079 Flow: 0.0206 Cons: 0.0212 Contr: 4.1267 | M: 0.5396
+
+[Step 5000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5100] Loss: -0.0968 | R: 0.0000 P: -445.4484 Flow: 0.0197 Cons: 0.0200 Contr: 4.1596 | M: 0.5458
+[Step 5200] Loss: -0.1147 | R: 0.0000 P: -450.0456 Flow: 0.0222 Cons: 0.0227 Contr: 4.1612 | M: 0.5404
+[Step 5300] Loss: -0.0765 | R: 0.0000 P: -446.4310 Flow: 0.0172 Cons: 0.0175 Contr: 4.2147 | M: 0.5453
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] Loss: 0.7830 | R: 0.0000 P: -261.3680 Flow: 0.0354 Cons: 0.0324 Contr: 3.0577 | M: 0.6989
+[Step 200] Loss: 0.5773 | R: 0.0000 P: -280.0898 Flow: 0.0332 Cons: 0.0305 Contr: 3.0599 | M: 0.6838
+[Step 300] Loss: 0.6956 | R: 0.0000 P: -267.3909 Flow: 0.0321 Cons: 0.0309 Contr: 3.0546 | M: 0.6674
+[Step 400] Loss: 0.4980 | R: 0.0000 P: -280.9557 Flow: 0.0309 Cons: 0.0291 Contr: 3.0073 | M: 0.6594
+[Step 500] Loss: 0.6353 | R: 0.0000 P: -277.6075 Flow: 0.0345 Cons: 0.0336 Contr: 3.0708 | M: 0.6454
+
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 600] Loss: 0.5408 | R: 0.0000 P: -278.6587 Flow: 0.0337 Cons: 0.0321 Contr: 2.9983 | M: 0.6393
+[Step 700] Loss: 0.6176 | R: 0.0000 P: -280.4263 Flow: 0.0286 Cons: 0.0284 Contr: 3.1368 | M: 0.6307
+[Step 800] Loss: 0.4903 | R: 0.0000 P: -283.4631 Flow: 0.0255 Cons: 0.0247 Contr: 3.0739 | M: 0.6266
+[Step 900] Loss: 0.4863 | R: 0.0000 P: -280.9747 Flow: 0.0306 Cons: 0.0304 Contr: 2.9909 | M: 0.6211
+[Step 1000] Loss: 0.5836 | R: 0.0000 P: -282.1366 Flow: 0.0305 Cons: 0.0307 Contr: 3.0989 | M: 0.6141
+
+[Step 1000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1100] Loss: 0.4806 | R: 0.0000 P: -289.7504 Flow: 0.0293 Cons: 0.0286 Contr: 3.0883 | M: 0.6085
+[Step 1200] Loss: 0.5292 | R: 0.0000 P: -291.8401 Flow: 0.0290 Cons: 0.0288 Contr: 3.1587 | M: 0.5981
+[Step 1300] Loss: 0.5718 | R: 0.0000 P: -286.6005 Flow: 0.0316 Cons: 0.0313 Contr: 3.1233 | M: 0.6042
+[Step 1400] Loss: 0.5995 | R: 0.0000 P: -286.1692 Flow: 0.0301 Cons: 0.0302 Contr: 3.1593 | M: 0.5978
+[Step 1500] Loss: 0.5671 | R: 0.0000 P: -294.3178 Flow: 0.0287 Cons: 0.0284 Contr: 3.2250 | M: 0.5897
+
+[Step 1500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1600] Loss: 0.4187 | R: 0.0000 P: -289.8148 Flow: 0.0284 Cons: 0.0280 Contr: 3.0348 | M: 0.5925
+[Step 1700] Loss: 0.6879 | R: 0.0000 P: -287.0456 Flow: 0.0278 Cons: 0.0279 Contr: 3.2800 | M: 0.5859
+[Step 1800] Loss: 0.4318 | R: 0.0000 P: -294.5896 Flow: 0.0304 Cons: 0.0309 Contr: 3.0715 | M: 0.5820
+[Step 1900] Loss: 0.3471 | R: 0.0000 P: -290.6428 Flow: 0.0211 Cons: 0.0215 Contr: 3.0403 | M: 0.5853
+[Step 2000] Loss: 0.0894 | R: 0.0000 P: -309.2845 Flow: 0.0316 Cons: 0.0317 Contr: 2.8658 | M: 0.5866
+
+[Step 2000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2100] Loss: 0.5847 | R: 0.0000 P: -292.3154 Flow: 0.0256 Cons: 0.0255 Contr: 3.2523 | M: 0.5825
+[Step 2200] Loss: 0.5671 | R: 0.0000 P: -294.4746 Flow: 0.0294 Cons: 0.0302 Contr: 3.2140 | M: 0.5816
+[Step 2300] Loss: 0.4155 | R: 0.0000 P: -296.3839 Flow: 0.0334 Cons: 0.0338 Contr: 3.0431 | M: 0.5799
+[Step 2400] Loss: 0.4203 | R: 0.0000 P: -298.0224 Flow: 0.0250 Cons: 0.0254 Contr: 3.1483 | M: 0.5801
+[Step 2500] Loss: 0.1819 | R: 0.0000 P: -304.6259 Flow: 0.0315 Cons: 0.0314 Contr: 2.9136 | M: 0.5832
+
+[Step 2500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2600] Loss: 0.4677 | R: 0.0000 P: -295.4376 Flow: 0.0281 Cons: 0.0287 Contr: 3.1381 | M: 0.5806
+[Step 2700] Loss: 0.4759 | R: 0.0000 P: -295.6547 Flow: 0.0305 Cons: 0.0310 Contr: 3.1246 | M: 0.5801
+[Step 2800] Loss: 0.5445 | R: 0.0000 P: -296.5923 Flow: 0.0286 Cons: 0.0290 Contr: 3.2221 | M: 0.5792
+[Step 2900] Loss: 0.4258 | R: 0.0000 P: -293.0253 Flow: 0.0312 Cons: 0.0317 Contr: 3.0412 | M: 0.5781
+[Step 3000] Loss: 0.3950 | R: 0.0000 P: -294.9208 Flow: 0.0319 Cons: 0.0323 Contr: 3.0233 | M: 0.5816
+
+[Step 3000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3100] Loss: 0.5119 | R: 0.0000 P: -298.5170 Flow: 0.0297 Cons: 0.0301 Contr: 3.1980 | M: 0.5784
+[Step 3200] Loss: 0.3892 | R: 0.0000 P: -296.6831 Flow: 0.0313 Cons: 0.0318 Contr: 3.0405 | M: 0.5813
+[Step 3300] Loss: 0.6254 | R: 0.0000 P: -291.0452 Flow: 0.0309 Cons: 0.0312 Contr: 3.2253 | M: 0.5789
+[Step 3400] Loss: 0.5241 | R: 0.0000 P: -289.9711 Flow: 0.0332 Cons: 0.0338 Contr: 3.0889 | M: 0.5808
+[Step 3500] Loss: 0.6279 | R: 0.0000 P: -288.6145 Flow: 0.0282 Cons: 0.0284 Contr: 3.2313 | M: 0.5828
+
+[Step 3500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3600] Loss: 0.4770 | R: 0.0000 P: -293.9542 Flow: 0.0284 Cons: 0.0289 Contr: 3.1301 | M: 0.5821
+[Step 3700] Loss: 0.5054 | R: 0.0000 P: -298.0180 Flow: 0.0303 Cons: 0.0309 Contr: 3.1799 | M: 0.5853
+[Step 3800] Loss: 0.5744 | R: 0.0000 P: -291.2922 Flow: 0.0298 Cons: 0.0303 Contr: 3.1868 | M: 0.5842
+[Step 3900] Loss: 0.5138 | R: 0.0000 P: -291.5233 Flow: 0.0310 Cons: 0.0313 Contr: 3.1176 | M: 0.5822
+[Step 4000] Loss: 0.6485 | R: 0.0000 P: -283.9073 Flow: 0.0318 Cons: 0.0324 Contr: 3.1665 | M: 0.5867
+
+[Step 4000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4100] Loss: 0.6220 | R: 0.0000 P: -286.0028 Flow: 0.0311 Cons: 0.0316 Contr: 3.1683 | M: 0.5873
+[Step 4200] Loss: 0.5607 | R: 0.0000 P: -292.0811 Flow: 0.0296 Cons: 0.0298 Contr: 3.1842 | M: 0.5855
+[Step 4300] Loss: 0.5751 | R: 0.0000 P: -288.4067 Flow: 0.0287 Cons: 0.0293 Contr: 3.1690 | M: 0.5880
+[Step 4400] Loss: 0.2783 | R: 0.0000 P: -297.7145 Flow: 0.0356 Cons: 0.0359 Contr: 2.8979 | M: 0.5910
+[Step 4500] Loss: 0.6003 | R: 0.0000 P: -289.0677 Flow: 0.0294 Cons: 0.0299 Contr: 3.1946 | M: 0.5888
+
+[Step 4500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4600] Loss: 0.6471 | R: 0.0000 P: -286.8983 Flow: 0.0312 Cons: 0.0316 Contr: 3.2016 | M: 0.5925
+[Step 4700] Loss: 0.5476 | R: 0.0000 P: -286.9241 Flow: 0.0310 Cons: 0.0313 Contr: 3.1052 | M: 0.5946
+[Step 4800] Loss: 0.4572 | R: 0.0000 P: -291.7672 Flow: 0.0308 Cons: 0.0311 Contr: 3.0655 | M: 0.5945
+[Step 4900] Loss: 0.7318 | R: 0.0000 P: -282.0529 Flow: 0.0291 Cons: 0.0298 Contr: 3.2578 | M: 0.5941
+[Step 5000] Loss: 0.7313 | R: 0.0000 P: -281.4263 Flow: 0.0308 Cons: 0.0313 Contr: 3.2351 | M: 0.5953
+
+[Step 5000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5100] Loss: 0.5701 | R: 0.0000 P: -285.1539 Flow: 0.0259 Cons: 0.0264 Contr: 3.1604 | M: 0.5992
+[Step 5200] Loss: 0.7597 | R: 0.0000 P: -281.9377 Flow: 0.0300 Cons: 0.0305 Contr: 3.2768 | M: 0.5984
+[Step 5300] Loss: 0.6132 | R: 0.0000 P: -285.7810 Flow: 0.0281 Cons: 0.0283 Contr: 3.1886 | M: 0.6010
+[Step 5400] Loss: 0.8492 | R: 0.0000 P: -277.3134 Flow: 0.0303 Cons: 0.0306 Contr: 3.3179 | M: 0.6003
+[Step 5500] Loss: 0.7172 | R: 0.0000 P: -281.2241 Flow: 0.0294 Cons: 0.0297 Contr: 3.2338 | M: 0.6020
+
+[Step 5500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5600] Loss: 0.6261 | R: 0.0000 P: -280.5206 Flow: 0.0309 Cons: 0.0313 Contr: 3.1205 | M: 0.6039
+[Step 5700] Loss: 0.6697 | R: 0.0000 P: -283.3060 Flow: 0.0222 Cons: 0.0225 Contr: 3.2794 | M: 0.6045
+[Step 5800] Loss: 0.7226 | R: 0.0000 P: -285.2120 Flow: 0.0277 Cons: 0.0280 Contr: 3.2962 | M: 0.6070
+[Step 5900] Loss: 0.7794 | R: 0.0000 P: -279.9140 Flow: 0.0295 Cons: 0.0298 Contr: 3.2824 | M: 0.6071
+[Step 6000] Loss: 0.9068 | R: 0.0000 P: -269.9065 Flow: 0.0300 Cons: 0.0305 Contr: 3.3034 | M: 0.6067
+
+[Step 6000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6100] Loss: 0.7013 | R: 0.0000 P: -279.4793 Flow: 0.0267 Cons: 0.0269 Contr: 3.2284 | M: 0.6091
+[Step 6200] Loss: 0.6571 | R: 0.0000 P: -278.5617 Flow: 0.0276 Cons: 0.0277 Contr: 3.1663 | M: 0.6119
+[Step 6300] Loss: 0.4225 | R: 0.0000 P: -285.2827 Flow: 0.0201 Cons: 0.0202 Contr: 3.0736 | M: 0.6127
+[Step 6400] Loss: 0.6503 | R: 0.0000 P: -288.4265 Flow: 0.0293 Cons: 0.0296 Contr: 3.2399 | M: 0.6133
+[Step 6500] Loss: 0.9227 | R: 0.0000 P: -279.8074 Flow: 0.0292 Cons: 0.0296 Contr: 3.4269 | M: 0.6134
+
+[Step 6500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6600] Loss: 0.8192 | R: 0.0000 P: -279.7525 Flow: 0.0220 Cons: 0.0223 Contr: 3.3952 | M: 0.6150
+[Step 6700] Loss: 0.6232 | R: 0.0000 P: -281.4844 Flow: 0.0292 Cons: 0.0293 Contr: 3.1458 | M: 0.6165
+[Step 6800] Loss: 0.8423 | R: 0.0000 P: -281.5018 Flow: 0.0247 Cons: 0.0249 Contr: 3.4089 | M: 0.6172
+[Step 6900] Loss: 0.7993 | R: 0.0000 P: -273.7164 Flow: 0.0297 Cons: 0.0300 Contr: 3.2380 | M: 0.6173
+[Step 7000] Loss: 0.8298 | R: 0.0000 P: -281.4168 Flow: 0.0324 Cons: 0.0327 Contr: 3.3182 | M: 0.6193
+
+[Step 7000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 7100] Loss: 0.8893 | R: 0.0000 P: -280.0829 Flow: 0.0299 Cons: 0.0302 Contr: 3.3896 | M: 0.6200
+[Step 7200] Loss: 0.9223 | R: 0.0000 P: -272.9365 Flow: 0.0307 Cons: 0.0310 Contr: 3.3431 | M: 0.6207
+[Step 7300] Loss: 0.8076 | R: 0.0000 P: -273.9471 Flow: 0.0299 Cons: 0.0302 Contr: 3.2465 | M: 0.6211
+[Step 7400] Loss: 0.9306 | R: 0.0000 P: -276.8821 Flow: 0.0217 Cons: 0.0219 Contr: 3.4814 | M: 0.6234
+[Step 7500] Loss: 0.9272 | R: 0.0000 P: -276.6103 Flow: 0.0291 Cons: 0.0294 Contr: 3.4012 | M: 0.6244
+
+[Step 7500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 7600] Loss: 0.9269 | R: 0.0000 P: -271.7562 Flow: 0.0293 Cons: 0.0295 Contr: 3.3505 | M: 0.6247
+[Step 7700] Loss: 0.9466 | R: 0.0000 P: -272.6826 Flow: 0.0295 Cons: 0.0298 Contr: 3.3772 | M: 0.6257
+[Step 7800] Loss: 0.9123 | R: 0.0000 P: -280.1464 Flow: 0.0327 Cons: 0.0329 Contr: 3.3857 | M: 0.6266
+[Step 7900] Loss: 0.8411 | R: 0.0000 P: -277.0114 Flow: 0.0217 Cons: 0.0219 Contr: 3.3931 | M: 0.6277
+[Step 8000] Loss: 0.9394 | R: 0.0000 P: -275.9489 Flow: 0.0263 Cons: 0.0266 Contr: 3.4341 | M: 0.6285
+
+[Step 8000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 8100] Loss: 0.8908 | R: 0.0000 P: -273.5106 Flow: 0.0288 Cons: 0.0290 Contr: 3.3371 | M: 0.6293
+[Step 8200] Loss: 0.9382 | R: 0.0000 P: -271.5909 Flow: 0.0296 Cons: 0.0299 Contr: 3.3569 | M: 0.6305
+[Step 8300] Loss: 0.7557 | R: 0.0000 P: -276.6569 Flow: 0.0287 Cons: 0.0290 Contr: 3.2340 | M: 0.6322
+[Step 8400] Loss: 0.9236 | R: 0.0000 P: -276.7556 Flow: 0.0250 Cons: 0.0252 Contr: 3.4404 | M: 0.6324
+[Step 8500] Loss: 1.0047 | R: 0.0000 P: -275.9187 Flow: 0.0270 Cons: 0.0273 Contr: 3.4924 | M: 0.6328
+
+[Step 8500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 8600] Loss: 1.0146 | R: 0.0000 P: -276.5554 Flow: 0.0266 Cons: 0.0269 Contr: 3.5125 | M: 0.6336
+[Step 8700] Loss: 1.0496 | R: 0.0000 P: -271.0713 Flow: 0.0302 Cons: 0.0305 Contr: 3.4565 | M: 0.6347
+[Step 8800] Loss: 1.0977 | R: 0.0000 P: -272.9759 Flow: 0.0296 Cons: 0.0299 Contr: 3.5296 | M: 0.6354
+[Step 8900] Loss: 0.8274 | R: 0.0000 P: -272.9706 Flow: 0.0155 Cons: 0.0155 Contr: 3.4023 | M: 0.6372
+[Step 9000] Loss: 1.2661 | R: 0.0000 P: -266.4489 Flow: 0.0293 Cons: 0.0296 Contr: 3.6358 | M: 0.6370
+
+[Step 9000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 9100] Loss: 1.0479 | R: 0.0000 P: -280.4276 Flow: 0.0267 Cons: 0.0269 Contr: 3.5842 | M: 0.6377
+[Step 9200] Loss: 1.1138 | R: 0.0000 P: -273.9226 Flow: 0.0289 Cons: 0.0291 Contr: 3.5629 | M: 0.6383
+[Step 9300] Loss: 1.2126 | R: 0.0000 P: -272.0355 Flow: 0.0279 Cons: 0.0282 Contr: 3.6523 | M: 0.6392
+[Step 9400] Loss: 1.0797 | R: 0.0000 P: -271.7247 Flow: 0.0311 Cons: 0.0313 Contr: 3.4853 | M: 0.6404
+[Step 9500] Loss: 1.2127 | R: 0.0000 P: -271.9941 Flow: 0.0292 Cons: 0.0295 Contr: 3.6389 | M: 0.6408
+
+[Step 9500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 9600] Loss: 1.2356 | R: 0.0000 P: -270.5753 Flow: 0.0309 Cons: 0.0312 Contr: 3.6308 | M: 0.6418
+[Step 9700] Loss: 1.3848 | R: 0.0000 P: -264.8096 Flow: 0.0300 Cons: 0.0302 Contr: 3.7318 | M: 0.6419
+[Step 9800] Loss: 1.1731 | R: 0.0000 P: -269.8381 Flow: 0.0268 Cons: 0.0270 Contr: 3.6023 | M: 0.6427
+[Step 9900] Loss: 1.2950 | R: 0.0000 P: -272.0558 Flow: 0.0290 Cons: 0.0293 Contr: 3.7241 | M: 0.6434
+[Step 10000] Loss: 1.3494 | R: 0.0000 P: -270.7678 Flow: 0.0294 Cons: 0.0296 Contr: 3.7623 | M: 0.6444
+
+[Step 10000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 10100] Loss: 1.1348 | R: 0.0000 P: -272.2536 Flow: 0.0261 Cons: 0.0263 Contr: 3.5955 | M: 0.6448
+[Step 10200] Loss: 1.4706 | R: 0.0000 P: -274.4037 Flow: 0.0266 Cons: 0.0267 Contr: 3.9478 | M: 0.6455
+[Step 10300] Loss: 1.4239 | R: 0.0000 P: -264.7316 Flow: 0.0278 Cons: 0.0280 Contr: 3.7922 | M: 0.6459
+[Step 10400] Loss: 1.5683 | R: 0.0000 P: -268.0923 Flow: 0.0295 Cons: 0.0297 Contr: 3.9536 | M: 0.6473
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] Loss: 1.7863 | R: 0.0000 P: -242.8135 Flow: 0.0259 Cons: 0.0233 Contr: 3.9683 | M: 0.7253
+[Step 200] Loss: 1.5051 | R: 0.0000 P: -263.5241 Flow: 0.0279 Cons: 0.0262 Contr: 3.8694 | M: 0.7031
+[Step 300] Loss: 1.7063 | R: 0.0000 P: -250.1702 Flow: 0.0254 Cons: 0.0242 Contr: 3.9598 | M: 0.6863
+[Step 400] Loss: 1.2175 | R: 0.0000 P: -266.3612 Flow: 0.0234 Cons: 0.0227 Contr: 3.6509 | M: 0.6639
+[Step 500] Loss: 1.5115 | R: 0.0000 P: -260.7375 Flow: 0.0245 Cons: 0.0238 Contr: 3.8777 | M: 0.6494
+
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] L:1.62 | V_all: M 2.2 G -0.5 Geo -304.0 Ch 56.3 Rot 0.2 | C:3.83
+[Step 200] L:1.44 | V_all: M 1.4 G -0.4 Geo -320.5 Ch 53.0 Rot 0.2 | C:3.87
+[Step 300] L:1.77 | V_all: M 1.9 G -0.5 Geo -304.2 Ch 51.2 Rot 0.1 | C:4.05
+[Step 400] L:1.40 | V_all: M 1.5 G -0.4 Geo -317.6 Ch 48.5 Rot 0.1 | C:3.87
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] L:4.66 | V_all: M 2.0 G -0.5 Geo -3.0 Ch 52.7 Rot 0.2 | C:3.88
+[Step 200] L:4.50 | V_all: M 1.3 G -0.4 Geo -3.2 Ch 50.1 Rot 0.1 | C:3.76
+[Step 300] L:4.62 | V_all: M 1.9 G -0.5 Geo -3.0 Ch 48.6 Rot 0.1 | C:3.90
+[Step 400] L:4.44 | V_all: M 1.5 G -0.4 Geo -3.2 Ch 46.3 Rot 0.1 | C:3.75
+[Step 500] L:4.46 | V_all: M 1.8 G -0.4 Geo -3.1 Ch 44.3 Rot 0.1 | C:3.79
+
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 600] L:4.52 | V_all: M 2.2 G -0.4 Geo -3.1 Ch 42.8 Rot 0.1 | C:3.85
+[Step 700] L:4.41 | V_all: M 1.7 G -0.4 Geo -3.1 Ch 41.5 Rot 0.1 | C:3.77
+[Step 800] L:4.30 | V_all: M 0.7 G -0.4 Geo -3.1 Ch 40.2 Rot 0.1 | C:3.73
+[Step 900] L:4.59 | V_all: M 2.0 G -0.4 Geo -3.1 Ch 39.6 Rot 0.1 | C:4.00
+[Step 1000] L:4.49 | V_all: M 2.3 G -0.4 Geo -3.1 Ch 38.1 Rot 0.1 | C:3.89
+
+[Step 1000] Probe: 好好好好好好好好好好好好好好好好好好好好
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] L:3.63 | V_all: M 2.2 G -0.3 Geo -3.0 Ch 56.8 Rot 0.2 | C:3.29
+[Step 200] L:3.61 | V_all: M 1.6 G -0.3 Geo -3.2 Ch 56.8 Rot 0.2 | C:3.29
+[Step 300] L:3.81 | V_all: M 2.1 G -0.3 Geo -3.0 Ch 56.9 Rot 0.1 | C:3.52
+[Step 400] L:3.54 | V_all: M 1.9 G -0.3 Geo -3.2 Ch 56.8 Rot 0.1 | C:3.24
+[Step 500] L:3.67 | V_all: M 2.2 G -0.3 Geo -3.1 Ch 56.6 Rot 0.1 | C:3.37
+
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 600] L:3.73 | V_all: M 2.8 G -0.3 Geo -3.1 Ch 56.6 Rot 0.1 | C:3.44
+[Step 700] L:3.68 | V_all: M 2.3 G -0.3 Geo -3.1 Ch 56.6 Rot 0.1 | C:3.41
+[Step 800] L:3.35 | V_all: M 1.0 G -0.3 Geo -3.1 Ch 57.1 Rot 0.1 | C:3.14
+[Step 900] L:3.53 | V_all: M 2.7 G -0.3 Geo -3.1 Ch 56.9 Rot 0.1 | C:3.30
+[Step 1000] L:3.70 | V_all: M 3.3 G -0.3 Geo -3.1 Ch 57.0 Rot 0.1 | C:3.43
+
+[Step 1000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1100] L:3.49 | V_all: M 4.0 G -0.3 Geo -3.2 Ch 56.7 Rot 0.1 | C:3.19
+[Step 1200] L:3.62 | V_all: M 1.2 G -0.2 Geo -3.2 Ch 56.7 Rot 0.1 | C:3.34
+[Step 1300] L:3.55 | V_all: M 1.3 G -0.3 Geo -3.1 Ch 56.8 Rot 0.1 | C:3.23
+[Step 1400] L:3.72 | V_all: M 1.7 G -0.3 Geo -3.1 Ch 56.7 Rot 0.1 | C:3.41
+[Step 1500] L:3.63 | V_all: M 1.5 G -0.2 Geo -3.1 Ch 56.7 Rot 0.1 | C:3.35
+
+[Step 1500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1600] L:3.37 | V_all: M 1.4 G -0.2 Geo -3.1 Ch 56.6 Rot 0.1 | C:3.13
+[Step 1700] L:3.66 | V_all: M 2.0 G -0.3 Geo -3.0 Ch 56.9 Rot 0.1 | C:3.37
+[Step 1800] L:3.68 | V_all: M 2.2 G -0.2 Geo -3.1 Ch 57.1 Rot 0.1 | C:3.40
+[Step 1900] L:3.49 | V_all: M 3.7 G -0.3 Geo -3.1 Ch 56.8 Rot 0.1 | C:3.26
+[Step 2000] L:3.65 | V_all: M 0.8 G -0.2 Geo -3.3 Ch 56.4 Rot 0.1 | C:3.35
+
+[Step 2000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2100] L:4.22 | V_all: M 1.2 G -0.2 Geo -3.1 Ch 56.2 Rot 0.1 | C:3.39
+[Step 2200] L:4.79 | V_all: M 2.2 G -0.2 Geo -3.1 Ch 54.9 Rot 0.1 | C:3.43
+[Step 2300] L:5.17 | V_all: M 1.2 G -0.2 Geo -3.1 Ch 53.1 Rot 0.1 | C:3.33
+[Step 2400] L:5.60 | V_all: M 1.4 G -0.2 Geo -3.2 Ch 50.8 Rot 0.1 | C:3.39
+[Step 2500] L:6.02 | V_all: M 3.0 G -0.2 Geo -3.2 Ch 48.1 Rot 0.1 | C:3.31
+
+[Step 2500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2600] L:6.20 | V_all: M 1.1 G -0.2 Geo -3.1 Ch 44.9 Rot 0.1 | C:3.36
+[Step 2700] L:6.34 | V_all: M 1.2 G -0.2 Geo -3.1 Ch 41.9 Rot 0.1 | C:3.31
+[Step 2800] L:6.65 | V_all: M 1.7 G -0.2 Geo -3.1 Ch 39.2 Rot 0.1 | C:3.34
+[Step 2900] L:6.80 | V_all: M 1.0 G -0.2 Geo -3.1 Ch 36.2 Rot 0.1 | C:3.45
+[Step 3000] L:6.78 | V_all: M 1.3 G -0.2 Geo -3.1 Ch 33.5 Rot 0.1 | C:3.31
+
+[Step 3000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3100] L:6.55 | V_all: M 0.7 G -0.2 Geo -3.1 Ch 31.4 Rot 0.1 | C:3.40
+[Step 3200] L:6.18 | V_all: M 1.0 G -0.2 Geo -3.1 Ch 29.5 Rot 0.1 | C:3.11
+[Step 3300] L:6.24 | V_all: M 0.5 G -0.2 Geo -3.1 Ch 28.2 Rot 0.1 | C:3.42
+[Step 3400] L:6.18 | V_all: M 0.7 G -0.2 Geo -3.1 Ch 27.1 Rot 0.1 | C:3.45
+[Step 3500] L:6.10 | V_all: M 1.8 G -0.2 Geo -3.1 Ch 26.2 Rot 0.0 | C:3.32
+
+[Step 3500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3600] L:5.89 | V_all: M 0.4 G -0.2 Geo -3.1 Ch 25.2 Rot 0.0 | C:3.39
+[Step 3700] L:5.84 | V_all: M 0.9 G -0.2 Geo -3.2 Ch 24.5 Rot 0.0 | C:3.34
+[Step 3800] L:5.69 | V_all: M 0.6 G -0.2 Geo -3.1 Ch 24.0 Rot 0.0 | C:3.25
+[Step 3900] L:5.78 | V_all: M 0.5 G -0.2 Geo -3.1 Ch 23.5 Rot 0.0 | C:3.45
+[Step 4000] L:5.82 | V_all: M 1.1 G -0.2 Geo -3.0 Ch 22.9 Rot 0.0 | C:3.40
+
+[Step 4000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4100] L:5.81 | V_all: M 1.1 G -0.2 Geo -3.0 Ch 22.5 Rot 0.0 | C:3.47
+[Step 4200] L:5.68 | V_all: M 0.6 G -0.2 Geo -3.1 Ch 22.4 Rot 0.0 | C:3.42
+[Step 4300] L:5.65 | V_all: M 0.6 G -0.2 Geo -3.1 Ch 22.1 Rot 0.0 | C:3.40
+[Step 4400] L:5.49 | V_all: M 0.4 G -0.1 Geo -3.2 Ch 22.0 Rot 0.0 | C:3.32
+[Step 4500] L:5.71 | V_all: M 0.5 G -0.2 Geo -3.1 Ch 21.7 Rot 0.0 | C:3.53
+
+[Step 4500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4600] L:5.71 | V_all: M 0.6 G -0.2 Geo -3.1 Ch 21.6 Rot 0.0 | C:3.56
+[Step 4700] L:5.49 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 21.6 Rot 0.0 | C:3.29
+[Step 4800] L:5.39 | V_all: M 0.3 G -0.1 Geo -3.2 Ch 21.4 Rot 0.0 | C:3.23
+[Step 4900] L:5.52 | V_all: M 0.8 G -0.1 Geo -3.0 Ch 21.3 Rot 0.0 | C:3.32
+[Step 5000] L:5.55 | V_all: M 0.5 G -0.1 Geo -3.0 Ch 21.3 Rot 0.0 | C:3.38
+
+[Step 5000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5100] L:5.28 | V_all: M 0.3 G -0.1 Geo -3.1 Ch 21.5 Rot 0.0 | C:3.12
+[Step 5200] L:5.62 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 21.3 Rot 0.0 | C:3.48
+[Step 5300] L:5.51 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 21.3 Rot 0.0 | C:3.40
+[Step 5400] L:5.53 | V_all: M 0.8 G -0.1 Geo -3.0 Ch 21.3 Rot 0.0 | C:3.34
+[Step 5500] L:5.63 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 21.4 Rot 0.0 | C:3.49
+
+[Step 5500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5600] L:5.60 | V_all: M 1.1 G -0.1 Geo -3.1 Ch 21.5 Rot 0.0 | C:3.35
+[Step 5700] L:5.34 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 21.6 Rot 0.0 | C:3.15
+[Step 5800] L:5.52 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 21.6 Rot 0.0 | C:3.35
+[Step 5900] L:5.56 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 21.6 Rot 0.0 | C:3.35
+[Step 6000] L:5.70 | V_all: M 1.6 G -0.1 Geo -3.0 Ch 21.7 Rot 0.0 | C:3.37
+
+[Step 6000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6100] L:5.62 | V_all: M 1.0 G -0.1 Geo -3.1 Ch 22.2 Rot 0.0 | C:3.35
+[Step 6200] L:5.60 | V_all: M 0.8 G -0.1 Geo -3.1 Ch 22.3 Rot 0.0 | C:3.39
+[Step 6300] L:5.49 | V_all: M 2.1 G -0.2 Geo -3.1 Ch 22.6 Rot 0.0 | C:3.13
+[Step 6400] L:5.57 | V_all: M 0.2 G -0.1 Geo -3.2 Ch 22.3 Rot 0.0 | C:3.36
+[Step 6500] L:5.67 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 22.3 Rot 0.0 | C:3.41
+
+[Step 6500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6600] L:5.64 | V_all: M 0.3 G -0.1 Geo -3.1 Ch 22.4 Rot 0.0 | C:3.41
+[Step 6700] L:5.76 | V_all: M 0.3 G -0.1 Geo -3.1 Ch 22.5 Rot 0.0 | C:3.52
+[Step 6800] L:5.83 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 22.7 Rot 0.0 | C:3.55
+[Step 6900] L:5.84 | V_all: M 0.5 G -0.1 Geo -3.0 Ch 22.8 Rot 0.0 | C:3.53
+[Step 7000] L:5.79 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 23.0 Rot 0.0 | C:3.46
+
+[Step 7000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 7100] L:5.85 | V_all: M 0.6 G -0.1 Geo -3.1 Ch 23.1 Rot 0.0 | C:3.50
+[Step 7200] L:5.94 | V_all: M 0.5 G -0.1 Geo -3.0 Ch 23.2 Rot 0.0 | C:3.59
+[Step 7300] L:5.94 | V_all: M 0.4 G -0.1 Geo -3.0 Ch 23.4 Rot 0.0 | C:3.61
+[Step 7400] L:5.86 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 23.6 Rot 0.0 | C:3.54
+[Step 7500] L:5.86 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 23.8 Rot 0.0 | C:3.51
+
+[Step 7500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 7600] L:5.95 | V_all: M 0.5 G -0.1 Geo -3.0 Ch 23.9 Rot 0.0 | C:3.51
+[Step 7700] L:6.10 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 24.1 Rot 0.0 | C:3.70

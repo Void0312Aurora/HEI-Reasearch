@@ -10,12 +10,12 @@ Ref: Axiom 3.3.
 
 import torch
 import torch.nn.functional as F
-from ..model.injector import AuroraInjector
+from ..model.injector import ContinuousInjector
 from ..data.data_pipeline import GlobalEntropyStats
 from ..physics import geometry
 
 class ReadoutMechanism:
-    def __init__(self, injector: AuroraInjector, entropy_stats: GlobalEntropyStats, vocab: dict):
+    def __init__(self, injector: ContinuousInjector, entropy_stats: GlobalEntropyStats, vocab: dict):
         self.injector = injector
         self.entropy = entropy_stats
         self.vocab = vocab # id -> char
@@ -28,29 +28,37 @@ class ReadoutMechanism:
         """Precompute Psi for all chars in vocab (Context-free)."""
         print("Precomputing readout prototypes...")
         device = next(self.injector.parameters()).device
-        ids = torch.arange(len(self.vocab), device=device)
         
-        # We need entropy 'r' for each char.
-        # This is slow if loop. Batch it.
-        # But GlobalEntropyStats is CPU dict.
+        # Prepare Batch of all vocab chars
         r_list = []
+        x_list = []
+        
         for i in range(len(self.vocab)):
             char = self.vocab[i]
             r = self.entropy.get_radial_target(char)
             r_list.append(r)
+            
+            # Continuous Encoding: Normalized Codepoint
+            if len(char) == 1:
+                codepoint = ord(char)
+            else:
+                codepoint = 0 # Fallback for unknown/special
+                
+            x_norm = float(codepoint) / 65535.0
+            x_list.append(x_norm)
         
         r_tensor = torch.tensor(r_list, device=device).unsqueeze(1) # (V, 1)
-        ids_in = ids.unsqueeze(1) # (V, 1)
+        x_tensor = torch.tensor(x_list, device=device).unsqueeze(1) # (V, 1)
         
         with torch.no_grad():
-            # Injector expects (Batch, Seq). 
-            # We treat each char as independent sequence of len 1.
-            m, q, J, _ = self.injector(ids_in, r_tensor) 
-            # Output: (V, 1, ...)
+            # Injector expects (Batch, 1) if handling independent items
+            # ContinuousInjector(x, r)
+            m, q, J, _ = self.injector(x_tensor, r_tensor) 
+            # Output: (V, ...)
             
-        self.psi_m = m.squeeze(1)
-        self.psi_q = q.squeeze(1)
-        self.psi_J = J.squeeze(1)
+        self.psi_m = m
+        self.psi_q = q
+        self.psi_J = J
         
     def read_prob(self, state_q: torch.Tensor, beta: float = 5.0) -> torch.Tensor:
         """

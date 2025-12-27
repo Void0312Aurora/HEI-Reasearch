@@ -1,98 +1,149 @@
 """
-Aurora Injector Network (CCD v3.1).
-===================================
+Aurora Injector (CCD v3.1)
+==========================
 
-Maps Char Stream -> Physical State (Psi, u).
-Ref: Axiom 2.1.1.
+Implements Axiom 0.1.2: Continuum Hypothesis.
+Maps continuous input signals (e.g. normalized codepoints) to 
+Symplectic Phase Space (T*Q + g).
+
+NO discrete embeddings allowed.
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
-class AuroraInjector(nn.Module):
-    def __init__(self, vocab_size: int, embed_dim: int, hidden_dim: int, space_dim: int, num_layers: int = 2):
+class FourierFeatureEncoder(nn.Module):
+    """
+    Maps scalar input x in [0, 1] to high-dim feature vector using Random Fourier Features.
+    Phi(x) = [sin(2pi * Wx), cos(2pi * Wx)]
+    """
+    def __init__(self, input_dim=1, embed_dim=64, scale=10.0):
         super().__init__()
-        self.space_dim = space_dim
+        self.input_dim = input_dim
+        self.embed_dim = embed_dim
         
-        # 1. Char Encoding
-        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        # Random Gaussian Frequencies
+        # W ~ N(0, scale^2)
+        # We need output size embed_dim.
+        # [sin, cos] takes 2 slots per freq.
+        # So we need embed_dim // 2 frequencies.
+        num_freqs = embed_dim // 2
         
-        # 2. Context Processing (Transformer)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=4, dim_feedforward=hidden_dim, batch_first=True)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        # Scale:
+        # We want to resolve 1/65536 delta.
+        # Sigma should be roughly 65536 / 2pi ~ 10000.
+        # If scale arg is small, we multiply internally.
+        # Heuristic: scale=1.0 is low freq. scale=10.0 is mid.
+        # To resolve individual chars, we need High Frequency.
+        # Let's use a mixed spectrum strategy if possible, but for now Gaussian with high variance.
+        # Or better: Log-linear geometric series clamped to sensible range.
         
-        # 3. Heads
-        # A. Mass Head (Scalar m > 0)
-        self.mass_head = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-            nn.Softplus() # Ensure positive mass
-        )
+        # Option A: RFF
+        # self.register_buffer('B', torch.randn(input_dim, num_freqs) * scale)
         
-        # B. Rest Position Head (Direction only, Radius from Entropy)
-        # Output unit vector in R^n
-        self.dir_head = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, space_dim)
-        )
+        # Option B: Safe Geometric Series (Better for positional-like resolution)
+        # 2^0 ... 2^18 (covering 1 to 262k)
+        # If num_freqs > 19, we wrap or cycle? Or just clamp max freq.
         
-        # C. Charge Head (Lie Algebra element J in so(space_dim)?)
-        # Or internal logic space? Let's assume J lives in so(dim).
-        # Output skew-symmetric k*k
-        k = space_dim # Or different logical dim? Let's match space dim for now.
-        self.charge_dim = k
-        self.charge_flat = k * k
-        self.charge_head = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, self.charge_flat)
-        )
+        max_freq_log2 = 18.0 
+        if num_freqs > 0:
+            # Linear space in log domain
+            exponent = torch.linspace(0, max_freq_log2, num_freqs)
+            freqs = 2.0 ** exponent * math.pi
+        else:
+            freqs = torch.tensor([])
+            
+        self.register_buffer('freqs', freqs)
         
-        # D. Momentum Head (p(0) perturbation)
-        self.momentum_head = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, space_dim)
-        )
+    def forward(self, x):
+        # x: (B, 1) or (B,)
+        if x.dim() == 1:
+            x = x.unsqueeze(-1)
+            
+        # x * freqs -> (B, num_freqs)
+        # x is (B, 1), freqs is (num_freqs)
+        args = x * self.freqs.unsqueeze(0)
+        
+        # [sin, cos]
+        emb = torch.cat([torch.sin(args), torch.cos(args)], dim=-1)
+        return emb
 
-    def forward(self, char_ids: torch.Tensor, entropy_r: torch.Tensor):
+class ContinuousInjector(nn.Module):
+    def __init__(self, input_dim=1, hidden_dim=256, dim=16):
+        super().__init__()
+        self.dim = dim
+        self.output_dim = dim
+        
+        # 1. Continuous Encoder
+        self.encoder = FourierFeatureEncoder(input_dim=input_dim, embed_dim=hidden_dim, scale=10.0)
+        
+        # 2. Processor MLP
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU()
+        )
+        
+        # 3. Heads (Ontological & Dynamical)
+        # Mass Head: m > 0
+        self.head_m = nn.Linear(hidden_dim, 1)
+        
+        # Position Head: Direction in H^n (constraint: norm < 1 enforced by r input)
+        self.head_q_dir = nn.Linear(hidden_dim, dim)
+        
+        # Gauge Charge Head: so(dim) algebra (Skew-symmetric)
+        # Output dim*(dim-1)/2 parameters
+        self.num_skew = dim * (dim - 1) // 2
+        self.head_J = nn.Linear(hidden_dim, self.num_skew)
+        
+        # Momentum Head: Tangent vector
+        self.head_p = nn.Linear(hidden_dim, dim)
+        
+    def forward(self, x_continuous, r_entropy):
         """
         Args:
-            char_ids: (Batch, Seq)
-            entropy_r: (Batch, Seq) Target radius from entropy stats.
-            
+            x_continuous: (B, 1) Normalized codepoint [0, 1]
+            r_entropy: (B, 1) Radial constraint from entropy stats [0, 1)
+        
         Returns:
-            mass: (Batch, Seq, 1)
-            q_rest: (Batch, Seq, Dim)
-            J_rest: (Batch, Seq, Dim, Dim) Skew-Symmetric
-            p_init: (Batch, Seq, Dim)
+            m: (B, 1)
+            q: (B, D)
+            J: (B, D, D)
+            p: (B, D)
         """
-        x = self.embedding(char_ids) # (B, S, E)
-        feat = self.transformer(x)   # (B, S, E) (Contextualized)
+        # Encode
+        features = self.encoder(x_continuous)
+        latent = self.mlp(features)
         
-        # 1. Mass
-        mass = self.mass_head(feat) + 1e-4 # Avoid zero mass
+        # A. Mass
+        m_raw = self.head_m(latent)
+        m = F.softplus(m_raw) + 0.01 # Positivity
         
-        # 2. Rest Position
-        # Direction
-        raw_dir = self.dir_head(feat)
-        # Normalize to unit sphere
-        u_dir = F.normalize(raw_dir, p=2, dim=-1)
-        # Scale by entropy radius
-        q_rest = u_dir * entropy_r.unsqueeze(-1)
+        # B. Position (Constraint: q = dir * r)
+        q_raw = self.head_q_dir(latent)
+        # Normalize to unit direction
+        q_dir = F.normalize(q_raw, p=2, dim=-1) # (B, D)
+        # Apply entropy radius
+        # Ensure r is within [0, 1)
+        r = torch.clamp(r_entropy, min=0.0, max=0.99)
+        q = q_dir * r
         
-        # 3. Charge
-        raw_J = self.charge_head(feat)
-        B, S, _ = raw_J.shape
-        raw_J = raw_J.view(B, S, self.charge_dim, self.charge_dim)
-        # Force Skew-Symmetric (Lie Algebra)
-        J_rest = 0.5 * (raw_J - raw_J.transpose(-1, -2))
+        # C. Gauge Charge (Skew-symmetric so(n))
+        # Bound J to [-1, 1] to prevent Energy Divergence (Ferromagnetic Collapse)
+        J_params = torch.tanh(self.head_J(latent))
         
-        # 4. Momentum
-        # This is the "Innovation" term added to transported momentum
-        p_init = self.momentum_head(feat)
+        J = torch.zeros(x_continuous.size(0), self.dim, self.dim, device=x_continuous.device)
         
-        return mass, q_rest, J_rest, p_init
+        # Fill strictly upper triangle
+        triu_indices = torch.triu_indices(self.dim, self.dim, offset=1)
+        J[:, triu_indices[0], triu_indices[1]] = J_params
+        # Skew-symmetric construction: A - A.T
+        J = J - J.transpose(1, 2)
+        
+        # D. Momentum (Tangent Vector)
+        p = self.head_p(latent)
+        
+        return m, q, J, p

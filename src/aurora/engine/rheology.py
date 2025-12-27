@@ -18,6 +18,12 @@ class RheologicalOptimizer:
         self.yield_stress = yield_stress
         self.elastic_k = elastic_k
         
+    def zero_grad(self):
+        for p in self.params:
+            if p.grad is not None:
+                p.grad.detach_()
+                p.grad.zero_()
+        
     def step(self):
         """
         Update parameters based on their .grad (Stress).

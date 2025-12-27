@@ -57,10 +57,11 @@ def dist(x: torch.Tensor, y: torch.Tensor, c: float = 1.0) -> torch.Tensor:
     """
     Geodesic distance.
     d(x, y) = 2/sqrt(c) * atanh( sqrt(c) * || -x (+) y || )
+    Returns shape without keepdim for compatibility with HyperbolicMemory.
     """
     sqrt_c = c ** 0.5
     diff = mobius_add(-x, y, c)
-    norm = torch.norm(diff, dim=-1, keepdim=True)
+    norm = torch.norm(diff, dim=-1)  # 移除 keepdim=True 以匹配 (B,N) 期望
     return (2.0 / sqrt_c) * torch.atanh(torch.clamp(sqrt_c * norm, max=1.0-EPS))
 
 def exp_map(x: torch.Tensor, v: torch.Tensor, c: float = 1.0) -> torch.Tensor:
