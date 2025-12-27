@@ -12,12 +12,15 @@ import torch
 from ..physics import geometry
 
 class ForceField:
-    def __init__(self, G: float = 1.0, lambda_gauge: float = 1.0, k_geo: float = 0.5, r_cutoff: float = 0.8, mu: float = 0.1):
+    def __init__(self, G: float = 1.0, lambda_gauge: float = 1.0, k_geo: float = 0.5, r_cutoff: float = 0.8, mu: float = 0.1, G_core: float = None, lambda_quartic: float = 0.01):
         self.G = G
         self.lambda_gauge = lambda_gauge
         self.k_geo = k_geo
         self.mu = mu # Chemical Potential (Mass Cost)
         self.r_cutoff = r_cutoff 
+        # Default G_core if not provided (Short range repulsion > Long range attraction)
+        self.G_core = G_core if G_core is not None else 2.0 * G
+        self.lambda_quartic = lambda_quartic
 
     def potential_geometry(self, q: torch.Tensor) -> torch.Tensor:
         """
@@ -33,17 +36,18 @@ class ForceField:
 
     def potential_chemical(self, m: torch.Tensor) -> torch.Tensor:
         """
-        V_chem: Mass Self-Energy.
-        Cost of maintaining mass.
-        V = 0.5 * mu * sum(m^2).
-        Deriv w.r.t m is mu * m.
-        This suppresses 'Free Lunch' mass explosion.
+        V_chem: Mass Self-Energy (Landau Potential).
+        V = 0.5 * mu * m^2 + 0.25 * lambda * m^4.
+        Quartic term ensures stability (Mexican Hat) even if Attraction overpowers m^2.
         """
-        return 0.5 * self.mu * torch.sum(m**2)
+        V_quad = 0.5 * self.mu * (m**2)
+        V_quart = 0.25 * self.lambda_quartic * (m**4)
+        return (V_quad + V_quart).sum()
 
     def potential_mass(self, q: torch.Tensor, m: torch.Tensor) -> torch.Tensor:
         """
-        V_mass = - G * sum_{i<j} m_i m_j * K_att(d_ij) + G_core * sum K_rep(d_ij).
+        V_mass = m_i * m_j * (- G * K_att + G_core * K_rep) / (N + 1).
+        Kac Normalization ensures Energy is O(N) not O(N^2).
         """
         N = q.shape[0]
         if N < 2: return torch.tensor(0.0, device=q.device)
@@ -68,12 +72,14 @@ class ForceField:
         sigma_core = 0.01
         K_rep = torch.exp(- (d_ij**2) / sigma_core)
         
-        m_prod = m @ m.t() # (N, N)
-        
-        G_core = 10.0 * self.G
+        # Kac Scaling
+        scale_factor = 1.0 / (N + 1.0)
         
         # Combined Potential
-        E_mat = (- self.G * m_prod * K_att) + (G_core * K_rep)
+        term_interact = ((- self.G * K_att) + (self.G_core * K_rep)) * scale_factor
+        
+        m_prod = m @ m.t() # (N, N)
+        E_mat = m_prod * term_interact
         
         # Mask diagonal
         mask_diag = torch.eye(N, device=q.device).bool()

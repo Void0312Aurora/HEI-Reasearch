@@ -23,6 +23,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../src"))
 from aurora.data.data_pipeline import GlobalEntropyStats, CharStreamProcessor
 from aurora.model.injector import AuroraInjector
 from aurora.engine.forces import ForceField
+from aurora.physics import geometry
 from aurora.engine.integrator import LieIntegrator
 from aurora.engine.rheology import RheologicalOptimizer
 from aurora.engine.memory import HyperbolicMemory
@@ -38,16 +39,24 @@ ELASTIC_K = 0.0001
 MAX_ATOMS = 1000 # Buffer (Working Memory)
 CONTEXT_K = 10 # Neighbors per particle
 MEMORY_SIZE = 20000 # LTM Capacity
-BATCH_SIZE = 128 # Safe GPU Batch Size
+BATCH_SIZE = 700 # Safe GPU Batch Size
 
-def eval_probe(injector, entropy_stats, id_to_char, prompt="你好", dim=DIM, device='cpu'):
-    """Generate text to probe nucleation."""
+
+def eval_probe(injector, entropy_stats, id_to_char, ff, prompt="你好", dim=DIM, device='cpu'):
+    """Generate text WITH Dynamics."""
+    from aurora.engine.integrator import LieIntegrator
+    from aurora.physics import geometry
+    
     injector.eval()
     readout = ReadoutMechanism(injector, entropy_stats, id_to_char)
     char_to_id = {v:k for k,v in id_to_char.items()}
     
+    # integrator = LieIntegrator(ff) # Unused in simplified probe, we map manually
+    
     gen_text = ""
-    curr_q = torch.zeros(1, dim, device=device)
+    active_q = []
+    active_m = []
+    active_J = []
     
     with torch.no_grad():
         for char in prompt:
@@ -55,20 +64,48 @@ def eval_probe(injector, entropy_stats, id_to_char, prompt="你好", dim=DIM, de
              cid = torch.tensor([[char_to_id[char]]], dtype=torch.long, device=device)
              r = torch.tensor([[entropy_stats.get_radial_target(char)]], dtype=torch.float, device=device)
              m, q, J, p = injector(cid, r)
-             curr_q = q.view(1, dim)
+             active_q.append(q.view(1, dim))
+             active_m.append(m.view(1, 1))
+             active_J.append(J.view(1, dim, dim))
     
-    for _ in range(20): # Longer probe
-        probs = readout.read_prob(curr_q, beta=5.0) # Lower beta for sampling
-        dist = torch.distributions.Categorical(probs)
-        idx = dist.sample().item()
+    # Generate
+    if not active_q: return ""
+    curr_q = active_q[-1]
+    
+    for _ in range(20): 
+        # 1. Physics Evolution (Short)
+        q_in = torch.cat(active_q, dim=0)
+        m_in = torch.cat(active_m, dim=0)
+        J_in = torch.cat(active_J, dim=0)
+        
+        # Compute Force on Last Particle (Focus)
+        F, _ = ff.compute_forces(q_in, m_in, J_in)
+        F_curr = F[-1].unsqueeze(0)
+        
+        # Overdamped Motion
+        dt = 0.1
+        curr_q = geometry.exp_map(curr_q, F_curr * dt)
+        
+        # 2. Readout
+        probs = readout.read_prob(curr_q, beta=10.0)
+        idx = probs.argmax().item()
         char = id_to_char[idx]
         gen_text += char
         
+        # 3. Inject
         cid = torch.tensor([[idx]], dtype=torch.long, device=device)
         r = torch.tensor([[entropy_stats.get_radial_target(char)]], dtype=torch.float, device=device)
         m, q, J, p = injector(cid, r)
-        curr_q = q.view(1, dim)
         
+        active_q.append(q.view(1, dim))
+        active_m.append(m.view(1, 1))
+        active_J.append(J.view(1, dim, dim))
+        
+        if len(active_q) > 20:
+            active_q.pop(0)
+            active_m.pop(0)
+            active_J.pop(0)
+            
     injector.train()
     return gen_text
 
@@ -96,8 +133,8 @@ def train(args):
     injector = AuroraInjector(VOCAB_SIZE, EMBED_DIM, HIDDEN_DIM, DIM).to(device)
     
     # Physics (Tuned)
-    # Exp 6: G=1.0, mu=0.1 (Chemical Potential for Mass Cost)
-    ff = ForceField(G=1.0, lambda_gauge=1.5, k_geo=1.0, mu=0.1)
+    # Exp 7: Landau Stabilization (mu=1.0, lambda=0.01) + Kac Scaling
+    ff = ForceField(G=1.0, lambda_gauge=1.5, k_geo=1.0, mu=1.0, lambda_quartic=0.01)
     ltm = HyperbolicMemory(DIM, MEMORY_SIZE, device=device).to(device)
     
     # Optimizer
@@ -162,8 +199,9 @@ def train(args):
             m_batch = m_curr.squeeze(1) # (B, 1)
             q_batch = q_rest.squeeze(1) # (B, D)
             J_batch = J_curr.squeeze(1) # (B, D, D)
+            p_batch = p_init.squeeze(1) # (B, D)
             
-            # Noise & Clamp
+            # Noise & Clamp (Stability)
             noise = torch.randn_like(q_batch) * 0.01
             q_batch = q_batch + noise
             qn = torch.norm(q_batch, dim=-1, keepdim=True)
@@ -189,17 +227,36 @@ def train(args):
             J_in = torch.cat(J_parts, dim=0)
             
             # Force Calculation
-            # Normalize Energy by N^2 to prevent explosion with System Size
+            # Exp 7/8: Kac Scaling (divide by N)
             N_sys = q_in.size(0)
             _, E_pot_raw = ff.compute_forces(q_in, m_in, J_in)
-            E_pot = E_pot_raw / (N_sys**2 + 1e-9)
+            E_pot = E_pot_raw / (N_sys + 1e-9)
             
-            # Loss
+            # Loss Components
+            
+            # A. Constraint Loss (Entropy Radius)
             r_curr = torch.norm(q_batch, dim=-1) # (B)
-            # Match r_t (B)
             loss_r = torch.mean((r_curr - r_t.squeeze(1))**2)
             
-            loss = loss_r + w_pot * E_pot
+            # B. Flow Loss (Kinematic Momentum) - Phase 37
+            # Predict next token: Exp(q_t, p_t) -> q_{t+1}
+            # We use adjacent pairs in the batch
+            if BATCH_SIZE > 1:
+                q_t = q_batch[:-1]
+                p_t = p_batch[:-1]
+                q_next_target = q_batch[1:].detach() # Target is fixed geom
+                
+                # dt = 1.0 (Unit Time Step per Token)
+                # q_pred = Exp_q(p)
+                q_pred = geometry.exp_map(q_t, p_t * 1.0)
+                
+                loss_flow = torch.mean((q_pred - q_next_target)**2)
+            else:
+                loss_flow = torch.tensor(0.0, device=device)
+            
+            # Total Loss
+            # Exp 8: Flow Weight = 1.0
+            loss = loss_r + w_pot * E_pot + 1.0 * loss_flow
             
             if torch.isnan(loss):
                 logger.warning(f"NaN Loss at step {step_cnt}. Resetting Buffer.")
@@ -215,7 +272,7 @@ def train(args):
             rheo_opt.step()
             
             loss_smooth = 0.9 * loss_smooth + 0.1 * loss.item()
-            pbar.set_description(f"L:{loss_smooth:.4f} W:{w_pot:.3f}")
+            pbar.set_description(f"L:{loss_smooth:.4f} Flow:{loss_flow.item():.4f}")
             
             # Update Buffer & LTM
             if len(active_q) >= MAX_ATOMS // BATCH_SIZE: 
@@ -230,7 +287,7 @@ def train(args):
             
             # Probe
             if step_cnt % args.probe_freq == 0:
-                 gen = eval_probe(injector, entropy_stats, id_to_char, device=device)
+                 gen = eval_probe(injector, entropy_stats, id_to_char, ff, device=device)
                  logger.info(f"\n[Step {step_cnt}] Probe: {gen}")
                  
             # Save
