@@ -1132,3 +1132,1511 @@ Starting Training for 50000 steps...
 [Step 2500] L:7.08 | V_all: M 9.3 G -0.3 Geo -5.5 Ch 88.7 Rot 0.1 | C:2.03
 
 [Step 2500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2600] L:7.55 | V_all: M 3.8 G -0.2 Geo -5.3 Ch 86.0 Rot 0.1 | C:2.05
+[Step 2700] L:8.04 | V_all: M 3.5 G -0.2 Geo -5.3 Ch 81.4 Rot 0.1 | C:2.05
+[Step 2800] L:8.72 | V_all: M 5.0 G -0.2 Geo -5.3 Ch 78.7 Rot 0.1 | C:2.03
+[Step 2900] L:8.88 | V_all: M 3.2 G -0.2 Geo -5.3 Ch 73.2 Rot 0.1 | C:2.03
+[Step 3000] L:9.53 | V_all: M 4.7 G -0.2 Geo -5.3 Ch 71.1 Rot 0.1 | C:2.08
+
+[Step 3000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3100] L:8.78 | V_all: M 2.6 G -0.2 Geo -5.4 Ch 65.8 Rot 0.1 | C:2.05
+[Step 3200] L:8.55 | V_all: M 4.3 G -0.2 Geo -5.4 Ch 62.2 Rot 0.1 | C:2.03
+[Step 3300] L:8.24 | V_all: M 2.8 G -0.2 Geo -5.2 Ch 59.6 Rot 0.1 | C:2.13
+[Step 3400] L:7.91 | V_all: M 2.3 G -0.2 Geo -5.3 Ch 57.0 Rot 0.1 | C:2.14
+[Step 3500] L:8.13 | V_all: M 5.3 G -0.2 Geo -5.2 Ch 55.6 Rot 0.1 | C:2.15
+
+[Step 3500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3600] L:7.49 | V_all: M 1.6 G -0.2 Geo -5.3 Ch 53.6 Rot 0.1 | C:2.10
+[Step 3700] L:7.51 | V_all: M 3.2 G -0.2 Geo -5.4 Ch 52.0 Rot 0.1 | C:2.04
+[Step 3800] L:7.28 | V_all: M 2.3 G -0.2 Geo -5.2 Ch 50.8 Rot 0.1 | C:2.09
+[Step 3900] L:7.15 | V_all: M 1.8 G -0.2 Geo -5.3 Ch 49.3 Rot 0.1 | C:2.16
+[Step 4000] L:7.22 | V_all: M 2.8 G -0.2 Geo -5.2 Ch 47.7 Rot 0.1 | C:2.25
+
+[Step 4000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4100] L:7.10 | V_all: M 2.8 G -0.2 Geo -5.2 Ch 47.1 Rot 0.1 | C:2.23
+[Step 4200] L:6.96 | V_all: M 2.1 G -0.2 Geo -5.3 Ch 46.2 Rot 0.1 | C:2.24
+[Step 4300] L:6.92 | V_all: M 2.5 G -0.2 Geo -5.2 Ch 45.4 Rot 0.1 | C:2.30
+[Step 4400] L:6.65 | V_all: M 1.9 G -0.2 Geo -5.5 Ch 45.2 Rot 0.1 | C:2.05
+[Step 4500] L:6.80 | V_all: M 2.6 G -0.2 Geo -5.3 Ch 44.2 Rot 0.1 | C:2.29
+
+[Step 4500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4600] L:6.89 | V_all: M 2.3 G -0.2 Geo -5.2 Ch 44.3 Rot 0.1 | C:2.35
+[Step 4700] L:6.71 | V_all: M 1.9 G -0.2 Geo -5.2 Ch 43.8 Rot 0.1 | C:2.27
+[Step 4800] L:6.64 | V_all: M 1.7 G -0.2 Geo -5.3 Ch 43.6 Rot 0.1 | C:2.20
+[Step 4900] L:6.73 | V_all: M 2.7 G -0.2 Geo -5.1 Ch 42.9 Rot 0.1 | C:2.30
+[Step 5000] L:6.63 | V_all: M 1.9 G -0.2 Geo -5.2 Ch 42.8 Rot 0.1 | C:2.30
+
+[Step 5000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5100] L:6.48 | V_all: M 1.3 G -0.2 Geo -5.3 Ch 43.0 Rot 0.1 | C:2.19
+[Step 5200] L:6.60 | V_all: M 2.4 G -0.2 Geo -5.2 Ch 42.5 Rot 0.1 | C:2.25
+[Step 5300] L:6.53 | V_all: M 1.4 G -0.2 Geo -5.3 Ch 42.5 Rot 0.1 | C:2.28
+[Step 5400] L:6.72 | V_all: M 3.3 G -0.2 Geo -5.1 Ch 42.1 Rot 0.1 | C:2.31
+[Step 5500] L:6.57 | V_all: M 1.7 G -0.2 Geo -5.2 Ch 42.1 Rot 0.1 | C:2.32
+
+[Step 5500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5600] L:6.72 | V_all: M 3.4 G -0.2 Geo -5.2 Ch 42.1 Rot 0.1 | C:2.26
+[Step 5700] L:6.43 | V_all: M 1.3 G -0.1 Geo -5.2 Ch 42.2 Rot 0.0 | C:2.29
+[Step 5800] L:6.56 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 42.2 Rot 0.0 | C:2.30
+[Step 5900] L:6.59 | V_all: M 1.7 G -0.1 Geo -5.2 Ch 42.2 Rot 0.0 | C:2.34
+[Step 6000] L:6.90 | V_all: M 2.9 G -0.2 Geo -5.1 Ch 42.1 Rot 0.0 | C:2.56
+
+[Step 6000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6100] L:6.51 | V_all: M 2.2 G -0.1 Geo -5.2 Ch 42.5 Rot 0.0 | C:2.21
+[Step 6200] L:6.59 | V_all: M 3.0 G -0.2 Geo -5.2 Ch 42.7 Rot 0.0 | C:2.22
+[Step 6300] L:6.87 | V_all: M 5.7 G -0.2 Geo -5.3 Ch 43.1 Rot 0.0 | C:2.24
+[Step 6400] L:6.53 | V_all: M 1.1 G -0.1 Geo -5.4 Ch 42.6 Rot 0.0 | C:2.33
+[Step 6500] L:6.83 | V_all: M 3.1 G -0.1 Geo -5.2 Ch 42.6 Rot 0.0 | C:2.38
+
+[Step 6500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6600] L:6.70 | V_all: M 1.9 G -0.1 Geo -5.2 Ch 42.7 Rot 0.0 | C:2.42
+[Step 6700] L:6.72 | V_all: M 0.9 G -0.1 Geo -5.4 Ch 42.7 Rot 0.0 | C:2.44
+[Step 6800] L:6.77 | V_all: M 1.9 G -0.1 Geo -5.3 Ch 42.9 Rot 0.0 | C:2.44
+[Step 6900] L:6.91 | V_all: M 1.9 G -0.1 Geo -5.2 Ch 43.0 Rot 0.0 | C:2.50
+[Step 7000] L:6.85 | V_all: M 1.6 G -0.1 Geo -5.3 Ch 43.4 Rot 0.0 | C:2.47
+
+[Step 7000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 7100] L:6.95 | V_all: M 2.6 G -0.1 Geo -5.2 Ch 43.5 Rot 0.0 | C:2.46
+[Step 7200] L:6.93 | V_all: M 1.6 G -0.1 Geo -5.2 Ch 43.5 Rot 0.0 | C:2.52
+[Step 7300] L:6.92 | V_all: M 1.0 G -0.1 Geo -5.2 Ch 43.6 Rot 0.0 | C:2.57
+[Step 7400] L:6.95 | V_all: M 1.8 G -0.1 Geo -5.3 Ch 44.0 Rot 0.0 | C:2.53
+[Step 7500] L:7.02 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 44.2 Rot 0.0 | C:2.53
+
+[Step 7500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 7600] L:7.09 | V_all: M 1.9 G -0.1 Geo -5.2 Ch 44.3 Rot 0.0 | C:2.59
+[Step 7700] L:7.15 | V_all: M 1.6 G -0.1 Geo -5.2 Ch 44.6 Rot 0.0 | C:2.63
+[Step 7800] L:7.10 | V_all: M 1.4 G -0.1 Geo -5.3 Ch 45.0 Rot 0.0 | C:2.60
+[Step 7900] L:7.05 | V_all: M 2.3 G -0.1 Geo -5.2 Ch 45.1 Rot 0.0 | C:2.57
+[Step 8000] L:7.25 | V_all: M 2.2 G -0.1 Geo -5.2 Ch 45.2 Rot 0.0 | C:2.64
+
+[Step 8000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 8100] L:7.32 | V_all: M 1.8 G -0.1 Geo -5.3 Ch 45.4 Rot 0.0 | C:2.77
+[Step 8200] L:7.27 | V_all: M 1.1 G -0.1 Geo -5.3 Ch 45.7 Rot 0.0 | C:2.68
+[Step 8300] L:7.35 | V_all: M 2.2 G -0.1 Geo -5.3 Ch 46.2 Rot 0.0 | C:2.63
+[Step 8400] L:7.20 | V_all: M 0.9 G -0.1 Geo -5.3 Ch 46.2 Rot 0.0 | C:2.69
+[Step 8500] L:7.35 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 46.4 Rot 0.0 | C:2.66
+
+[Step 8500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 8600] L:7.46 | V_all: M 1.0 G -0.1 Geo -5.3 Ch 46.5 Rot 0.0 | C:2.83
+[Step 8700] L:7.49 | V_all: M 1.9 G -0.1 Geo -5.2 Ch 46.9 Rot 0.0 | C:2.74
+[Step 8800] L:7.57 | V_all: M 1.3 G -0.1 Geo -5.2 Ch 47.3 Rot 0.0 | C:2.85
+[Step 8900] L:7.09 | V_all: M 1.1 G -0.1 Geo -5.3 Ch 47.5 Rot 0.0 | C:2.56
+[Step 9000] L:7.68 | V_all: M 1.5 G -0.1 Geo -5.2 Ch 47.6 Rot 0.0 | C:2.92
+
+[Step 9000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 9100] L:7.67 | V_all: M 0.9 G -0.1 Geo -5.4 Ch 47.7 Rot 0.0 | C:3.02
+[Step 9200] L:7.83 | V_all: M 1.5 G -0.1 Geo -5.3 Ch 48.2 Rot 0.0 | C:3.00
+[Step 9300] L:7.82 | V_all: M 1.5 G -0.1 Geo -5.3 Ch 48.5 Rot 0.0 | C:2.95
+[Step 9400] L:7.80 | V_all: M 1.2 G -0.1 Geo -5.4 Ch 48.6 Rot 0.0 | C:2.96
+[Step 9500] L:7.94 | V_all: M 1.9 G -0.1 Geo -5.3 Ch 49.0 Rot 0.0 | C:2.95
+
+[Step 9500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 9600] L:8.02 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 49.3 Rot 0.0 | C:3.08
+[Step 9700] L:7.97 | V_all: M 1.1 G -0.1 Geo -5.2 Ch 49.3 Rot 0.0 | C:3.10
+[Step 9800] L:8.05 | V_all: M 1.9 G -0.1 Geo -5.2 Ch 49.7 Rot 0.0 | C:3.06
+[Step 9900] L:8.00 | V_all: M 1.2 G -0.1 Geo -5.2 Ch 50.0 Rot 0.0 | C:3.08
+[Step 10000] L:8.06 | V_all: M 1.0 G -0.1 Geo -5.3 Ch 50.4 Rot 0.0 | C:3.11
+
+[Step 10000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 10100] L:8.13 | V_all: M 1.4 G -0.1 Geo -5.3 Ch 50.6 Rot 0.0 | C:3.18
+[Step 10200] L:8.15 | V_all: M 0.7 G -0.1 Geo -5.4 Ch 50.8 Rot 0.0 | C:3.16
+[Step 10300] L:8.20 | V_all: M 1.7 G -0.1 Geo -5.1 Ch 51.1 Rot 0.0 | C:3.12
+[Step 10400] L:8.43 | V_all: M 1.5 G -0.1 Geo -5.3 Ch 51.3 Rot 0.0 | C:3.30
+[Step 10500] L:8.39 | V_all: M 1.2 G -0.1 Geo -5.2 Ch 51.6 Rot 0.0 | C:3.32
+
+[Step 10500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 10600] L:9.12 | V_all: M 0.4 G -0.0 Geo -7.0 Ch 52.3 Rot 0.0 | C:4.26
+[Step 10700] L:8.60 | V_all: M 1.7 G -0.1 Geo -5.2 Ch 52.2 Rot 0.0 | C:3.41
+[Step 10800] L:8.77 | V_all: M 2.4 G -0.1 Geo -5.4 Ch 52.5 Rot 0.0 | C:3.50
+[Step 10900] L:8.45 | V_all: M 2.2 G -0.1 Geo -5.3 Ch 52.9 Rot 0.0 | C:3.21
+[Step 11000] L:8.58 | V_all: M 1.4 G -0.1 Geo -5.2 Ch 53.2 Rot 0.0 | C:3.33
+
+[Step 11000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 11100] L:8.61 | V_all: M 1.0 G -0.1 Geo -5.3 Ch 53.3 Rot 0.0 | C:3.41
+[Step 11200] L:8.82 | V_all: M 1.2 G -0.1 Geo -5.3 Ch 53.6 Rot 0.0 | C:3.54
+[Step 11300] L:9.11 | V_all: M 1.0 G -0.1 Geo -5.2 Ch 53.8 Rot 0.0 | C:3.82
+[Step 11400] L:9.12 | V_all: M 0.9 G -0.1 Geo -5.3 Ch 54.0 Rot 0.0 | C:3.82
+[Step 11500] L:9.07 | V_all: M 2.1 G -0.1 Geo -5.2 Ch 54.5 Rot 0.0 | C:3.63
+
+[Step 11500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 11600] L:9.11 | V_all: M 1.7 G -0.1 Geo -5.2 Ch 54.6 Rot 0.0 | C:3.66
+[Step 11700] L:8.94 | V_all: M 1.3 G -0.1 Geo -5.2 Ch 55.1 Rot 0.0 | C:3.55
+[Step 11800] L:9.20 | V_all: M 1.4 G -0.1 Geo -5.1 Ch 55.3 Rot 0.0 | C:3.71
+[Step 11900] L:9.02 | V_all: M 0.9 G -0.1 Geo -5.2 Ch 55.4 Rot 0.0 | C:3.65
+[Step 12000] L:9.30 | V_all: M 1.1 G -0.1 Geo -5.2 Ch 55.8 Rot 0.0 | C:3.82
+
+[Step 12000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 12100] L:9.49 | V_all: M 2.2 G -0.1 Geo -5.3 Ch 56.3 Rot 0.0 | C:3.87
+[Step 12200] L:9.33 | V_all: M 1.0 G -0.0 Geo -5.3 Ch 56.5 Rot 0.0 | C:3.79
+[Step 12300] L:9.48 | V_all: M 1.3 G -0.1 Geo -5.1 Ch 56.6 Rot 0.0 | C:3.92
+[Step 12400] L:9.54 | V_all: M 2.5 G -0.1 Geo -5.1 Ch 56.9 Rot 0.0 | C:3.88
+[Step 12500] L:9.53 | V_all: M 1.8 G -0.1 Geo -5.1 Ch 57.2 Rot 0.0 | C:3.84
+
+[Step 12500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 12600] L:9.82 | V_all: M 0.8 G -0.1 Geo -5.3 Ch 57.5 Rot 0.0 | C:4.24
+[Step 12700] L:9.62 | V_all: M 2.3 G -0.1 Geo -5.1 Ch 57.6 Rot 0.0 | C:3.91
+[Step 12800] L:9.62 | V_all: M 0.9 G -0.0 Geo -5.5 Ch 58.0 Rot 0.0 | C:4.01
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] L:4.14 | V_all: M 4.9 G -0.8 Geo -5.2 Ch 103.2 Rot 0.3 | C:3.88 | Div: 30/32 Ent:8.33 MaxP:0.02
+[Step 200] L:3.54 | V_all: M 4.8 G -0.6 Geo -5.4 Ch 103.2 Rot 0.2 | C:3.29 | Div: 30/32 Ent:8.23 MaxP:0.04
+[Step 300] L:3.24 | V_all: M 6.0 G -0.6 Geo -5.2 Ch 103.8 Rot 0.2 | C:2.91 | Div: 29/32 Ent:8.18 MaxP:0.06
+[Step 400] L:2.89 | V_all: M 4.0 G -0.4 Geo -5.4 Ch 102.6 Rot 0.2 | C:2.55 | Div: 28/32 Ent:8.06 MaxP:0.08
+[Step 500] L:2.82 | V_all: M 4.2 G -0.4 Geo -5.3 Ch 103.0 Rot 0.2 | C:2.41 | Div: 31/32 Ent:8.04 MaxP:0.09
+Generating probe text...
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] L:4.13 | V_all: M 4.7 G -0.8 Geo -5.1 Ch 93.6 Rot 0.3 | C:3.86 | Div: 30/32 Ent:8.30 MaxP:0.02
+[Step 200] L:3.40 | V_all: M 4.4 G -0.6 Geo -5.4 Ch 94.1 Rot 0.2 | C:3.08 | Div: 30/32 Ent:8.20 MaxP:0.05
+[Step 300] L:3.28 | V_all: M 5.5 G -0.6 Geo -5.2 Ch 94.2 Rot 0.2 | C:2.94 | Div: 29/32 Ent:8.19 MaxP:0.06
+[Step 400] L:2.93 | V_all: M 3.8 G -0.5 Geo -5.4 Ch 94.5 Rot 0.2 | C:2.58 | Div: 28/32 Ent:8.07 MaxP:0.08
+[Step 500] L:2.83 | V_all: M 3.9 G -0.4 Geo -5.3 Ch 93.7 Rot 0.2 | C:2.46 | Div: 31/32 Ent:8.05 MaxP:0.09
+Generating probe text...
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] L:4.41 | V_all: M 4.3 G -1.0 Geo -5.2 Ch 89.9 Rot 0.3 | C:4.16 | Div: 30/32 Ent:8.31 MaxP:0.02
+[Step 200] L:3.69 | V_all: M 4.3 G -0.8 Geo -5.4 Ch 89.9 Rot 0.3 | C:3.44 | Div: 30/32 Ent:8.19 MaxP:0.03
+[Step 300] L:3.31 | V_all: M 5.6 G -0.7 Geo -5.2 Ch 89.9 Rot 0.3 | C:3.00 | Div: 29/32 Ent:8.17 MaxP:0.05
+[Step 400] L:2.99 | V_all: M 3.4 G -0.5 Geo -5.4 Ch 89.2 Rot 0.2 | C:2.67 | Div: 28/32 Ent:8.08 MaxP:0.07
+[Step 500] L:2.94 | V_all: M 3.6 G -0.5 Geo -5.3 Ch 90.5 Rot 0.2 | C:2.61 | Div: 31/32 Ent:8.08 MaxP:0.08
+Generating probe text...
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 500] TF Probe: 自->然 [Pred: 自 (0.07) | GT: 0.00] | 然->语 [Pred: 然 (0.08) | GT: 0.00] | 语->言 [Pred: 语 (0.09) | GT: 0.00] | 言->处 [Pred: 言 (0.11) | GT: 0.00] | 处->理 [Pred: 处 (0.12) | GT: 0.00] | 理->是 [Pred: 理 (0.07) | GT: 0.00] | 是->人 [Pred: 是 (0.06) | GT: 0.00] | 人->工 [Pred: 人 (0.07) | GT: 0.00] | 工->智 [Pred: 工 (0.07) | GT: 0.00] | 智->能 [Pred: 智 (0.10) | GT: 0.00] | 能->的 [Pred: 能 (0.10) | GT: 0.00] | 的->核 [Pred: 的 (0.07) | GT: 0.00] | 核->心 [Pred: 核 (0.14) | GT: 0.00] | 心->技 [Pred: 心 (0.07) | GT: 0.00] | 技->术 [Pred: 技 (0.11) | GT: 0.00]
+[Step 600] L:2.82 | V_all: M 6.2 G -0.5 Geo -5.3 Ch 91.1 Rot 0.2 | C:2.42 | Div: 28/32 Ent:8.04 MaxP:0.09
+[Step 700] L:2.74 | V_all: M 6.1 G -0.4 Geo -5.2 Ch 90.8 Rot 0.2 | C:2.35 | Div: 26/32 Ent:8.01 MaxP:0.10
+[Step 800] L:2.60 | V_all: M 4.6 G -0.4 Geo -5.3 Ch 91.0 Rot 0.2 | C:2.28 | Div: 26/32 Ent:7.92 MaxP:0.10
+[Step 900] L:2.62 | V_all: M 7.8 G -0.5 Geo -5.2 Ch 91.3 Rot 0.2 | C:2.25 | Div: 25/32 Ent:7.93 MaxP:0.11
+[Step 1000] L:2.63 | V_all: M 6.7 G -0.4 Geo -5.3 Ch 90.6 Rot 0.2 | C:2.21 | Div: 28/32 Ent:7.97 MaxP:0.11
+Generating probe text...
+[Step 1000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1000] TF Probe: 自->然 [Pred: 自 (0.09) | GT: 0.00] | 然->语 [Pred: 然 (0.11) | GT: 0.00] | 语->言 [Pred: 语 (0.13) | GT: 0.00] | 言->处 [Pred: 言 (0.15) | GT: 0.00] | 处->理 [Pred: 处 (0.14) | GT: 0.00] | 理->是 [Pred: 理 (0.10) | GT: 0.00] | 是->人 [Pred: 是 (0.09) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.11) | GT: 0.00] | 智->能 [Pred: 智 (0.14) | GT: 0.00] | 能->的 [Pred: 能 (0.12) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.16) | GT: 0.00] | 心->技 [Pred: 心 (0.10) | GT: 0.00] | 技->术 [Pred: 技 (0.14) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_1000.pth
+[Step 1100] L:2.45 | V_all: M 6.8 G -0.4 Geo -5.4 Ch 91.5 Rot 0.2 | C:2.04 | Div: 29/32 Ent:7.85 MaxP:0.13
+[Step 1200] L:2.53 | V_all: M 4.4 G -0.3 Geo -5.3 Ch 91.4 Rot 0.2 | C:2.12 | Div: 29/32 Ent:7.90 MaxP:0.12
+[Step 1300] L:2.57 | V_all: M 3.9 G -0.3 Geo -5.2 Ch 90.9 Rot 0.2 | C:2.14 | Div: 32/32 Ent:7.92 MaxP:0.12
+[Step 1400] L:2.53 | V_all: M 4.5 G -0.3 Geo -5.3 Ch 90.4 Rot 0.2 | C:2.09 | Div: 30/32 Ent:7.92 MaxP:0.13
+[Step 1500] L:2.52 | V_all: M 4.7 G -0.3 Geo -5.3 Ch 90.8 Rot 0.2 | C:2.07 | Div: 28/32 Ent:7.91 MaxP:0.13
+Generating probe text...
+[Step 1500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1500] TF Probe: 自->然 [Pred: 自 (0.10) | GT: 0.00] | 然->语 [Pred: 然 (0.11) | GT: 0.00] | 语->言 [Pred: 语 (0.14) | GT: 0.00] | 言->处 [Pred: 言 (0.15) | GT: 0.00] | 处->理 [Pred: 处 (0.15) | GT: 0.00] | 理->是 [Pred: 理 (0.12) | GT: 0.00] | 是->人 [Pred: 是 (0.09) | GT: 0.00] | 人->工 [Pred: 人 (0.10) | GT: 0.00] | 工->智 [Pred: 工 (0.12) | GT: 0.00] | 智->能 [Pred: 智 (0.15) | GT: 0.00] | 能->的 [Pred: 能 (0.11) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.16) | GT: 0.00] | 心->技 [Pred: 心 (0.11) | GT: 0.00] | 技->术 [Pred: 技 (0.14) | GT: 0.00]
+[Step 1600] L:2.45 | V_all: M 4.6 G -0.3 Geo -5.3 Ch 91.6 Rot 0.2 | C:2.09 | Div: 26/32 Ent:7.84 MaxP:0.13
+[Step 1700] L:2.53 | V_all: M 6.2 G -0.4 Geo -5.1 Ch 90.9 Rot 0.2 | C:2.11 | Div: 28/32 Ent:7.92 MaxP:0.13
+[Step 1800] L:2.48 | V_all: M 3.9 G -0.3 Geo -5.3 Ch 90.9 Rot 0.1 | C:2.06 | Div: 32/32 Ent:7.88 MaxP:0.13
+[Step 1900] L:2.49 | V_all: M 9.2 G -0.5 Geo -5.2 Ch 91.6 Rot 0.1 | C:2.18 | Div: 21/32 Ent:7.93 MaxP:0.11
+[Step 2000] L:2.37 | V_all: M 2.2 G -0.2 Geo -5.6 Ch 91.1 Rot 0.1 | C:1.85 | Div: 30/32 Ent:7.71 MaxP:0.16
+Generating probe text...
+[Step 2000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2000] TF Probe: 自->然 [Pred: 自 (0.10) | GT: 0.00] | 然->语 [Pred: 然 (0.12) | GT: 0.00] | 语->言 [Pred: 语 (0.14) | GT: 0.00] | 言->处 [Pred: 言 (0.16) | GT: 0.00] | 处->理 [Pred: 处 (0.15) | GT: 0.00] | 理->是 [Pred: 理 (0.12) | GT: 0.00] | 是->人 [Pred: 是 (0.09) | GT: 0.00] | 人->工 [Pred: 人 (0.10) | GT: 0.00] | 工->智 [Pred: 工 (0.12) | GT: 0.00] | 智->能 [Pred: 智 (0.16) | GT: 0.00] | 能->的 [Pred: 能 (0.11) | GT: 0.00] | 的->核 [Pred: 的 (0.10) | GT: 0.00] | 核->心 [Pred: 核 (0.17) | GT: 0.00] | 心->技 [Pred: 心 (0.11) | GT: 0.00] | 技->术 [Pred: 技 (0.15) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_2000.pth
+[Step 2100] L:3.43 | V_all: M 3.9 G -0.3 Geo -5.2 Ch 91.2 Rot 0.1 | C:2.11 | Div: 31/32 Ent:7.93 MaxP:0.12
+[Step 2200] L:4.27 | V_all: M 5.0 G -0.3 Geo -5.3 Ch 90.1 Rot 0.1 | C:2.03 | Div: 29/32 Ent:7.86 MaxP:0.14
+[Step 2300] L:5.09 | V_all: M 3.7 G -0.2 Geo -5.4 Ch 88.8 Rot 0.1 | C:1.98 | Div: 29/32 Ent:7.83 MaxP:0.14
+[Step 2400] L:5.94 | V_all: M 5.3 G -0.3 Geo -5.4 Ch 85.8 Rot 0.1 | C:2.09 | Div: 25/32 Ent:7.92 MaxP:0.13
+[Step 2500] L:6.86 | V_all: M 9.2 G -0.3 Geo -5.5 Ch 83.4 Rot 0.1 | C:2.03 | Div: 22/32 Ent:7.90 MaxP:0.13
+Generating probe text...
+[Step 2500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2500] TF Probe: 自->然 [Pred: 自 (0.10) | GT: 0.00] | 然->语 [Pred: 然 (0.12) | GT: 0.00] | 语->言 [Pred: 语 (0.16) | GT: 0.00] | 言->处 [Pred: 言 (0.15) | GT: 0.00] | 处->理 [Pred: 处 (0.15) | GT: 0.00] | 理->是 [Pred: 理 (0.13) | GT: 0.00] | 是->人 [Pred: 是 (0.10) | GT: 0.00] | 人->工 [Pred: 人 (0.10) | GT: 0.00] | 工->智 [Pred: 工 (0.13) | GT: 0.00] | 智->能 [Pred: 智 (0.15) | GT: 0.00] | 能->的 [Pred: 能 (0.12) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.17) | GT: 0.00] | 心->技 [Pred: 心 (0.13) | GT: 0.00] | 技->术 [Pred: 技 (0.15) | GT: 0.00]
+[Step 2600] L:7.21 | V_all: M 3.6 G -0.2 Geo -5.3 Ch 80.4 Rot 0.1 | C:2.06 | Div: 27/32 Ent:7.89 MaxP:0.13
+[Step 2700] L:7.61 | V_all: M 3.2 G -0.2 Geo -5.3 Ch 75.7 Rot 0.1 | C:2.06 | Div: 30/32 Ent:7.90 MaxP:0.13
+[Step 2800] L:8.28 | V_all: M 4.4 G -0.2 Geo -5.3 Ch 73.2 Rot 0.1 | C:2.05 | Div: 29/32 Ent:7.87 MaxP:0.13
+[Step 2900] L:8.40 | V_all: M 2.9 G -0.2 Geo -5.3 Ch 68.6 Rot 0.1 | C:2.02 | Div: 30/32 Ent:7.90 MaxP:0.14
+[Step 3000] L:9.05 | V_all: M 4.3 G -0.3 Geo -5.3 Ch 66.5 Rot 0.1 | C:2.12 | Div: 23/32 Ent:7.94 MaxP:0.12
+Generating probe text...
+[Step 3000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3000] TF Probe: 自->然 [Pred: 自 (0.10) | GT: 0.00] | 然->语 [Pred: 然 (0.11) | GT: 0.00] | 语->言 [Pred: 语 (0.16) | GT: 0.00] | 言->处 [Pred: 言 (0.13) | GT: 0.00] | 处->理 [Pred: 处 (0.15) | GT: 0.00] | 理->是 [Pred: 理 (0.13) | GT: 0.00] | 是->人 [Pred: 是 (0.10) | GT: 0.00] | 人->工 [Pred: 人 (0.10) | GT: 0.00] | 工->智 [Pred: 工 (0.13) | GT: 0.00] | 智->能 [Pred: 智 (0.15) | GT: 0.00] | 能->的 [Pred: 能 (0.14) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.17) | GT: 0.00] | 心->技 [Pred: 心 (0.13) | GT: 0.00] | 技->术 [Pred: 技 (0.15) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_3000.pth
+[Step 3100] L:8.51 | V_all: M 2.5 G -0.2 Geo -5.4 Ch 62.7 Rot 0.1 | C:2.07 | Div: 31/32 Ent:7.92 MaxP:0.13
+[Step 3200] L:8.26 | V_all: M 3.9 G -0.2 Geo -5.4 Ch 59.2 Rot 0.1 | C:2.04 | Div: 25/32 Ent:7.89 MaxP:0.14
+[Step 3300] L:7.93 | V_all: M 2.7 G -0.2 Geo -5.2 Ch 56.4 Rot 0.1 | C:2.14 | Div: 28/32 Ent:7.97 MaxP:0.12
+[Step 3400] L:7.67 | V_all: M 2.3 G -0.2 Geo -5.2 Ch 54.4 Rot 0.1 | C:2.11 | Div: 27/32 Ent:7.95 MaxP:0.12
+[Step 3500] L:7.88 | V_all: M 4.9 G -0.3 Geo -5.2 Ch 53.0 Rot 0.1 | C:2.18 | Div: 28/32 Ent:8.00 MaxP:0.12
+Generating probe text...
+[Step 3500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3500] TF Probe: 自->然 [Pred: 自 (0.11) | GT: 0.00] | 然->语 [Pred: 然 (0.10) | GT: 0.00] | 语->言 [Pred: 语 (0.15) | GT: 0.00] | 言->处 [Pred: 言 (0.12) | GT: 0.00] | 处->理 [Pred: 处 (0.14) | GT: 0.00] | 理->是 [Pred: 理 (0.13) | GT: 0.00] | 是->人 [Pred: 是 (0.10) | GT: 0.00] | 人->工 [Pred: 人 (0.10) | GT: 0.00] | 工->智 [Pred: 工 (0.13) | GT: 0.00] | 智->能 [Pred: 智 (0.15) | GT: 0.00] | 能->的 [Pred: 能 (0.14) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.16) | GT: 0.00] | 心->技 [Pred: 心 (0.14) | GT: 0.00] | 技->术 [Pred: 技 (0.14) | GT: 0.00]
+[Step 3600] L:7.28 | V_all: M 1.6 G -0.2 Geo -5.3 Ch 51.1 Rot 0.1 | C:2.13 | Div: 32/32 Ent:7.96 MaxP:0.12
+[Step 3700] L:7.20 | V_all: M 3.0 G -0.2 Geo -5.4 Ch 49.5 Rot 0.1 | C:2.06 | Div: 27/32 Ent:7.91 MaxP:0.13
+[Step 3800] L:7.16 | V_all: M 2.1 G -0.2 Geo -5.3 Ch 48.9 Rot 0.1 | C:2.17 | Div: 30/32 Ent:7.97 MaxP:0.12
+[Step 3900] L:6.96 | V_all: M 1.8 G -0.2 Geo -5.3 Ch 47.2 Rot 0.1 | C:2.18 | Div: 30/32 Ent:7.97 MaxP:0.12
+[Step 4000] L:6.95 | V_all: M 2.7 G -0.2 Geo -5.1 Ch 46.0 Rot 0.1 | C:2.17 | Div: 29/32 Ent:8.00 MaxP:0.12
+Generating probe text...
+[Step 4000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4000] TF Probe: 自->然 [Pred: 自 (0.10) | GT: 0.00] | 然->语 [Pred: 然 (0.09) | GT: 0.00] | 语->言 [Pred: 语 (0.14) | GT: 0.00] | 言->处 [Pred: 言 (0.11) | GT: 0.00] | 处->理 [Pred: 处 (0.13) | GT: 0.00] | 理->是 [Pred: 理 (0.13) | GT: 0.00] | 是->人 [Pred: 是 (0.09) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.12) | GT: 0.00] | 智->能 [Pred: 智 (0.13) | GT: 0.00] | 能->的 [Pred: 能 (0.13) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.15) | GT: 0.00] | 心->技 [Pred: 心 (0.14) | GT: 0.00] | 技->术 [Pred: 技 (0.13) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_4000.pth
+[Step 4100] L:6.99 | V_all: M 2.8 G -0.2 Geo -5.2 Ch 45.8 Rot 0.1 | C:2.22 | Div: 29/32 Ent:8.02 MaxP:0.11
+[Step 4200] L:6.75 | V_all: M 2.1 G -0.2 Geo -5.3 Ch 44.6 Rot 0.1 | C:2.21 | Div: 28/32 Ent:8.01 MaxP:0.11
+[Step 4300] L:6.76 | V_all: M 2.4 G -0.2 Geo -5.2 Ch 44.0 Rot 0.1 | C:2.23 | Div: 27/32 Ent:8.04 MaxP:0.11
+[Step 4400] L:6.51 | V_all: M 1.8 G -0.2 Geo -5.5 Ch 43.9 Rot 0.1 | C:2.06 | Div: 27/32 Ent:7.95 MaxP:0.13
+[Step 4500] L:6.62 | V_all: M 2.5 G -0.2 Geo -5.3 Ch 42.9 Rot 0.1 | C:2.17 | Div: 25/32 Ent:8.00 MaxP:0.12
+Generating probe text...
+[Step 4500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4500] TF Probe: 自->然 [Pred: 自 (0.09) | GT: 0.00] | 然->语 [Pred: 然 (0.08) | GT: 0.00] | 语->言 [Pred: 语 (0.13) | GT: 0.00] | 言->处 [Pred: 言 (0.11) | GT: 0.00] | 处->理 [Pred: 处 (0.12) | GT: 0.00] | 理->是 [Pred: 理 (0.13) | GT: 0.00] | 是->人 [Pred: 是 (0.09) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.11) | GT: 0.00] | 智->能 [Pred: 智 (0.12) | GT: 0.00] | 能->的 [Pred: 能 (0.11) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.13) | GT: 0.00] | 心->技 [Pred: 心 (0.13) | GT: 0.00] | 技->术 [Pred: 技 (0.12) | GT: 0.00]
+[Step 4600] L:6.64 | V_all: M 2.1 G -0.2 Geo -5.2 Ch 42.7 Rot 0.1 | C:2.27 | Div: 29/32 Ent:8.08 MaxP:0.11
+[Step 4700] L:6.57 | V_all: M 1.9 G -0.2 Geo -5.2 Ch 42.4 Rot 0.1 | C:2.29 | Div: 28/32 Ent:8.02 MaxP:0.11
+[Step 4800] L:6.43 | V_all: M 1.7 G -0.2 Geo -5.3 Ch 42.1 Rot 0.1 | C:2.14 | Div: 27/32 Ent:8.00 MaxP:0.12
+[Step 4900] L:6.54 | V_all: M 2.6 G -0.2 Geo -5.1 Ch 41.5 Rot 0.1 | C:2.26 | Div: 26/32 Ent:8.05 MaxP:0.11
+[Step 5000] L:6.48 | V_all: M 1.8 G -0.2 Geo -5.2 Ch 41.2 Rot 0.1 | C:2.29 | Div: 29/32 Ent:8.07 MaxP:0.10
+Generating probe text...
+[Step 5000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5000] TF Probe: 自->然 [Pred: 自 (0.09) | GT: 0.00] | 然->语 [Pred: 然 (0.08) | GT: 0.00] | 语->言 [Pred: 语 (0.13) | GT: 0.00] | 言->处 [Pred: 言 (0.12) | GT: 0.00] | 处->理 [Pred: 处 (0.12) | GT: 0.00] | 理->是 [Pred: 理 (0.12) | GT: 0.00] | 是->人 [Pred: 是 (0.09) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.11) | GT: 0.00] | 智->能 [Pred: 智 (0.12) | GT: 0.00] | 能->的 [Pred: 能 (0.11) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.14) | GT: 0.00] | 心->技 [Pred: 心 (0.13) | GT: 0.00] | 技->术 [Pred: 技 (0.12) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_5000.pth
+[Step 5100] L:6.37 | V_all: M 1.5 G -0.2 Geo -5.3 Ch 41.4 Rot 0.1 | C:2.25 | Div: 32/32 Ent:8.03 MaxP:0.11
+[Step 5200] L:6.53 | V_all: M 2.4 G -0.2 Geo -5.2 Ch 41.0 Rot 0.1 | C:2.33 | Div: 25/32 Ent:8.08 MaxP:0.10
+[Step 5300] L:6.41 | V_all: M 1.4 G -0.2 Geo -5.3 Ch 41.2 Rot 0.1 | C:2.27 | Div: 31/32 Ent:8.08 MaxP:0.11
+[Step 5400] L:6.55 | V_all: M 3.2 G -0.2 Geo -5.1 Ch 40.8 Rot 0.1 | C:2.29 | Div: 26/32 Ent:8.07 MaxP:0.10
+[Step 5500] L:6.44 | V_all: M 1.9 G -0.2 Geo -5.2 Ch 40.8 Rot 0.1 | C:2.29 | Div: 29/32 Ent:8.09 MaxP:0.10
+Generating probe text...
+[Step 5500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5500] TF Probe: 自->然 [Pred: 自 (0.07) | GT: 0.00] | 然->语 [Pred: 然 (0.07) | GT: 0.00] | 语->言 [Pred: 语 (0.11) | GT: 0.00] | 言->处 [Pred: 言 (0.11) | GT: 0.00] | 处->理 [Pred: 处 (0.12) | GT: 0.00] | 理->是 [Pred: 理 (0.11) | GT: 0.00] | 是->人 [Pred: 是 (0.08) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.09) | GT: 0.00] | 智->能 [Pred: 智 (0.10) | GT: 0.00] | 能->的 [Pred: 能 (0.08) | GT: 0.00] | 的->核 [Pred: 的 (0.10) | GT: 0.00] | 核->心 [Pred: 核 (0.11) | GT: 0.00] | 心->技 [Pred: 心 (0.10) | GT: 0.00] | 技->术 [Pred: 技 (0.10) | GT: 0.00]
+[Step 5600] L:6.68 | V_all: M 3.1 G -0.2 Geo -5.2 Ch 40.9 Rot 0.1 | C:2.36 | Div: 26/32 Ent:8.11 MaxP:0.10
+[Step 5700] L:6.44 | V_all: M 1.4 G -0.2 Geo -5.2 Ch 40.9 Rot 0.1 | C:2.38 | Div: 31/32 Ent:8.10 MaxP:0.09
+[Step 5800] L:6.50 | V_all: M 1.6 G -0.2 Geo -5.3 Ch 40.9 Rot 0.0 | C:2.42 | Div: 30/32 Ent:8.10 MaxP:0.09
+[Step 5900] L:6.52 | V_all: M 1.7 G -0.1 Geo -5.2 Ch 41.0 Rot 0.0 | C:2.36 | Div: 28/32 Ent:8.11 MaxP:0.09
+[Step 6000] L:6.60 | V_all: M 2.7 G -0.2 Geo -5.1 Ch 40.8 Rot 0.0 | C:2.39 | Div: 29/32 Ent:8.10 MaxP:0.09
+Generating probe text...
+[Step 6000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6000] TF Probe: 自->然 [Pred: 自 (0.07) | GT: 0.00] | 然->语 [Pred: 然 (0.08) | GT: 0.00] | 语->言 [Pred: 语 (0.11) | GT: 0.00] | 言->处 [Pred: 言 (0.13) | GT: 0.00] | 处->理 [Pred: 处 (0.13) | GT: 0.00] | 理->是 [Pred: 理 (0.11) | GT: 0.00] | 是->人 [Pred: 是 (0.08) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.09) | GT: 0.00] | 智->能 [Pred: 智 (0.12) | GT: 0.00] | 能->的 [Pred: 能 (0.07) | GT: 0.00] | 的->核 [Pred: 的 (0.10) | GT: 0.00] | 核->心 [Pred: 核 (0.11) | GT: 0.00] | 心->技 [Pred: 心 (0.10) | GT: 0.00] | 技->术 [Pred: 技 (0.10) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_6000.pth
+[Step 6100] L:6.43 | V_all: M 2.2 G -0.2 Geo -5.2 Ch 41.3 Rot 0.0 | C:2.24 | Div: 31/32 Ent:7.97 MaxP:0.11
+[Step 6200] L:6.52 | V_all: M 3.0 G -0.2 Geo -5.2 Ch 41.5 Rot 0.0 | C:2.27 | Div: 25/32 Ent:7.95 MaxP:0.11
+[Step 6300] L:6.74 | V_all: M 5.8 G -0.3 Geo -5.3 Ch 41.7 Rot 0.0 | C:2.28 | Div: 18/32 Ent:7.92 MaxP:0.10
+[Step 6400] L:6.48 | V_all: M 1.1 G -0.1 Geo -5.4 Ch 41.3 Rot 0.0 | C:2.40 | Div: 31/32 Ent:8.10 MaxP:0.09
+[Step 6500] L:6.71 | V_all: M 2.9 G -0.1 Geo -5.2 Ch 41.3 Rot 0.0 | C:2.42 | Div: 24/32 Ent:8.15 MaxP:0.09
+Generating probe text...
+[Step 6500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6500] TF Probe: 自->然 [Pred: 自 (0.05) | GT: 0.00] | 然->语 [Pred: 然 (0.07) | GT: 0.00] | 语->言 [Pred: 语 (0.11) | GT: 0.00] | 言->处 [Pred: 言 (0.11) | GT: 0.00] | 处->理 [Pred: 处 (0.13) | GT: 0.00] | 理->是 [Pred: 理 (0.08) | GT: 0.00] | 是->人 [Pred: 是 (0.06) | GT: 0.00] | 人->工 [Pred: 人 (0.08) | GT: 0.00] | 工->智 [Pred: 工 (0.08) | GT: 0.00] | 智->能 [Pred: 智 (0.10) | GT: 0.00] | 能->的 [Pred: 能 (0.05) | GT: 0.00] | 的->核 [Pred: 的 (0.08) | GT: 0.00] | 核->心 [Pred: 核 (0.08) | GT: 0.00] | 心->技 [Pred: 心 (0.09) | GT: 0.00] | 技->术 [Pred: 技 (0.10) | GT: 0.00]
+[Step 6600] L:6.66 | V_all: M 1.6 G -0.1 Geo -5.2 Ch 41.5 Rot 0.0 | C:2.57 | Div: 28/32 Ent:8.18 MaxP:0.08
+[Step 6700] L:6.66 | V_all: M 0.9 G -0.1 Geo -5.4 Ch 41.5 Rot 0.0 | C:2.48 | Div: 27/32 Ent:8.21 MaxP:0.09
+[Step 6800] L:6.66 | V_all: M 1.8 G -0.1 Geo -5.3 Ch 41.6 Rot 0.0 | C:2.43 | Div: 26/32 Ent:8.17 MaxP:0.09
+[Step 6900] L:6.78 | V_all: M 1.8 G -0.1 Geo -5.2 Ch 41.8 Rot 0.0 | C:2.55 | Div: 27/32 Ent:8.18 MaxP:0.08
+[Step 7000] L:6.76 | V_all: M 1.5 G -0.1 Geo -5.3 Ch 42.0 Rot 0.0 | C:2.54 | Div: 29/32 Ent:8.23 MaxP:0.08
+Generating probe text...
+[Step 7000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 7000] TF Probe: 自->然 [Pred: 自 (0.05) | GT: 0.00] | 然->语 [Pred: 然 (0.07) | GT: 0.00] | 语->言 [Pred: 语 (0.09) | GT: 0.00] | 言->处 [Pred: 言 (0.10) | GT: 0.00] | 处->理 [Pred: 处 (0.12) | GT: 0.00] | 理->是 [Pred: 理 (0.08) | GT: 0.00] | 是->人 [Pred: 是 (0.07) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.08) | GT: 0.00] | 智->能 [Pred: 智 (0.10) | GT: 0.00] | 能->的 [Pred: 能 (0.05) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.08) | GT: 0.00] | 心->技 [Pred: 心 (0.09) | GT: 0.00] | 技->术 [Pred: 技 (0.11) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_7000.pth
+[Step 7100] L:6.89 | V_all: M 2.5 G -0.1 Geo -5.2 Ch 42.1 Rot 0.0 | C:2.55 | Div: 27/32 Ent:8.19 MaxP:0.08
+[Step 7200] L:6.78 | V_all: M 1.4 G -0.1 Geo -5.2 Ch 42.2 Rot 0.0 | C:2.58 | Div: 29/32 Ent:8.24 MaxP:0.08
+[Step 7300] L:6.84 | V_all: M 1.0 G -0.1 Geo -5.2 Ch 42.3 Rot 0.0 | C:2.61 | Div: 31/32 Ent:8.25 MaxP:0.07
+[Step 7400] L:6.92 | V_all: M 1.7 G -0.1 Geo -5.2 Ch 42.7 Rot 0.0 | C:2.63 | Div: 28/32 Ent:8.22 MaxP:0.07
+[Step 7500] L:6.87 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 42.9 Rot 0.0 | C:2.49 | Div: 24/32 Ent:8.18 MaxP:0.08
+Generating probe text...
+[Step 7500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 7500] TF Probe: 自->然 [Pred: 自 (0.04) | GT: 0.00] | 然->语 [Pred: 然 (0.06) | GT: 0.00] | 语->言 [Pred: 语 (0.08) | GT: 0.00] | 言->处 [Pred: 言 (0.09) | GT: 0.00] | 处->理 [Pred: 处 (0.11) | GT: 0.00] | 理->是 [Pred: 理 (0.07) | GT: 0.00] | 是->人 [Pred: 是 (0.08) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.08) | GT: 0.00] | 智->能 [Pred: 智 (0.10) | GT: 0.00] | 能->的 [Pred: 能 (0.05) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.08) | GT: 0.00] | 心->技 [Pred: 心 (0.09) | GT: 0.00] | 技->术 [Pred: 技 (0.10) | GT: 0.00]
+[Step 7600] L:6.88 | V_all: M 1.8 G -0.1 Geo -5.2 Ch 42.9 Rot 0.0 | C:2.54 | Div: 27/32 Ent:8.21 MaxP:0.08
+[Step 7700] L:7.04 | V_all: M 1.7 G -0.1 Geo -5.2 Ch 43.2 Rot 0.0 | C:2.68 | Div: 29/32 Ent:8.24 MaxP:0.07
+[Step 7800] L:6.97 | V_all: M 1.2 G -0.1 Geo -5.4 Ch 43.5 Rot 0.0 | C:2.60 | Div: 28/32 Ent:8.26 MaxP:0.08
+[Step 7900] L:7.05 | V_all: M 2.6 G -0.1 Geo -5.2 Ch 43.6 Rot 0.0 | C:2.65 | Div: 23/32 Ent:8.18 MaxP:0.07
+[Step 8000] L:7.08 | V_all: M 2.2 G -0.1 Geo -5.2 Ch 43.8 Rot 0.0 | C:2.62 | Div: 29/32 Ent:8.23 MaxP:0.08
+Generating probe text...
+[Step 8000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 8000] TF Probe: 自->然 [Pred: 自 (0.05) | GT: 0.00] | 然->语 [Pred: 然 (0.06) | GT: 0.00] | 语->言 [Pred: 语 (0.08) | GT: 0.00] | 言->处 [Pred: 言 (0.10) | GT: 0.00] | 处->理 [Pred: 处 (0.11) | GT: 0.00] | 理->是 [Pred: 理 (0.08) | GT: 0.00] | 是->人 [Pred: 是 (0.08) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.09) | GT: 0.00] | 智->能 [Pred: 智 (0.10) | GT: 0.00] | 能->的 [Pred: 能 (0.05) | GT: 0.00] | 的->核 [Pred: 的 (0.10) | GT: 0.00] | 核->心 [Pred: 核 (0.09) | GT: 0.00] | 心->技 [Pred: 心 (0.09) | GT: 0.00] | 技->术 [Pred: 技 (0.10) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_8000.pth
+[Step 8100] L:7.15 | V_all: M 1.8 G -0.1 Geo -5.3 Ch 44.1 Rot 0.0 | C:2.69 | Div: 27/32 Ent:8.27 MaxP:0.07
+[Step 8200] L:7.15 | V_all: M 1.1 G -0.1 Geo -5.3 Ch 44.2 Rot 0.0 | C:2.67 | Div: 28/32 Ent:8.30 MaxP:0.07
+[Step 8300] L:7.17 | V_all: M 2.4 G -0.1 Geo -5.3 Ch 44.7 Rot 0.0 | C:2.60 | Div: 26/32 Ent:8.21 MaxP:0.08
+[Step 8400] L:7.16 | V_all: M 1.1 G -0.1 Geo -5.3 Ch 44.7 Rot 0.0 | C:2.72 | Div: 28/32 Ent:8.23 MaxP:0.07
+[Step 8500] L:7.21 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 45.0 Rot 0.0 | C:2.67 | Div: 28/32 Ent:8.26 MaxP:0.07
+Generating probe text...
+[Step 8500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 8500] TF Probe: 自->然 [Pred: 自 (0.05) | GT: 0.00] | 然->语 [Pred: 然 (0.06) | GT: 0.00] | 语->言 [Pred: 语 (0.08) | GT: 0.00] | 言->处 [Pred: 言 (0.09) | GT: 0.00] | 处->理 [Pred: 处 (0.11) | GT: 0.00] | 理->是 [Pred: 理 (0.07) | GT: 0.00] | 是->人 [Pred: 是 (0.08) | GT: 0.00] | 人->工 [Pred: 人 (0.09) | GT: 0.00] | 工->智 [Pred: 工 (0.08) | GT: 0.00] | 智->能 [Pred: 智 (0.10) | GT: 0.00] | 能->的 [Pred: 能 (0.05) | GT: 0.00] | 的->核 [Pred: 的 (0.10) | GT: 0.00] | 核->心 [Pred: 核 (0.09) | GT: 0.00] | 心->技 [Pred: 心 (0.09) | GT: 0.00] | 技->术 [Pred: 技 (0.10) | GT: 0.00]
+[Step 8600] L:7.24 | V_all: M 1.1 G -0.1 Geo -5.3 Ch 45.2 Rot 0.0 | C:2.74 | Div: 30/32 Ent:8.28 MaxP:0.07
+[Step 8700] L:7.31 | V_all: M 1.7 G -0.1 Geo -5.2 Ch 45.4 Rot 0.0 | C:2.71 | Div: 29/32 Ent:8.26 MaxP:0.07
+[Step 8800] L:7.32 | V_all: M 1.3 G -0.1 Geo -5.2 Ch 45.8 Rot 0.0 | C:2.78 | Div: 27/32 Ent:8.28 MaxP:0.06
+[Step 8900] L:7.32 | V_all: M 1.2 G -0.1 Geo -5.3 Ch 46.0 Rot 0.0 | C:2.91 | Div: 24/32 Ent:8.21 MaxP:0.06
+[Step 9000] L:7.55 | V_all: M 1.5 G -0.1 Geo -5.2 Ch 46.3 Rot 0.0 | C:2.91 | Div: 30/32 Ent:8.34 MaxP:0.06
+Generating probe text...
+[Step 9000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 9000] TF Probe: 自->然 [Pred: 自 (0.05) | GT: 0.00] | 然->语 [Pred: 然 (0.05) | GT: 0.00] | 语->言 [Pred: 语 (0.07) | GT: 0.00] | 言->处 [Pred: 言 (0.09) | GT: 0.00] | 处->理 [Pred: 处 (0.10) | GT: 0.00] | 理->是 [Pred: 理 (0.07) | GT: 0.00] | 是->人 [Pred: 是 (0.07) | GT: 0.00] | 人->工 [Pred: 人 (0.08) | GT: 0.00] | 工->智 [Pred: 工 (0.08) | GT: 0.00] | 智->能 [Pred: 智 (0.09) | GT: 0.00] | 能->的 [Pred: 能 (0.04) | GT: 0.00] | 的->核 [Pred: 的 (0.10) | GT: 0.00] | 核->心 [Pred: 核 (0.08) | GT: 0.00] | 心->技 [Pred: 心 (0.08) | GT: 0.00] | 技->术 [Pred: 技 (0.09) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_9000.pth
+[Step 9100] L:7.65 | V_all: M 0.9 G -0.1 Geo -5.4 Ch 46.5 Rot 0.0 | C:3.08 | Div: 29/32 Ent:8.38 MaxP:0.05
+[Step 9200] L:7.65 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 46.9 Rot 0.0 | C:2.90 | Div: 29/32 Ent:8.36 MaxP:0.06
+[Step 9300] L:7.59 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 47.1 Rot 0.0 | C:2.84 | Div: 28/32 Ent:8.33 MaxP:0.06
+[Step 9400] L:7.51 | V_all: M 1.1 G -0.1 Geo -5.4 Ch 47.3 Rot 0.0 | C:2.84 | Div: 27/32 Ent:8.31 MaxP:0.06
+[Step 9500] L:7.66 | V_all: M 1.9 G -0.1 Geo -5.3 Ch 47.6 Rot 0.0 | C:2.86 | Div: 27/32 Ent:8.31 MaxP:0.06
+Generating probe text...
+[Step 9500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 9500] TF Probe: 自->然 [Pred: 自 (0.04) | GT: 0.00] | 然->语 [Pred: 然 (0.05) | GT: 0.00] | 语->言 [Pred: 语 (0.06) | GT: 0.00] | 言->处 [Pred: 言 (0.08) | GT: 0.00] | 处->理 [Pred: 处 (0.10) | GT: 0.00] | 理->是 [Pred: 理 (0.06) | GT: 0.00] | 是->人 [Pred: 是 (0.06) | GT: 0.00] | 人->工 [Pred: 人 (0.07) | GT: 0.00] | 工->智 [Pred: 工 (0.07) | GT: 0.00] | 智->能 [Pred: 智 (0.09) | GT: 0.00] | 能->的 [Pred: 能 (0.04) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.07) | GT: 0.00] | 心->技 [Pred: 心 (0.08) | GT: 0.00] | 技->术 [Pred: 技 (0.09) | GT: 0.00]
+[Step 9600] L:7.84 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 47.9 Rot 0.0 | C:3.07 | Div: 26/32 Ent:8.34 MaxP:0.05
+[Step 9700] L:7.85 | V_all: M 1.1 G -0.1 Geo -5.2 Ch 48.0 Rot 0.0 | C:3.06 | Div: 26/32 Ent:8.34 MaxP:0.05
+[Step 9800] L:7.77 | V_all: M 1.9 G -0.1 Geo -5.2 Ch 48.3 Rot 0.0 | C:2.91 | Div: 23/32 Ent:8.30 MaxP:0.06
+[Step 9900] L:7.73 | V_all: M 1.2 G -0.1 Geo -5.2 Ch 48.6 Rot 0.0 | C:2.95 | Div: 28/32 Ent:8.27 MaxP:0.05
+[Step 10000] L:7.94 | V_all: M 1.1 G -0.1 Geo -5.3 Ch 49.0 Rot 0.0 | C:3.10 | Div: 31/32 Ent:8.36 MaxP:0.05
+Generating probe text...
+[Step 10000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 10000] TF Probe: 自->然 [Pred: 自 (0.04) | GT: 0.00] | 然->语 [Pred: 然 (0.05) | GT: 0.00] | 语->言 [Pred: 语 (0.06) | GT: 0.00] | 言->处 [Pred: 言 (0.09) | GT: 0.00] | 处->理 [Pred: 处 (0.09) | GT: 0.00] | 理->是 [Pred: 理 (0.06) | GT: 0.00] | 是->人 [Pred: 是 (0.06) | GT: 0.00] | 人->工 [Pred: 人 (0.07) | GT: 0.00] | 工->智 [Pred: 工 (0.06) | GT: 0.00] | 智->能 [Pred: 智 (0.08) | GT: 0.00] | 能->的 [Pred: 能 (0.04) | GT: 0.00] | 的->核 [Pred: 的 (0.09) | GT: 0.00] | 核->心 [Pred: 核 (0.07) | GT: 0.00] | 心->技 [Pred: 心 (0.07) | GT: 0.00] | 技->术 [Pred: 技 (0.08) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_10000.pth
+[Step 10100] L:7.98 | V_all: M 1.2 G -0.1 Geo -5.3 Ch 49.3 Rot 0.0 | C:3.11 | Div: 28/32 Ent:8.33 MaxP:0.05
+[Step 10200] L:8.06 | V_all: M 0.6 G -0.1 Geo -5.4 Ch 49.4 Rot 0.0 | C:3.23 | Div: 32/32 Ent:8.37 MaxP:0.04
+[Step 10300] L:7.99 | V_all: M 1.6 G -0.1 Geo -5.1 Ch 49.8 Rot 0.0 | C:3.04 | Div: 27/32 Ent:8.32 MaxP:0.05
+[Step 10400] L:8.31 | V_all: M 1.5 G -0.1 Geo -5.3 Ch 50.1 Rot 0.0 | C:3.29 | Div: 28/32 Ent:8.43 MaxP:0.04
+[Step 10500] L:8.16 | V_all: M 1.2 G -0.1 Geo -5.2 Ch 50.3 Rot 0.0 | C:3.22 | Div: 27/32 Ent:8.32 MaxP:0.04
+Generating probe text...
+[Step 10500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 10500] TF Probe: 自->然 [Pred: 自 (0.04) | GT: 0.00] | 然->语 [Pred: 然 (0.05) | GT: 0.00] | 语->言 [Pred: 语 (0.06) | GT: 0.00] | 言->处 [Pred: 言 (0.08) | GT: 0.00] | 处->理 [Pred: 处 (0.09) | GT: 0.00] | 理->是 [Pred: 理 (0.06) | GT: 0.00] | 是->人 [Pred: 是 (0.05) | GT: 0.00] | 人->工 [Pred: 人 (0.06) | GT: 0.00] | 工->智 [Pred: 工 (0.07) | GT: 0.00] | 智->能 [Pred: 智 (0.08) | GT: 0.00] | 能->的 [Pred: 能 (0.03) | GT: 0.00] | 的->核 [Pred: 的 (0.08) | GT: 0.00] | 核->心 [Pred: 核 (0.07) | GT: 0.00] | 心->技 [Pred: 心 (0.07) | GT: 0.00] | 技->术 [Pred: 技 (0.07) | GT: 0.00]
+[Step 10600] L:8.90 | V_all: M 0.5 G -0.0 Geo -6.9 Ch 50.9 Rot 0.0 | C:4.13 | Div: 30/32 Ent:8.84 MaxP:0.02
+[Step 10700] L:8.39 | V_all: M 1.6 G -0.1 Geo -5.2 Ch 50.9 Rot 0.0 | C:3.31 | Div: 27/32 Ent:8.36 MaxP:0.04
+[Step 10800] L:8.64 | V_all: M 1.9 G -0.1 Geo -5.4 Ch 51.2 Rot 0.0 | C:3.50 | Div: 25/32 Ent:8.41 MaxP:0.03
+[Step 10900] L:8.27 | V_all: M 2.2 G -0.1 Geo -5.3 Ch 51.6 Rot 0.0 | C:3.21 | Div: 24/32 Ent:8.24 MaxP:0.04
+[Step 11000] L:8.50 | V_all: M 1.5 G -0.1 Geo -5.2 Ch 51.9 Rot 0.0 | C:3.41 | Div: 24/32 Ent:8.31 MaxP:0.04
+Generating probe text...
+[Step 11000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 11000] TF Probe: 自->然 [Pred: 自 (0.03) | GT: 0.00] | 然->语 [Pred: 然 (0.03) | GT: 0.00] | 语->言 [Pred: 语 (0.04) | GT: 0.00] | 言->处 [Pred: 言 (0.07) | GT: 0.00] | 处->理 [Pred: 处 (0.05) | GT: 0.00] | 理->是 [Pred: 理 (0.04) | GT: 0.00] | 是->人 [Pred: 是 (0.04) | GT: 0.00] | 人->工 [Pred: 人 (0.05) | GT: 0.00] | 工->智 [Pred: 工 (0.04) | GT: 0.00] | 智->能 [Pred: 智 (0.05) | GT: 0.00] | 能->的 [Pred: 能 (0.02) | GT: 0.00] | 的->核 [Pred: 的 (0.07) | GT: 0.00] | 核->心 [Pred: 核 (0.05) | GT: 0.00] | 心->技 [Pred: 心 (0.06) | GT: 0.00] | 技->术 [Pred: 技 (0.06) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_11000.pth
+[Step 11100] L:8.45 | V_all: M 1.0 G -0.1 Geo -5.3 Ch 52.0 Rot 0.0 | C:3.41 | Div: 26/32 Ent:8.37 MaxP:0.04
+[Step 11200] L:8.69 | V_all: M 1.4 G -0.1 Geo -5.3 Ch 52.3 Rot 0.0 | C:3.53 | Div: 28/32 Ent:8.37 MaxP:0.03
+[Step 11300] L:9.01 | V_all: M 1.0 G -0.1 Geo -5.2 Ch 52.5 Rot 0.0 | C:3.89 | Div: 29/32 Ent:8.44 MaxP:0.02
+[Step 11400] L:8.96 | V_all: M 1.0 G -0.1 Geo -5.3 Ch 52.8 Rot 0.0 | C:3.79 | Div: 30/32 Ent:8.47 MaxP:0.03
+[Step 11500] L:8.75 | V_all: M 2.3 G -0.1 Geo -5.2 Ch 53.2 Rot 0.0 | C:3.39 | Div: 19/32 Ent:8.39 MaxP:0.04
+Generating probe text...
+[Step 11500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 11500] TF Probe: 自->然 [Pred: 自 (0.03) | GT: 0.00] | 然->语 [Pred: 然 (0.03) | GT: 0.00] | 语->言 [Pred: 语 (0.04) | GT: 0.00] | 言->处 [Pred: 言 (0.05) | GT: 0.00] | 处->理 [Pred: 处 (0.05) | GT: 0.00] | 理->是 [Pred: 理 (0.04) | GT: 0.00] | 是->人 [Pred: 是 (0.03) | GT: 0.00] | 人->工 [Pred: 人 (0.05) | GT: 0.00] | 工->智 [Pred: 工 (0.04) | GT: 0.00] | 智->能 [Pred: 智 (0.05) | GT: 0.00] | 能->的 [Pred: 能 (0.02) | GT: 0.00] | 的->核 [Pred: 的 (0.06) | GT: 0.00] | 核->心 [Pred: 核 (0.05) | GT: 0.00] | 心->技 [Pred: 心 (0.05) | GT: 0.00] | 技->术 [Pred: 技 (0.05) | GT: 0.00]
+[Step 11600] L:9.04 | V_all: M 1.7 G -0.1 Geo -5.2 Ch 53.4 Rot 0.0 | C:3.75 | Div: 27/32 Ent:8.39 MaxP:0.03
+[Step 11700] L:8.90 | V_all: M 1.2 G -0.1 Geo -5.2 Ch 53.9 Rot 0.0 | C:3.63 | Div: 29/32 Ent:8.30 MaxP:0.03
+[Step 11800] L:9.05 | V_all: M 1.3 G -0.1 Geo -5.2 Ch 54.0 Rot 0.0 | C:3.74 | Div: 28/32 Ent:8.39 MaxP:0.03
+[Step 11900] L:9.17 | V_all: M 0.7 G -0.1 Geo -5.3 Ch 54.1 Rot 0.0 | C:3.94 | Div: 31/32 Ent:8.40 MaxP:0.02
+[Step 12000] L:9.14 | V_all: M 1.0 G -0.1 Geo -5.2 Ch 54.5 Rot 0.0 | C:3.86 | Div: 28/32 Ent:8.28 MaxP:0.02
+Generating probe text...
+[Step 12000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 12000] TF Probe: 自->然 [Pred: 自 (0.03) | GT: 0.00] | 然->语 [Pred: 然 (0.03) | GT: 0.00] | 语->言 [Pred: 语 (0.03) | GT: 0.00] | 言->处 [Pred: 言 (0.05) | GT: 0.00] | 处->理 [Pred: 处 (0.04) | GT: 0.00] | 理->是 [Pred: 理 (0.04) | GT: 0.00] | 是->人 [Pred: 是 (0.04) | GT: 0.00] | 人->工 [Pred: 人 (0.05) | GT: 0.00] | 工->智 [Pred: 工 (0.04) | GT: 0.00] | 智->能 [Pred: 智 (0.04) | GT: 0.00] | 能->的 [Pred: 能 (0.02) | GT: 0.00] | 的->核 [Pred: 的 (0.06) | GT: 0.00] | 核->心 [Pred: 核 (0.05) | GT: 0.00] | 心->技 [Pred: 心 (0.05) | GT: 0.00] | 技->术 [Pred: 技 (0.04) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_12000.pth
+[Step 12100] L:9.38 | V_all: M 2.3 G -0.1 Geo -5.3 Ch 55.0 Rot 0.0 | C:3.92 | Div: 25/32 Ent:8.36 MaxP:0.02
+[Step 12200] L:9.34 | V_all: M 1.1 G -0.1 Geo -5.3 Ch 55.2 Rot 0.0 | C:3.98 | Div: 30/32 Ent:8.33 MaxP:0.02
+[Step 12300] L:9.41 | V_all: M 1.3 G -0.1 Geo -5.1 Ch 55.3 Rot 0.0 | C:3.96 | Div: 27/32 Ent:8.40 MaxP:0.02
+[Step 12400] L:9.37 | V_all: M 2.2 G -0.1 Geo -5.1 Ch 55.7 Rot 0.0 | C:3.85 | Div: 24/32 Ent:8.33 MaxP:0.03
+[Step 12500] L:9.20 | V_all: M 1.8 G -0.1 Geo -5.1 Ch 55.9 Rot 0.0 | C:3.68 | Div: 30/32 Ent:8.32 MaxP:0.03
+Generating probe text...
+[Step 12500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 12500] TF Probe: 自->然 [Pred: 自 (0.03) | GT: 0.00] | 然->语 [Pred: 然 (0.02) | GT: 0.00] | 语->言 [Pred: 语 (0.04) | GT: 0.00] | 言->处 [Pred: 言 (0.06) | GT: 0.00] | 处->理 [Pred: 处 (0.03) | GT: 0.00] | 理->是 [Pred: 理 (0.03) | GT: 0.00] | 是->人 [Pred: 是 (0.03) | GT: 0.00] | 人->工 [Pred: 人 (0.03) | GT: 0.00] | 工->智 [Pred: 工 (0.03) | GT: 0.00] | 智->能 [Pred: 智 (0.03) | GT: 0.00] | 能->的 [Pred: 能 (0.02) | GT: 0.00] | 的->核 [Pred: 的 (0.05) | GT: 0.00] | 核->心 [Pred: 核 (0.04) | GT: 0.00] | 心->技 [Pred: 心 (0.04) | GT: 0.00] | 技->术 [Pred: 技 (0.06) | GT: 0.00]
+[Step 12600] L:9.57 | V_all: M 0.6 G -0.1 Geo -5.3 Ch 56.2 Rot 0.0 | C:4.11 | Div: 30/32 Ent:8.41 MaxP:0.02
+[Step 12700] L:9.47 | V_all: M 2.4 G -0.1 Geo -5.1 Ch 56.6 Rot 0.0 | C:3.83 | Div: 24/32 Ent:8.34 MaxP:0.02
+[Step 12800] L:9.57 | V_all: M 0.9 G -0.1 Geo -5.5 Ch 56.8 Rot 0.0 | C:4.11 | Div: 28/32 Ent:8.31 MaxP:0.02
+[Step 12900] L:9.66 | V_all: M 0.8 G -0.1 Geo -5.3 Ch 57.0 Rot 0.0 | C:4.21 | Div: 26/32 Ent:8.30 MaxP:0.02
+[Step 13000] L:9.71 | V_all: M 0.6 G -0.1 Geo -5.2 Ch 57.3 Rot 0.0 | C:4.17 | Div: 29/32 Ent:8.36 MaxP:0.02
+Generating probe text...
+[Step 13000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 13000] TF Probe: 自->然 [Pred: 自 (0.04) | GT: 0.00] | 然->语 [Pred: 然 (0.03) | GT: 0.00] | 语->言 [Pred: 语 (0.03) | GT: 0.00] | 言->处 [Pred: 言 (0.04) | GT: 0.00] | 处->理 [Pred: 处 (0.03) | GT: 0.00] | 理->是 [Pred: 理 (0.05) | GT: 0.00] | 是->人 [Pred: 是 (0.02) | GT: 0.00] | 人->工 [Pred: 人 (0.04) | GT: 0.00] | 工->智 [Pred: 工 (0.03) | GT: 0.00] | 智->能 [Pred: 智 (0.04) | GT: 0.00] | 能->的 [Pred: 能 (0.03) | GT: 0.00] | 的->核 [Pred: 的 (0.04) | GT: 0.00] | 核->心 [Pred: 核 (0.05) | GT: 0.00] | 心->技 [Pred: 心 (0.04) | GT: 0.00] | 技->术 [Pred: 技 (0.03) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_13000.pth
+[Step 13100] L:9.86 | V_all: M 2.4 G -0.1 Geo -5.1 Ch 57.7 Rot 0.0 | C:4.12 | Div: 26/32 Ent:8.34 MaxP:0.02
+[Step 13200] L:10.12 | V_all: M 1.1 G -0.0 Geo -5.3 Ch 58.0 Rot 0.0 | C:4.55 | Div: 24/32 Ent:8.39 MaxP:0.01
+[Step 13300] L:9.57 | V_all: M 1.0 G -0.1 Geo -5.3 Ch 58.1 Rot 0.0 | C:3.97 | Div: 30/32 Ent:8.17 MaxP:0.02
+[Step 13400] L:9.68 | V_all: M 0.7 G -0.1 Geo -5.1 Ch 58.5 Rot 0.0 | C:4.05 | Div: 28/32 Ent:8.27 MaxP:0.02
+[Step 13500] L:9.96 | V_all: M 1.6 G -0.0 Geo -5.4 Ch 58.8 Rot 0.0 | C:4.22 | Div: 30/32 Ent:8.22 MaxP:0.02
+Generating probe text...
+[Step 13500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 13500] TF Probe: 自->然 [Pred: 自 (0.03) | GT: 0.00] | 然->语 [Pred: 然 (0.03) | GT: 0.00] | 语->言 [Pred: 语 (0.02) | GT: 0.00] | 言->处 [Pred: 言 (0.02) | GT: 0.00] | 处->理 [Pred: 处 (0.04) | GT: 0.00] | 理->是 [Pred: 理 (0.05) | GT: 0.00] | 是->人 [Pred: 是 (0.02) | GT: 0.00] | 人->工 [Pred: 人 (0.03) | GT: 0.00] | 工->智 [Pred: 工 (0.05) | GT: 0.00] | 智->能 [Pred: 智 (0.03) | GT: 0.00] | 能->的 [Pred: 能 (0.02) | GT: 0.00] | 的->核 [Pred: 的 (0.05) | GT: 0.00] | 核->心 [Pred: 核 (0.04) | GT: 0.00] | 心->技 [Pred: 心 (0.04) | GT: 0.00] | 技->术 [Pred: 技 (0.02) | GT: 0.00]
+[Step 13600] L:9.94 | V_all: M 0.9 G -0.1 Geo -5.3 Ch 59.0 Rot 0.0 | C:4.24 | Div: 30/32 Ent:8.29 MaxP:0.02
+[Step 13700] L:10.08 | V_all: M 1.0 G -0.1 Geo -5.1 Ch 59.2 Rot 0.0 | C:4.36 | Div: 28/32 Ent:8.26 MaxP:0.01
+[Step 13800] L:9.84 | V_all: M 0.9 G -0.0 Geo -5.4 Ch 59.5 Rot 0.0 | C:4.14 | Div: 28/32 Ent:8.17 MaxP:0.02
+[Step 13900] L:9.44 | V_all: M 1.0 G -0.1 Geo -5.2 Ch 59.8 Rot 0.0 | C:3.65 | Div: 29/32 Ent:8.16 MaxP:0.03
+[Step 14000] L:10.05 | V_all: M 2.5 G -0.0 Geo -5.1 Ch 60.1 Rot 0.0 | C:4.10 | Div: 24/32 Ent:8.13 MaxP:0.02
+Generating probe text...
+[Step 14000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 14000] TF Probe: 自->然 [Pred: 自 (0.04) | GT: 0.00] | 然->语 [Pred: 然 (0.02) | GT: 0.00] | 语->言 [Pred: 语 (0.02) | GT: 0.00] | 言->处 [Pred: 言 (0.03) | GT: 0.00] | 处->理 [Pred: 处 (0.03) | GT: 0.00] | 理->是 [Pred: 理 (0.02) | GT: 0.00] | 是->人 [Pred: 是 (0.05) | GT: 0.00] | 人->工 [Pred: 人 (0.04) | GT: 0.00] | 工->智 [Pred: 工 (0.04) | GT: 0.00] | 智->能 [Pred: 智 (0.04) | GT: 0.00] | 能->的 [Pred: 能 (0.03) | GT: 0.00] | 的->核 [Pred: 的 (0.07) | GT: 0.00] | 核->心 [Pred: 核 (0.05) | GT: 0.00] | 心->技 [Pred: 心 (0.04) | GT: 0.00] | 技->术 [Pred: 技 (0.02) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_14000.pth
+[Step 14100] L:9.99 | V_all: M 1.4 G -0.0 Geo -5.2 Ch 60.4 Rot 0.0 | C:4.08 | Div: 24/32 Ent:8.27 MaxP:0.02
+[Step 14200] L:9.98 | V_all: M 1.0 G -0.1 Geo -5.1 Ch 60.7 Rot 0.0 | C:4.14 | Div: 31/32 Ent:8.06 MaxP:0.02
+[Step 14300] L:10.10 | V_all: M 1.1 G -0.0 Geo -5.2 Ch 60.9 Rot 0.0 | C:4.17 | Div: 22/32 Ent:8.19 MaxP:0.02
+[Step 14400] L:10.30 | V_all: M 0.7 G -0.0 Geo -5.2 Ch 61.2 Rot 0.0 | C:4.36 | Div: 30/32 Ent:8.28 MaxP:0.01
+[Step 14500] L:10.62 | V_all: M 1.1 G -0.1 Geo -5.3 Ch 61.5 Rot 0.0 | C:4.66 | Div: 30/32 Ent:8.29 MaxP:0.01
+Generating probe text...
+[Step 14500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 14500] TF Probe: 自->然 [Pred: 自 (0.03) | GT: 0.00] | 然->语 [Pred: 然 (0.04) | GT: 0.00] | 语->言 [Pred: 语 (0.03) | GT: 0.00] | 言->处 [Pred: 言 (0.02) | GT: 0.00] | 处->理 [Pred: 处 (0.03) | GT: 0.00] | 理->是 [Pred: 理 (0.03) | GT: 0.00] | 是->人 [Pred: 是 (0.02) | GT: 0.00] | 人->工 [Pred: 人 (0.01) | GT: 0.00] | 工->智 [Pred: 工 (0.02) | GT: 0.00] | 智->能 [Pred: 智 (0.04) | GT: 0.00] | 能->的 [Pred: 能 (0.03) | GT: 0.00] | 的->核 [Pred: 的 (0.03) | GT: 0.00] | 核->心 [Pred: 核 (0.04) | GT: 0.00] | 心->技 [Pred: 心 (0.02) | GT: 0.00] | 技->术 [Pred: 技 (0.04) | GT: 0.00]
+[Step 14600] L:11.14 | V_all: M 1.5 G -0.1 Geo -5.3 Ch 61.7 Rot 0.0 | C:5.14 | Div: 30/32 Ent:8.42 MaxP:0.01
+[Step 14700] L:10.86 | V_all: M 0.6 G -0.1 Geo -5.2 Ch 61.9 Rot 0.0 | C:4.95 | Div: 31/32 Ent:8.28 MaxP:0.01
+[Step 14800] L:10.87 | V_all: M 1.3 G -0.0 Geo -5.3 Ch 62.2 Rot 0.0 | C:4.84 | Div: 27/32 Ent:8.28 MaxP:0.01
+[Step 14900] L:11.07 | V_all: M 0.5 G -0.1 Geo -5.4 Ch 62.4 Rot 0.0 | C:5.19 | Div: 27/32 Ent:8.21 MaxP:0.01
+[Step 15000] L:10.95 | V_all: M 1.0 G -0.1 Geo -5.2 Ch 62.6 Rot 0.0 | C:4.93 | Div: 29/32 Ent:8.29 MaxP:0.01
+Generating probe text...
+[Step 15000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 15000] TF Probe: 自->然 [Pred: 自 (0.04) | GT: 0.00] | 然->语 [Pred: 然 (0.02) | GT: 0.00] | 语->言 [Pred: 语 (0.03) | GT: 0.00] | 言->处 [Pred: 言 (0.03) | GT: 0.00] | 处->理 [Pred: 处 (0.01) | GT: 0.00] | 理->是 [Pred: 理 (0.02) | GT: 0.00] | 是->人 [Pred: 是 (0.01) | GT: 0.00] | 人->工 [Pred: 人 (0.01) | GT: 0.00] | 工->智 [Pred: 工 (0.01) | GT: 0.00] | 智->能 [Pred: 智 (0.01) | GT: 0.00] | 能->的 [Pred: 能 (0.03) | GT: 0.00] | 的->核 [Pred: 的 (0.02) | GT: 0.00] | 核->心 [Pred: 核 (0.02) | GT: 0.00] | 心->技 [Pred: 心 (0.01) | GT: 0.00] | 技->术 [Pred: 技 (0.02) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_15000.pth
+[Step 15100] L:10.98 | V_all: M 0.9 G -0.1 Geo -5.2 Ch 62.9 Rot 0.0 | C:4.93 | Div: 23/32 Ent:8.23 MaxP:0.01
+[Step 15200] L:11.12 | V_all: M 1.0 G -0.0 Geo -5.3 Ch 63.2 Rot 0.0 | C:5.01 | Div: 31/32 Ent:8.35 MaxP:0.01
+[Step 15300] L:11.22 | V_all: M 1.8 G -0.0 Geo -5.4 Ch 63.5 Rot 0.0 | C:5.04 | Div: 23/32 Ent:8.28 MaxP:0.01
+[Step 15400] L:11.30 | V_all: M 0.7 G -0.0 Geo -5.2 Ch 63.7 Rot 0.0 | C:5.24 | Div: 29/32 Ent:8.24 MaxP:0.01
+[Step 15500] L:11.13 | V_all: M 1.7 G -0.0 Geo -5.2 Ch 63.9 Rot 0.0 | C:4.89 | Div: 27/32 Ent:8.32 MaxP:0.01
+Generating probe text...
+[Step 15500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 15500] TF Probe: 自->然 [Pred: 自 (0.03) | GT: 0.00] | 然->语 [Pred: 然 (0.01) | GT: 0.00] | 语->言 [Pred: 语 (0.03) | GT: 0.00] | 言->处 [Pred: 言 (0.04) | GT: 0.00] | 处->理 [Pred: 处 (0.01) | GT: 0.00] | 理->是 [Pred: 理 (0.01) | GT: 0.00] | 是->人 [Pred: 是 (0.01) | GT: 0.00] | 人->工 [Pred: 人 (0.01) | GT: 0.00] | 工->智 [Pred: 工 (0.01) | GT: 0.00] | 智->能 [Pred: 智 (0.01) | GT: 0.00] | 能->的 [Pred: 能 (0.03) | GT: 0.00] | 的->核 [Pred: 的 (0.02) | GT: 0.00] | 核->心 [Pred: 核 (0.02) | GT: 0.00] | 心->技 [Pred: 心 (0.01) | GT: 0.00] | 技->术 [Pred: 技 (0.01) | GT: 0.00]
+[Step 15600] L:11.11 | V_all: M 1.3 G -0.0 Geo -5.1 Ch 64.2 Rot 0.0 | C:4.91 | Div: 26/32 Ent:8.16 MaxP:0.01
+[Step 15700] L:11.38 | V_all: M 3.5 G -0.0 Geo -5.1 Ch 64.5 Rot 0.0 | C:4.90 | Div: 25/32 Ent:8.35 MaxP:0.01
+[Step 15800] L:11.55 | V_all: M 1.6 G -0.0 Geo -5.2 Ch 64.6 Rot 0.0 | C:5.25 | Div: 26/32 Ent:8.34 MaxP:0.01
+[Step 15900] L:10.96 | V_all: M 1.0 G -0.0 Geo -5.2 Ch 64.9 Rot 0.0 | C:4.73 | Div: 30/32 Ent:8.25 MaxP:0.01
+[Step 16000] L:11.58 | V_all: M 1.5 G -0.0 Geo -5.2 Ch 65.1 Rot 0.0 | C:5.23 | Div: 25/32 Ent:8.36 MaxP:0.01
+Generating probe text...
+[Step 16000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 16000] TF Probe: 自->然 [Pred: 自 (0.02) | GT: 0.00] | 然->语 [Pred: 然 (0.01) | GT: 0.00] | 语->言 [Pred: 语 (0.03) | GT: 0.00] | 言->处 [Pred: 言 (0.02) | GT: 0.00] | 处->理 [Pred: 处 (0.01) | GT: 0.00] | 理->是 [Pred: 理 (0.01) | GT: 0.00] | 是->人 [Pred: 是 (0.02) | GT: 0.00] | 人->工 [Pred: 人 (0.01) | GT: 0.00] | 工->智 [Pred: 工 (0.01) | GT: 0.00] | 智->能 [Pred: 智 (0.02) | GT: 0.00] | 能->的 [Pred: 能 (0.03) | GT: 0.00] | 的->核 [Pred: 的 (0.03) | GT: 0.00] | 核->心 [Pred: 核 (0.02) | GT: 0.00] | 心->技 [Pred: 心 (0.01) | GT: 0.00] | 技->术 [Pred: 技 (0.02) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_16000.pth
+[Step 16100] L:11.44 | V_all: M 2.0 G -0.0 Geo -5.1 Ch 65.4 Rot 0.0 | C:5.02 | Div: 21/32 Ent:8.17 MaxP:0.01
+[Step 16200] L:11.46 | V_all: M 2.1 G -0.0 Geo -5.2 Ch 65.6 Rot 0.0 | C:4.99 | Div: 23/32 Ent:8.33 MaxP:0.01
+[Step 16300] L:11.58 | V_all: M 1.8 G -0.0 Geo -5.2 Ch 65.9 Rot 0.0 | C:5.16 | Div: 26/32 Ent:8.28 MaxP:0.01
+[Step 16400] L:11.53 | V_all: M 0.9 G -0.0 Geo -5.3 Ch 66.1 Rot 0.0 | C:5.17 | Div: 31/32 Ent:8.26 MaxP:0.01
+[Step 16500] L:11.71 | V_all: M 1.3 G -0.0 Geo -5.1 Ch 66.2 Rot 0.0 | C:5.24 | Div: 27/32 Ent:8.24 MaxP:0.01
+Generating probe text...
+[Step 16500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 16500] TF Probe: 自->然 [Pred: 自 (0.01) | GT: 0.00] | 然->语 [Pred: 然 (0.00) | GT: 0.00] | 语->言 [Pred: 语 (0.02) | GT: 0.00] | 言->处 [Pred: 言 (0.01) | GT: 0.00] | 处->理 [Pred: 处 (0.01) | GT: 0.00] | 理->是 [Pred: 理 (0.00) | GT: 0.00] | 是->人 [Pred: 是 (0.01) | GT: 0.00] | 人->工 [Pred: 人 (0.02) | GT: 0.00] | 工->智 [Pred: 工 (0.01) | GT: 0.00] | 智->能 [Pred: 智 (0.00) | GT: 0.00] | 能->的 [Pred: 能 (0.01) | GT: 0.00] | 的->核 [Pred: 的 (0.01) | GT: 0.00] | 核->心 [Pred: 核 (0.00) | GT: 0.00] | 心->技 [Pred: 心 (0.01) | GT: 0.00] | 技->术 [Pred: 技 (0.00) | GT: 0.00]
+[Step 16600] L:11.69 | V_all: M 0.8 G -0.0 Geo -5.2 Ch 66.5 Rot 0.0 | C:5.29 | Div: 29/32 Ent:8.12 MaxP:0.01
+[Step 16700] L:12.03 | V_all: M 1.9 G -0.0 Geo -5.1 Ch 66.9 Rot 0.0 | C:5.51 | Div: 24/32 Ent:8.34 MaxP:0.01
+[Step 16800] L:12.05 | V_all: M 1.4 G -0.0 Geo -5.3 Ch 67.1 Rot 0.0 | C:5.55 | Div: 24/32 Ent:8.35 MaxP:0.01
+[Step 16900] L:11.87 | V_all: M 0.7 G -0.0 Geo -5.2 Ch 67.2 Rot 0.0 | C:5.41 | Div: 26/32 Ent:8.31 MaxP:0.01
+[Step 17000] L:12.12 | V_all: M 0.8 G -0.0 Geo -5.2 Ch 67.5 Rot 0.0 | C:5.66 | Div: 23/32 Ent:8.22 MaxP:0.01
+Generating probe text...
+[Step 17000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 17000] TF Probe: 自->然 [Pred: 自 (0.02) | GT: 0.00] | 然->语 [Pred: 然 (0.01) | GT: 0.00] | 语->言 [Pred: 语 (0.03) | GT: 0.00] | 言->处 [Pred: 言 (0.02) | GT: 0.00] | 处->理 [Pred: 处 (0.01) | GT: 0.00] | 理->是 [Pred: 理 (0.00) | GT: 0.00] | 是->人 [Pred: 是 (0.01) | GT: 0.00] | 人->工 [Pred: 人 (0.01) | GT: 0.00] | 工->智 [Pred: 工 (0.01) | GT: 0.00] | 智->能 [Pred: 智 (0.01) | GT: 0.00] | 能->的 [Pred: 能 (0.02) | GT: 0.00] | 的->核 [Pred: 的 (0.01) | GT: 0.00] | 核->心 [Pred: 核 (0.01) | GT: 0.00] | 心->技 [Pred: 心 (0.01) | GT: 0.00] | 技->术 [Pred: 技 (0.01) | GT: 0.00]
+Saved checkpoint to data/aurora_v3_1_step_17000.pth
+[Step 17100] L:11.82 | V_all: M 0.8 G -0.0 Geo -5.2 Ch 67.7 Rot 0.0 | C:5.32 | Div: 24/32 Ent:8.28 MaxP:0.01
+[Step 17200] L:12.01 | V_all: M 1.2 G -0.0 Geo -5.1 Ch 67.9 Rot 0.0 | C:5.46 | Div: 26/32 Ent:8.13 MaxP:0.01
+[Step 17300] L:11.87 | V_all: M 1.0 G -0.0 Geo -5.3 Ch 68.0 Rot 0.0 | C:5.36 | Div: 27/32 Ent:8.10 MaxP:0.01
+[Step 17400] L:12.65 | V_all: M 1.7 G -0.0 Geo -5.1 Ch 68.4 Rot 0.0 | C:6.03 | Div: 24/32 Ent:8.34 MaxP:0.00
+[Step 17500] L:12.24 | V_all: M 0.4 G -0.0 Geo -5.2 Ch 68.5 Rot 0.0 | C:5.69 | Div: 32/32 Ent:8.33 MaxP:0.01
+Generating probe text...
+[Step 17500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 17500] TF Probe: 自->然 [Pred: 自 (0.02) | GT: 0.00] | 然->语 [Pred: 然 (0.01) | GT: 0.00] | 语->言 [Pred: 语 (0.03) | GT: 0.00] | 言->处 [Pred: 言 (0.02) | GT: 0.00] | 处->理 [Pred: 处 (0.01) | GT: 0.00] | 理->是 [Pred: 理 (0.00) | GT: 0.00] | 是->人 [Pred: 是 (0.01) | GT: 0.00] | 人->工 [Pred: 人 (0.01) | GT: 0.00] | 工->智 [Pred: 工 (0.01) | GT: 0.00] | 智->能 [Pred: 智 (0.00) | GT: 0.00] | 能->的 [Pred: 能 (0.02) | GT: 0.00] | 的->核 [Pred: 的 (0.01) | GT: 0.00] | 核->心 [Pred: 核 (0.01) | GT: 0.00] | 心->技 [Pred: 心 (0.01) | GT: 0.00] | 技->术 [Pred: 技 (0.00) | GT: 0.00]
+[Step 17600] L:12.38 | V_all: M 1.2 G -0.0 Geo -5.2 Ch 68.7 Rot 0.0 | C:5.73 | Div: 27/32 Ent:8.36 MaxP:0.01
+[Step 17700] L:12.20 | V_all: M 0.9 G -0.0 Geo -5.3 Ch 68.9 Rot 0.0 | C:5.56 | Div: 28/32 Ent:8.28 MaxP:0.01
+[Step 17800] L:12.66 | V_all: M 1.0 G -0.0 Geo -5.3 Ch 69.2 Rot 0.0 | C:5.97 | Div: 27/32 Ent:8.15 MaxP:0.01
+[Step 17900] L:12.58 | V_all: M 1.7 G -0.0 Geo -5.2 Ch 69.3 Rot 0.0 | C:5.84 | Div: 20/32 Ent:8.31 MaxP:0.00
+[Step 18000] L:12.53 | V_all: M 1.0 G -0.0 Geo -5.2 Ch 69.5 Rot 0.0 | C:5.85 | Div: 27/32 Ent:8.29 MaxP:0.01
+Generating probe text...
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+Resuming from checkpoint: data/aurora_v3_1_step_17000.pth
+Resumed at step 17000
+[Step 17100] L:14.36 | V_all: M 5.7 G -0.1 Geo -5.2 Ch 66.6 Rot 0.0 | C:7.63 | Div: 7/32 Ent:8.49 MaxP:0.00
+[Step 17200] L:13.27 | V_all: M 0.9 G -0.0 Geo -5.4 Ch 66.6 Rot 0.0 | C:6.96 | Div: 21/32 Ent:8.54 MaxP:0.00
+[Step 17300] L:12.25 | V_all: M 0.9 G -0.0 Geo -5.2 Ch 66.7 Rot 0.0 | C:5.85 | Div: 28/32 Ent:8.44 MaxP:0.00
+[Step 17400] L:12.18 | V_all: M 0.6 G -0.0 Geo -5.3 Ch 66.9 Rot 0.0 | C:5.82 | Div: 27/32 Ent:8.02 MaxP:0.01
+[Step 17500] L:12.33 | V_all: M 0.7 G -0.0 Geo -5.2 Ch 67.1 Rot 0.0 | C:5.86 | Div: 25/32 Ent:8.31 MaxP:0.01
+Generating probe text...
+[Step 17500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 17500] TF Probe: 自->然 [GT: 1.05e-03 Rank:71 | Top1: 自(0.01) | Top5: 自(0.01) 致(0.00) 臭(0.00) 确(0.00) 能(0.00)]
+然->语 [GT: 5.08e-05 Rank:3778 | Top1: 然(0.00) | Top5: 然(0.00) 照(0.00) 演(0.00) 科(0.00) 湖(0.00)]
+语->言 [GT: 5.92e-04 Rank:295 | Top1: 语(0.02) | Top5: 语(0.02) 邮(0.00) 衣(0.00) 酬(0.00) 误(0.00)]
+言->处 [GT: 1.29e-04 Rank:1933 | Top1: 言(0.01) | Top5: 言(0.01) 觉(0.00) 解(0.00) 聘(0.00) 花(0.00)]
+处->理 [GT: 5.88e-04 Rank:342 | Top1: 处(0.00) | Top5: 处(0.00) 备(0.00) 委(0.00) 头(0.00) 姐(0.00)]
+理->是 [GT: 2.48e-04 Rank:1268 | Top1: 理(0.00) | Top5: 理(0.00) 球(0.00) 班(0.00) 想(0.00) 潮(0.00)]
+是->人 [GT: 2.07e-04 Rank:1166 | Top1: 是(0.01) | Top5: 是(0.01) 时(0.00) 此(0.00) 朋(0.00) 数(0.00)]
+人->工 [GT: 1.21e-04 Rank:1226 | Top1: 人(0.01) | Top5: 人(0.01) 亲(0.01) 之(0.01) 介(0.01) 从(0.01)]
+工->智 [GT: 2.27e-04 Rank:946 | Top1: 工(0.01) | Top5: 工(0.01) 左(0.01) 己(0.00) 带(0.00) 张(0.00)]
+智->能 [GT: 1.00e-04 Rank:1953 | Top1: 智(0.01) | Top5: 智(0.01) 毅(0.00) 松(0.00) 每(0.00) 期(0.00)]
+能->的 [GT: 4.61e-04 Rank:455 | Top1: 能(0.01) | Top5: 能(0.01) 腾(0.00) 脉(0.00) 色(0.00) 莫(0.00)]
+的->核 [GT: 8.38e-04 Rank:147 | Top1: 的(0.01) | Top5: 的(0.01) 登(0.00) 百(0.00) 白(0.00) 示(0.00)]
+核->心 [GT: 4.63e-04 Rank:544 | Top1: 核(0.01) | Top5: 核(0.01) 格(0.00) 根(0.00) 样(0.00) 桃(0.00)]
+心->技 [GT: 9.22e-04 Rank:141 | Top1: 心(0.01) | Top5: 心(0.01) 必(0.00) 忆(0.00) 徽(0.00) 德(0.00)]
+技->术 [GT: 5.16e-04 Rank:436 | Top1: 技(0.01) | Top5: 技(0.01) 找(0.00) 打(0.00) 承(0.00) 手(0.00)]
+[Step 17600] L:12.05 | V_all: M 1.0 G -0.0 Geo -5.3 Ch 67.3 Rot 0.0 | C:5.60 | Div: 28/32 Ent:7.91 MaxP:0.01
+[Step 17700] L:12.19 | V_all: M 1.2 G -0.0 Geo -5.2 Ch 67.6 Rot 0.0 | C:5.68 | Div: 21/32 Ent:8.23 MaxP:0.01
+[Step 17800] L:11.74 | V_all: M 1.5 G -0.0 Geo -5.3 Ch 67.8 Rot 0.0 | C:5.21 | Div: 20/32 Ent:8.09 MaxP:0.01
+[Step 17900] L:12.27 | V_all: M 2.1 G -0.0 Geo -5.2 Ch 68.1 Rot 0.0 | C:5.60 | Div: 21/32 Ent:8.18 MaxP:0.01
+[Step 18000] L:12.35 | V_all: M 1.0 G -0.0 Geo -5.2 Ch 68.2 Rot 0.0 | C:5.73 | Div: 28/32 Ent:8.27 MaxP:0.01
+Generating probe text...
+[Step 18000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 18000] TF Probe: 自->然 [GT: 4.52e-04 Rank:434 | Top1: 自(0.01) | Top5: 自(0.01) 致(0.00) 臭(0.00) 至(0.00) 确(0.00)]
+然->语 [GT: 3.30e-05 Rank:4344 | Top1: 然(0.01) | Top5: 然(0.01) 科(0.00) 演(0.00) 照(0.00) 海(0.00)]
+语->言 [GT: 6.19e-04 Rank:318 | Top1: 语(0.02) | Top5: 语(0.02) 邮(0.00) 酬(0.00) 衣(0.00) 话(0.00)]
+言->处 [GT: 1.27e-04 Rank:1913 | Top1: 言(0.01) | Top5: 言(0.01) 谢(0.00) 评(0.00) 聘(0.00) 诚(0.00)]
+处->理 [GT: 3.76e-04 Rank:773 | Top1: 处(0.00) | Top5: 处(0.00) 备(0.00) 委(0.00) 头(0.00) 姐(0.00)]
+理->是 [GT: 1.17e-04 Rank:2322 | Top1: 理(0.00) | Top5: 理(0.00) 球(0.00) 想(0.00) 班(0.00) 改(0.00)]
+是->人 [GT: 1.10e-03 Rank:94 | Top1: 是(0.03) | Top5: 是(0.03) 时(0.00) 明(0.00) 数(0.00) 新(0.00)]
+人->工 [GT: 1.57e-04 Rank:1417 | Top1: 人(0.00) | Top5: 人(0.00) 也(0.00) 之(0.00) 亲(0.00) 从(0.00)]
+工->智 [GT: 1.10e-04 Rank:1910 | Top1: 工(0.01) | Top5: 工(0.01) 左(0.00) 己(0.00) 张(0.00) 带(0.00)]
+智->能 [GT: 2.60e-05 Rank:3787 | Top1: 智(0.01) | Top5: 智(0.01) 无(0.00) 极(0.00) 板(0.00) 料(0.00)]
+能->的 [GT: 6.33e-05 Rank:3430 | Top1: 能(0.02) | Top5: 能(0.02) 腾(0.00) 脉(0.00) 莫(0.00) 脑(0.00)]
+的->核 [GT: 5.17e-04 Rank:221 | Top1: 的(0.06) | Top5: 的(0.06) 登(0.00) 百(0.00) 白(0.00) 皇(0.00)]
+核->心 [GT: 3.89e-04 Rank:603 | Top1: 核(0.01) | Top5: 核(0.01) 根(0.01) 格(0.00) 样(0.00) 木(0.00)]
+心->技 [GT: 5.44e-04 Rank:451 | Top1: 心(0.01) | Top5: 心(0.01) 必(0.00) 德(0.00) 忆(0.00) 徽(0.00)]
+技->术 [GT: 3.18e-04 Rank:895 | Top1: 技(0.01) | Top5: 技(0.01) 找(0.00) 抵(0.00) 懂(0.00) 损(0.00)]
+Saved checkpoint to data/aurora_v3_1_step_18000.pth
+[Step 18100] L:12.45 | V_all: M 1.2 G -0.0 Geo -5.4 Ch 68.4 Rot 0.0 | C:5.92 | Div: 28/32 Ent:8.08 MaxP:0.01
+[Step 18200] L:12.26 | V_all: M 1.1 G -0.0 Geo -5.3 Ch 68.6 Rot 0.0 | C:5.66 | Div: 24/32 Ent:8.16 MaxP:0.01
+[Step 18300] L:12.52 | V_all: M 0.9 G -0.0 Geo -5.2 Ch 68.9 Rot 0.0 | C:5.91 | Div: 27/32 Ent:8.24 MaxP:0.00
+[Step 18400] L:12.59 | V_all: M 0.9 G -0.0 Geo -5.2 Ch 69.1 Rot 0.0 | C:5.94 | Div: 27/32 Ent:8.07 MaxP:0.01
+[Step 18500] L:12.40 | V_all: M 1.0 G -0.0 Geo -5.3 Ch 69.3 Rot 0.0 | C:5.73 | Div: 27/32 Ent:8.18 MaxP:0.01
+Generating probe text...
+[Step 18500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 18500] TF Probe: 自->然 [GT: 3.27e-04 Rank:778 | Top1: 自(0.01) | Top5: 自(0.01) 致(0.00) 臭(0.00) 至(0.00) 虎(0.00)]
+然->语 [GT: 7.78e-05 Rank:3069 | Top1: 然(0.01) | Top5: 然(0.01) 演(0.00) 照(0.00) 瘾(0.00) 可(0.00)]
+语->言 [GT: 8.74e-04 Rank:279 | Top1: 语(0.01) | Top5: 语(0.01) 邮(0.00) 该(0.00) 读(0.00) 衣(0.00)]
+言->处 [GT: 2.12e-05 Rank:4311 | Top1: 言(0.01) | Top5: 言(0.01) 解(0.00) 评(0.00) 聘(0.00) 识(0.00)]
+处->理 [GT: 3.51e-04 Rank:891 | Top1: 处(0.00) | Top5: 处(0.00) 备(0.00) 委(0.00) 大(0.00) 头(0.00)]
+理->是 [GT: 1.20e-04 Rank:2007 | Top1: 理(0.01) | Top5: 理(0.01) 化(0.00) 球(0.00) 口(0.00) 包(0.00)]
+是->人 [GT: 1.19e-03 Rank:81 | Top1: 是(0.03) | Top5: 是(0.03) 时(0.00) 朋(0.00) 此(0.00) 明(0.00)]
+人->工 [GT: 1.72e-04 Rank:1357 | Top1: 人(0.00) | Top5: 人(0.00) 之(0.00) 也(0.00) 亲(0.00) 从(0.00)]
+工->智 [GT: 8.11e-05 Rank:2052 | Top1: 工(0.01) | Top5: 工(0.01) 左(0.01) 己(0.00) 差(0.00) 带(0.00)]
+智->能 [GT: 2.92e-05 Rank:3689 | Top1: 智(0.01) | Top5: 智(0.01) 林(0.01) 景(0.00) 普(0.00) 查(0.00)]
+能->的 [GT: 8.76e-05 Rank:2176 | Top1: 能(0.01) | Top5: 能(0.01) 腾(0.00) 色(0.00) 脉(0.00) 脑(0.00)]
+的->核 [GT: 3.91e-04 Rank:386 | Top1: 的(0.04) | Top5: 的(0.04) 登(0.01) 百(0.01) 白(0.00) 皇(0.00)]
+核->心 [GT: 2.77e-04 Rank:881 | Top1: 核(0.02) | Top5: 核(0.02) 木(0.01) 桃(0.00) 格(0.00) 根(0.00)]
+心->技 [GT: 5.15e-04 Rank:513 | Top1: 心(0.01) | Top5: 心(0.01) 德(0.00) 必(0.00) 徽(0.00) 忆(0.00)]
+技->术 [GT: 2.62e-04 Rank:1125 | Top1: 技(0.01) | Top5: 技(0.01) 找(0.00) 房(0.00) 抵(0.00) 拥(0.00)]
+[Step 18600] L:12.59 | V_all: M 0.9 G -0.0 Geo -5.3 Ch 69.4 Rot 0.0 | C:5.92 | Div: 21/32 Ent:8.10 MaxP:0.01
+[Step 18700] L:12.33 | V_all: M 1.5 G -0.0 Geo -5.1 Ch 69.7 Rot 0.0 | C:5.47 | Div: 24/32 Ent:7.96 MaxP:0.01
+[Step 18800] L:12.58 | V_all: M 0.8 G -0.0 Geo -5.3 Ch 69.8 Rot 0.0 | C:5.87 | Div: 26/32 Ent:8.15 MaxP:0.00
+[Step 18900] L:12.61 | V_all: M 4.1 G -0.0 Geo -5.1 Ch 70.1 Rot 0.0 | C:5.60 | Div: 13/32 Ent:8.01 MaxP:0.01
+[Step 19000] L:13.41 | V_all: M 0.7 G -0.0 Geo -5.5 Ch 70.2 Rot 0.0 | C:6.77 | Div: 27/32 Ent:7.85 MaxP:0.00
+Generating probe text...
+[Step 19000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 19000] TF Probe: 自->然 [GT: 4.59e-04 Rank:559 | Top1: 自(0.00) | Top5: 自(0.00) 致(0.00) 至(0.00) 能(0.00) 第(0.00)]
+然->语 [GT: 6.41e-05 Rank:3125 | Top1: 然(0.00) | Top5: 然(0.00) 演(0.00) 照(0.00) 湖(0.00) 的(0.00)]
+语->言 [GT: 8.91e-04 Rank:239 | Top1: 语(0.00) | Top5: 语(0.00) 该(0.00) 钟(0.00) 那(0.00) 衣(0.00)]
+言->处 [GT: 9.45e-06 Rank:6179 | Top1: 言(0.00) | Top5: 言(0.00) 觉(0.00) 规(0.00) 聘(0.00) 解(0.00)]
+处->理 [GT: 3.92e-04 Rank:731 | Top1: 处(0.00) | Top5: 处(0.00) 备(0.00) 委(0.00) 头(0.00) 大(0.00)]
+理->是 [GT: 8.20e-04 Rank:134 | Top1: 理(0.00) | Top5: 理(0.00) 球(0.00) 班(0.00) 死(0.00) 潮(0.00)]
+是->人 [GT: 2.27e-04 Rank:1162 | Top1: 是(0.00) | Top5: 是(0.00) 时(0.00) 朋(0.00) 每(0.00) 款(0.00)]
+人->工 [GT: 1.78e-04 Rank:1133 | Top1: 人(0.00) | Top5: 人(0.00) 之(0.00) 也(0.00) 买(0.00) 亲(0.00)]
+工->智 [GT: 2.27e-04 Rank:990 | Top1: 工(0.01) | Top5: 工(0.01) 左(0.00) 张(0.00) 己(0.00) 市(0.00)]
+智->能 [GT: 7.27e-05 Rank:2254 | Top1: 智(0.00) | Top5: 智(0.00) 松(0.00) 期(0.00) 树(0.00) 桥(0.00)]
+能->的 [GT: 5.24e-04 Rank:483 | Top1: 能(0.00) | Top5: 能(0.00) 色(0.00) 般(0.00) 获(0.00) 花(0.00)]
+的->核 [GT: 6.38e-04 Rank:270 | Top1: 的(0.00) | Top5: 的(0.00) 用(0.00) 科(0.00) 着(0.00) 种(0.00)]
+核->心 [GT: 3.95e-04 Rank:686 | Top1: 核(0.00) | Top5: 核(0.00) 格(0.00) 根(0.00) 样(0.00) 气(0.00)]
+心->技 [GT: 9.54e-04 Rank:131 | Top1: 心(0.00) | Top5: 心(0.00) 必(0.00) 微(0.00) 德(0.00) 徽(0.00)]
+技->术 [GT: 8.40e-04 Rank:179 | Top1: 技(0.00) | Top5: 技(0.00) 找(0.00) 承(0.00) 打(0.00) 手(0.00)]
+Saved checkpoint to data/aurora_v3_1_step_19000.pth
+[Step 19100] L:12.69 | V_all: M 0.8 G -0.0 Geo -5.2 Ch 70.4 Rot 0.0 | C:5.88 | Div: 26/32 Ent:7.85 MaxP:0.00
+[Step 19200] L:12.97 | V_all: M 0.9 G -0.0 Geo -5.2 Ch 70.6 Rot 0.0 | C:6.22 | Div: 26/32 Ent:8.20 MaxP:0.00
+[Step 19300] L:12.98 | V_all: M 0.8 G -0.0 Geo -5.3 Ch 70.7 Rot 0.0 | C:6.14 | Div: 25/32 Ent:8.05 MaxP:0.00
+[Step 19400] L:12.79 | V_all: M 1.1 G -0.0 Geo -5.3 Ch 70.9 Rot 0.0 | C:5.97 | Div: 24/32 Ent:7.84 MaxP:0.00
+[Step 19500] L:13.06 | V_all: M 2.5 G -0.0 Geo -5.4 Ch 71.1 Rot 0.0 | C:6.04 | Div: 15/32 Ent:7.97 MaxP:0.01
+Generating probe text...
+[Step 19500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 19500] TF Probe: 自->然 [GT: 4.07e-04 Rank:753 | Top1: 自(0.00) | Top5: 自(0.00) 致(0.00) 能(0.00) 至(0.00) 第(0.00)]
+然->语 [GT: 1.38e-04 Rank:1925 | Top1: 然(0.00) | Top5: 然(0.00) 照(0.00) 演(0.00) 科(0.00) 湖(0.00)]
+语->言 [GT: 7.90e-04 Rank:297 | Top1: 语(0.00) | Top5: 语(0.00) 邮(0.00) 衣(0.00) 钟(0.00) 那(0.00)]
+言->处 [GT: 4.26e-06 Rank:7060 | Top1: 言(0.00) | Top5: 言(0.00) 解(0.00) 觉(0.00) 规(0.00) 聘(0.00)]
+处->理 [GT: 3.98e-04 Rank:636 | Top1: 处(0.01) | Top5: 处(0.01) 备(0.01) 委(0.01) 姐(0.01) 头(0.01)]
+理->是 [GT: 1.05e-03 Rank:99 | Top1: 理(0.00) | Top5: 理(0.00) 球(0.00) 气(0.00) 短(0.00) 潮(0.00)]
+是->人 [GT: 9.97e-05 Rank:2258 | Top1: 是(0.00) | Top5: 是(0.00) 星(0.00) 时(0.00) 数(0.00) 机(0.00)]
+人->工 [GT: 6.86e-05 Rank:1355 | Top1: 人(0.01) | Top5: 人(0.01) 先(0.01) 之(0.01) 亲(0.01) 介(0.01)]
+工->智 [GT: 3.74e-04 Rank:468 | Top1: 工(0.01) | Top5: 工(0.01) 左(0.01) 己(0.01) 带(0.00) 年(0.00)]
+智->能 [GT: 7.19e-05 Rank:2167 | Top1: 智(0.00) | Top5: 智(0.00) 松(0.00) 期(0.00) 树(0.00) 查(0.00)]
+能->的 [GT: 3.97e-04 Rank:812 | Top1: 能(0.00) | Top5: 能(0.00) 色(0.00) 花(0.00) 般(0.00) 自(0.00)]
+的->核 [GT: 5.53e-04 Rank:348 | Top1: 的(0.00) | Top5: 的(0.00) 用(0.00) 着(0.00) 看(0.00) 白(0.00)]
+核->心 [GT: 4.26e-04 Rank:677 | Top1: 核(0.00) | Top5: 核(0.00) 根(0.00) 格(0.00) 检(0.00) 样(0.00)]
+心->技 [GT: 1.23e-03 Rank:96 | Top1: 心(0.01) | Top5: 心(0.01) 必(0.00) 德(0.00) 忆(0.00) 微(0.00)]
+技->术 [GT: 8.70e-04 Rank:208 | Top1: 技(0.00) | Top5: 技(0.00) 找(0.00) 承(0.00) 打(0.00) 抵(0.00)]
+[Step 19600] L:13.02 | V_all: M 1.1 G -0.0 Geo -5.2 Ch 71.3 Rot 0.0 | C:6.14 | Div: 23/32 Ent:8.11 MaxP:0.00
+[Step 19700] L:12.80 | V_all: M 0.6 G -0.0 Geo -5.3 Ch 71.3 Rot 0.0 | C:5.91 | Div: 18/32 Ent:7.72 MaxP:0.01
+[Step 19800] L:13.02 | V_all: M 1.1 G -0.0 Geo -5.3 Ch 71.7 Rot 0.0 | C:6.02 | Div: 26/32 Ent:7.79 MaxP:0.01
+[Step 19900] L:13.09 | V_all: M 0.4 G -0.0 Geo -5.2 Ch 71.7 Rot 0.0 | C:6.26 | Div: 25/32 Ent:8.13 MaxP:0.00
+[Step 20000] L:12.97 | V_all: M 1.6 G -0.0 Geo -5.3 Ch 71.9 Rot 0.0 | C:5.90 | Div: 19/32 Ent:7.77 MaxP:0.00
+Generating probe text...
+[Step 20000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 20000] TF Probe: 自->然 [GT: 1.88e-04 Rank:1250 | Top1: 自(0.01) | Top5: 自(0.01) 致(0.00) 臭(0.00) 至(0.00) 能(0.00)]
+然->语 [GT: 2.48e-05 Rank:3855 | Top1: 然(0.01) | Top5: 然(0.01) 演(0.00) 照(0.00) 湖(0.00) 气(0.00)]
+语->言 [GT: 7.33e-04 Rank:379 | Top1: 语(0.01) | Top5: 语(0.01) 邮(0.00) 那(0.00) 钟(0.00) 该(0.00)]
+言->处 [GT: 6.62e-06 Rank:5344 | Top1: 言(0.01) | Top5: 言(0.01) 规(0.00) 解(0.00) 觉(0.00) 说(0.00)]
+处->理 [GT: 1.31e-04 Rank:1739 | Top1: 处(0.00) | Top5: 处(0.00) 备(0.00) 委(0.00) 头(0.00) 姐(0.00)]
+理->是 [GT: 1.52e-03 Rank:64 | Top1: 理(0.01) | Top5: 理(0.01) 球(0.00) 椅(0.00) 术(0.00) 有(0.00)]
+是->人 [GT: 2.12e-04 Rank:1096 | Top1: 是(0.01) | Top5: 是(0.01) 时(0.00) 款(0.00) 朋(0.00) 河(0.00)]
+人->工 [GT: 1.52e-04 Rank:1136 | Top1: 人(0.00) | Top5: 人(0.00) 之(0.00) 也(0.00) 从(0.00) 亲(0.00)]
+工->智 [GT: 1.90e-04 Rank:1185 | Top1: 工(0.01) | Top5: 工(0.01) 左(0.00) 己(0.00) 带(0.00) 张(0.00)]
+智->能 [GT: 1.08e-05 Rank:4238 | Top1: 智(0.00) | Top5: 智(0.00) 松(0.00) 树(0.00) 晰(0.00) 暂(0.00)]
+能->的 [GT: 3.85e-04 Rank:701 | Top1: 能(0.01) | Top5: 能(0.01) 脉(0.00) 色(0.00) 要(0.00) 花(0.00)]
+的->核 [GT: 3.45e-04 Rank:557 | Top1: 的(0.01) | Top5: 的(0.01) 着(0.01) 看(0.01) 百(0.01) 白(0.01)]
+核->心 [GT: 2.99e-04 Rank:832 | Top1: 核(0.01) | Top5: 核(0.01) 格(0.00) 根(0.00) 气(0.00) 期(0.00)]
+心->技 [GT: 1.19e-03 Rank:144 | Top1: 心(0.01) | Top5: 心(0.01) 必(0.00) 微(0.00) 德(0.00) 忆(0.00)]
+技->术 [GT: 1.04e-03 Rank:212 | Top1: 技(0.01) | Top5: 技(0.01) 找(0.00) 承(0.00) 打(0.00) 手(0.00)]
+Saved checkpoint to data/aurora_v3_1_step_20000.pth
+[Step 20100] L:13.35 | V_all: M 0.8 G -0.0 Geo -5.3 Ch 72.1 Rot 0.0 | C:6.41 | Div: 29/32 Ent:7.70 MaxP:0.01
+[Step 20200] L:13.13 | V_all: M 1.1 G -0.0 Geo -5.3 Ch 72.2 Rot 0.0 | C:6.10 | Div: 25/32 Ent:7.91 MaxP:0.00
+[Step 20300] L:12.77 | V_all: M 0.8 G -0.0 Geo -5.1 Ch 72.3 Rot 0.0 | C:5.75 | Div: 21/32 Ent:7.83 MaxP:0.01
+[Step 20400] L:13.03 | V_all: M 0.7 G -0.0 Geo -5.2 Ch 72.6 Rot 0.0 | C:6.07 | Div: 24/32 Ent:8.09 MaxP:0.00
+[Step 20500] L:13.13 | V_all: M 2.6 G -0.0 Geo -5.1 Ch 72.8 Rot 0.0 | C:5.90 | Div: 22/32 Ent:7.84 MaxP:0.01
+Generating probe text...
+[Step 20500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 20500] TF Probe: 自->然 [GT: 2.79e-04 Rank:1154 | Top1: 自(0.00) | Top5: 自(0.00) 致(0.00) 要(0.00) 至(0.00) 能(0.00)]
+然->语 [GT: 1.89e-04 Rank:1394 | Top1: 然(0.00) | Top5: 然(0.00) 照(0.00) 演(0.00) 科(0.00) 满(0.00)]
+语->言 [GT: 7.88e-04 Rank:315 | Top1: 语(0.00) | Top5: 语(0.00) 邮(0.00) 那(0.00) 话(0.00) 钟(0.00)]
+言->处 [GT: 1.87e-06 Rank:7319 | Top1: 言(0.00) | Top5: 言(0.00) 解(0.00) 觉(0.00) 规(0.00) 聘(0.00)]
+处->理 [GT: 4.61e-05 Rank:2258 | Top1: 处(0.01) | Top5: 处(0.01) 备(0.01) 委(0.01) 头(0.01) 姐(0.01)]
+理->是 [GT: 1.26e-03 Rank:127 | Top1: 理(0.01) | Top5: 理(0.01) 球(0.00) 满(0.00) 此(0.00) 正(0.00)]
+是->人 [GT: 9.97e-05 Rank:1721 | Top1: 是(0.01) | Top5: 是(0.01) 时(0.00) 春(0.00) 朋(0.00) 数(0.00)]
+人->工 [GT: 6.44e-05 Rank:1317 | Top1: 人(0.01) | Top5: 人(0.01) 之(0.00) 亲(0.00) 介(0.00) 也(0.00)]
+工->智 [GT: 1.73e-04 Rank:859 | Top1: 工(0.02) | Top5: 工(0.02) 己(0.01) 左(0.01) 带(0.01) 年(0.01)]
+智->能 [GT: 3.98e-05 Rank:2101 | Top1: 智(0.01) | Top5: 智(0.01) 树(0.00) 松(0.00) 期(0.00) 暖(0.00)]
+能->的 [GT: 1.99e-04 Rank:1486 | Top1: 能(0.00) | Top5: 能(0.00) 色(0.00) 要(0.00) 花(0.00) 般(0.00)]
+的->核 [GT: 3.96e-04 Rank:570 | Top1: 的(0.01) | Top5: 的(0.01) 看(0.00) 用(0.00) 着(0.00) 由(0.00)]
+核->心 [GT: 2.11e-04 Rank:929 | Top1: 核(0.01) | Top5: 核(0.01) 根(0.00) 格(0.00) 检(0.00) 欧(0.00)]
+心->技 [GT: 1.63e-03 Rank:102 | Top1: 心(0.01) | Top5: 心(0.01) 必(0.01) 徽(0.01) 微(0.00) 德(0.00)]
+技->术 [GT: 1.03e-03 Rank:200 | Top1: 技(0.01) | Top5: 技(0.01) 找(0.01) 承(0.00) 打(0.00) 手(0.00)]
+[Step 20600] L:12.79 | V_all: M 0.7 G -0.0 Geo -5.2 Ch 72.9 Rot 0.0 | C:5.79 | Div: 26/32 Ent:7.79 MaxP:0.01
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+Resuming from checkpoint: data/aurora_v3_1_step_20000.pth
+Resumed at step 20000
+[Step 20700] L:13.27 | V_all: M 1.6 G -0.0 Geo -5.3 Ch 73.1 Rot 0.0 | C:6.08 | Div: 18/32 Ent:7.77 MaxP:0.01
+[Step 20100] L:16.25 | V_all: M 19.1 G -0.0 Geo -5.2 Ch 71.2 Rot 0.0 | C:7.73 | Div: 2/32 Ent:8.62 MaxP:0.00
+[Step 20800] L:13.39 | V_all: M 1.5 G -0.0 Geo -5.2 Ch 73.2 Rot 0.0 | C:6.25 | Div: 23/32 Ent:8.17 MaxP:0.00
+[Step 20200] L:14.03 | V_all: M 1.5 G -0.0 Geo -5.4 Ch 70.8 Rot 0.0 | C:7.22 | Div: 17/32 Ent:8.60 MaxP:0.00
+[Step 20300] L:13.11 | V_all: M 1.5 G -0.0 Geo -5.1 Ch 70.8 Rot 0.0 | C:6.28 | Div: 23/32 Ent:7.99 MaxP:0.00
+[Step 20400] L:13.35 | V_all: M 0.6 G -0.0 Geo -5.3 Ch 71.0 Rot 0.0 | C:6.58 | Div: 25/32 Ent:7.78 MaxP:0.00
+[Step 20500] L:13.07 | V_all: M 1.1 G -0.0 Geo -5.2 Ch 71.2 Rot 0.0 | C:6.14 | Div: 15/32 Ent:8.04 MaxP:0.00
+Generating probe text...
+[Step 20500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 20500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1473.3
+Median Rank: 1013
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:2.0e-04 R:1434 | P:自]
+然->语 [GT:6.8e-05 R:2463 | P:然]
+语->言 [GT:8.8e-04 R:280 | P:语]
+言->处 [GT:4.0e-06 R:6286 | P:言]
+处->理 [GT:1.3e-04 R:1706 | P:处]
+理->是 [GT:1.2e-03 R:71 | P:理]
+是->人 [GT:1.0e-04 R:1889 | P:是]
+人->工 [GT:1.4e-04 R:1013 | P:人]
+工->智 [GT:2.5e-04 R:890 | P:工]
+智->能 [GT:2.5e-05 R:3067 | P:智]
+能->的 [GT:2.2e-04 R:1360 | P:能]
+的->核 [GT:4.7e-04 R:466 | P:的]
+核->心 [GT:3.6e-04 R:786 | P:核]
+心->技 [GT:1.4e-03 R:106 | P:心]
+技->术 [GT:8.1e-04 R:282 | P:技]
+[Step 20600] L:12.93 | V_all: M 1.1 G -0.0 Geo -5.2 Ch 71.3 Rot 0.0 | C:6.06 | Div: 25/32 Ent:7.72 MaxP:0.00
+[Step 20700] L:13.00 | V_all: M 1.3 G -0.0 Geo -5.2 Ch 71.4 Rot 0.0 | C:6.05 | Div: 16/32 Ent:8.01 MaxP:0.01
+[Step 20800] L:12.50 | V_all: M 2.8 G -0.0 Geo -5.2 Ch 71.7 Rot 0.0 | C:5.43 | Div: 15/32 Ent:7.80 MaxP:0.01
+[Step 20900] L:13.11 | V_all: M 3.2 G -0.0 Geo -5.2 Ch 71.8 Rot 0.0 | C:5.96 | Div: 23/32 Ent:8.01 MaxP:0.00
+[Step 21000] L:13.09 | V_all: M 1.2 G -0.0 Geo -5.2 Ch 72.0 Rot 0.0 | C:6.04 | Div: 24/32 Ent:7.63 MaxP:0.00
+Generating probe text...
+[Step 21000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 21000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1513.9
+Median Rank: 1034
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:2.5e-04 R:1307 | P:自]
+然->语 [GT:8.9e-05 R:2199 | P:然]
+语->言 [GT:8.5e-04 R:282 | P:语]
+言->处 [GT:2.3e-06 R:7029 | P:言]
+处->理 [GT:8.9e-05 R:1808 | P:处]
+理->是 [GT:1.1e-03 R:126 | P:理]
+是->人 [GT:5.5e-05 R:2676 | P:是]
+人->工 [GT:9.6e-05 R:1034 | P:人]
+工->智 [GT:2.1e-04 R:913 | P:工]
+智->能 [GT:3.4e-05 R:2487 | P:智]
+能->的 [GT:3.2e-04 R:1090 | P:能]
+的->核 [GT:4.3e-04 R:552 | P:的]
+核->心 [GT:3.3e-04 R:844 | P:核]
+心->技 [GT:1.6e-03 R:98 | P:心]
+技->术 [GT:8.8e-04 R:263 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_21000.pth
+[Step 21100] L:13.40 | V_all: M 2.1 G -0.0 Geo -5.4 Ch 72.1 Rot 0.0 | C:6.38 | Div: 25/32 Ent:7.88 MaxP:0.00
+[Step 21200] L:12.83 | V_all: M 0.6 G -0.0 Geo -5.3 Ch 72.2 Rot 0.0 | C:5.87 | Div: 27/32 Ent:7.62 MaxP:0.00
+[Step 21300] L:13.28 | V_all: M 0.8 G -0.0 Geo -5.1 Ch 72.3 Rot 0.0 | C:6.35 | Div: 22/32 Ent:7.84 MaxP:0.00
+[Step 21400] L:13.35 | V_all: M 1.4 G -0.0 Geo -5.2 Ch 72.6 Rot 0.0 | C:6.23 | Div: 20/32 Ent:7.63 MaxP:0.01
+[Step 21500] L:13.18 | V_all: M 1.1 G -0.0 Geo -5.2 Ch 72.7 Rot 0.0 | C:6.15 | Div: 23/32 Ent:7.83 MaxP:0.00
+Generating probe text...
+[Step 21500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 21500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1516.8
+Median Rank: 936
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:2.5e-04 R:1298 | P:自]
+然->语 [GT:8.9e-05 R:2201 | P:然]
+语->言 [GT:8.4e-04 R:282 | P:语]
+言->处 [GT:2.2e-06 R:7232 | P:言]
+处->理 [GT:7.3e-05 R:2002 | P:处]
+理->是 [GT:1.3e-03 R:79 | P:理]
+是->人 [GT:5.9e-05 R:2556 | P:是]
+人->工 [GT:8.3e-05 R:1199 | P:人]
+工->智 [GT:2.2e-04 R:863 | P:工]
+智->能 [GT:3.6e-05 R:2442 | P:智]
+能->的 [GT:3.8e-04 R:911 | P:能]
+的->核 [GT:5.0e-04 R:475 | P:的]
+核->心 [GT:2.9e-04 R:936 | P:核]
+心->技 [GT:1.6e-03 R:81 | P:心]
+技->术 [GT:1.0e-03 R:195 | P:技]
+[Step 21600] L:13.38 | V_all: M 0.9 G -0.0 Geo -5.3 Ch 72.8 Rot 0.0 | C:6.42 | Div: 19/32 Ent:8.03 MaxP:0.00
+[Step 21700] L:13.11 | V_all: M 1.1 G -0.0 Geo -5.1 Ch 72.9 Rot 0.0 | C:6.00 | Div: 23/32 Ent:7.78 MaxP:0.00
+[Step 21800] L:13.34 | V_all: M 1.1 G -0.0 Geo -5.3 Ch 72.9 Rot 0.0 | C:6.30 | Div: 27/32 Ent:7.71 MaxP:0.00
+[Step 21900] L:13.13 | V_all: M 5.7 G -0.0 Geo -5.1 Ch 73.2 Rot 0.0 | C:5.65 | Div: 14/32 Ent:7.78 MaxP:0.00
+[Step 22000] L:14.09 | V_all: M 1.4 G -0.0 Geo -5.5 Ch 73.4 Rot 0.0 | C:7.05 | Div: 24/32 Ent:8.08 MaxP:0.00
+Generating probe text...
+[Step 22000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 22000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1253.0
+Median Rank: 967
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:4.0e-04 R:725 | P:自]
+然->语 [GT:2.0e-04 R:1686 | P:然]
+语->言 [GT:6.7e-04 R:222 | P:语]
+言->处 [GT:3.0e-05 R:4649 | P:言]
+处->理 [GT:5.6e-04 R:374 | P:处]
+理->是 [GT:5.6e-04 R:313 | P:理]
+是->人 [GT:4.2e-05 R:3697 | P:是]
+人->工 [GT:7.5e-05 R:1201 | P:人]
+工->智 [GT:1.8e-04 R:1627 | P:工]
+智->能 [GT:1.2e-04 R:1764 | P:智]
+能->的 [GT:3.3e-04 R:977 | P:能]
+的->核 [GT:6.0e-04 R:240 | P:的]
+核->心 [GT:3.5e-04 R:967 | P:核]
+心->技 [GT:7.4e-04 R:128 | P:心]
+技->术 [GT:6.9e-04 R:225 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_22000.pth
+[Step 22100] L:13.65 | V_all: M 1.1 G -0.0 Geo -5.2 Ch 73.5 Rot 0.0 | C:6.55 | Div: 21/32 Ent:8.25 MaxP:0.00
+[Step 22200] L:13.67 | V_all: M 0.7 G -0.0 Geo -5.2 Ch 73.5 Rot 0.0 | C:6.59 | Div: 20/32 Ent:8.06 MaxP:0.00
+[Step 22300] L:13.77 | V_all: M 1.3 G -0.0 Geo -5.3 Ch 73.6 Rot 0.0 | C:6.53 | Div: 20/32 Ent:8.06 MaxP:0.00
+[Step 22400] L:13.64 | V_all: M 1.8 G -0.0 Geo -5.3 Ch 73.8 Rot 0.0 | C:6.45 | Div: 17/32 Ent:7.90 MaxP:0.00
+[Step 22500] L:13.91 | V_all: M 4.5 G -0.0 Geo -5.5 Ch 73.9 Rot 0.0 | C:6.46 | Div: 15/32 Ent:7.96 MaxP:0.00
+Generating probe text...
+[Step 22500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 22500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1458.7
+Median Rank: 1205
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:4.1e-04 R:758 | P:自]
+然->语 [GT:2.1e-04 R:1543 | P:然]
+语->言 [GT:6.9e-04 R:242 | P:语]
+言->处 [GT:1.4e-05 R:5763 | P:言]
+处->理 [GT:1.3e-04 R:1205 | P:处]
+理->是 [GT:6.0e-04 R:358 | P:理]
+是->人 [GT:2.6e-05 R:4040 | P:是]
+人->工 [GT:5.7e-05 R:1315 | P:人]
+工->智 [GT:1.2e-04 R:1978 | P:工]
+智->能 [GT:1.1e-04 R:1679 | P:智]
+能->的 [GT:2.8e-04 R:1223 | P:能]
+的->核 [GT:7.5e-04 R:197 | P:的]
+核->心 [GT:2.4e-04 R:1189 | P:核]
+心->技 [GT:9.0e-04 R:128 | P:心]
+技->术 [GT:7.0e-04 R:263 | P:技]
+[Step 22600] L:13.53 | V_all: M 1.1 G -0.0 Geo -5.3 Ch 73.9 Rot 0.0 | C:6.39 | Div: 20/32 Ent:8.08 MaxP:0.00
+[Step 22700] L:13.24 | V_all: M 0.8 G -0.0 Geo -5.2 Ch 74.0 Rot 0.0 | C:6.11 | Div: 18/32 Ent:7.75 MaxP:0.01
+[Step 22800] L:13.51 | V_all: M 2.4 G -0.0 Geo -5.2 Ch 74.2 Rot 0.0 | C:6.10 | Div: 22/32 Ent:7.87 MaxP:0.00
+[Step 22900] L:13.78 | V_all: M 2.1 G -0.0 Geo -5.2 Ch 74.3 Rot 0.0 | C:6.49 | Div: 17/32 Ent:7.66 MaxP:0.00
+[Step 23000] L:13.45 | V_all: M 1.9 G -0.0 Geo -5.2 Ch 74.4 Rot 0.0 | C:6.08 | Div: 14/32 Ent:7.88 MaxP:0.00
+Generating probe text...
+[Step 23000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 23000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1731.9
+Median Rank: 1605
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:1.1e-04 R:1952 | P:自]
+然->语 [GT:2.7e-05 R:2909 | P:然]
+语->言 [GT:8.5e-04 R:348 | P:语]
+言->处 [GT:3.2e-06 R:5654 | P:言]
+处->理 [GT:2.0e-05 R:2605 | P:处]
+理->是 [GT:1.3e-03 R:165 | P:理]
+是->人 [GT:2.4e-05 R:2654 | P:是]
+人->工 [GT:6.2e-05 R:1320 | P:人]
+工->智 [GT:5.1e-05 R:1874 | P:工]
+智->能 [GT:1.3e-05 R:2600 | P:智]
+能->的 [GT:1.6e-04 R:1605 | P:能]
+的->核 [GT:5.7e-04 R:446 | P:的]
+核->心 [GT:9.9e-05 R:1321 | P:核]
+心->技 [GT:1.4e-03 R:175 | P:心]
+技->术 [GT:8.0e-04 R:351 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_23000.pth
+[Step 23100] L:13.93 | V_all: M 1.3 G -0.0 Geo -5.3 Ch 74.5 Rot 0.0 | C:6.66 | Div: 19/32 Ent:7.57 MaxP:0.01
+[Step 23200] L:13.51 | V_all: M 1.3 G -0.0 Geo -5.2 Ch 74.6 Rot 0.0 | C:6.18 | Div: 18/32 Ent:7.84 MaxP:0.00
+[Step 23300] L:13.50 | V_all: M 0.9 G -0.0 Geo -5.1 Ch 74.7 Rot 0.0 | C:6.17 | Div: 18/32 Ent:7.71 MaxP:0.01
+[Step 23400] L:13.30 | V_all: M 2.0 G -0.0 Geo -5.2 Ch 74.8 Rot 0.0 | C:5.93 | Div: 21/32 Ent:7.60 MaxP:0.00
+[Step 23500] L:13.60 | V_all: M 3.0 G -0.0 Geo -5.1 Ch 74.9 Rot 0.0 | C:6.05 | Div: 21/32 Ent:7.86 MaxP:0.01
+Generating probe text...
+[Step 23500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 23500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1875.6
+Median Rank: 1864
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:1.1e-04 R:2094 | P:自]
+然->语 [GT:6.7e-05 R:1864 | P:然]
+语->言 [GT:8.3e-04 R:327 | P:语]
+言->处 [GT:2.9e-06 R:6009 | P:言]
+处->理 [GT:8.6e-06 R:3033 | P:处]
+理->是 [GT:4.9e-04 R:558 | P:理]
+是->人 [GT:2.2e-05 R:2359 | P:是]
+人->工 [GT:5.0e-05 R:1357 | P:人]
+工->智 [GT:1.8e-05 R:3402 | P:工]
+智->能 [GT:1.7e-05 R:1880 | P:智]
+能->的 [GT:5.8e-05 R:2715 | P:能]
+的->核 [GT:5.5e-04 R:419 | P:的]
+核->心 [GT:6.6e-05 R:1279 | P:核]
+心->技 [GT:1.1e-03 R:228 | P:心]
+技->术 [GT:3.6e-04 R:610 | P:技]
+[Step 23600] L:13.21 | V_all: M 1.1 G -0.0 Geo -5.3 Ch 75.1 Rot 0.0 | C:5.88 | Div: 20/32 Ent:7.67 MaxP:0.01
+[Step 23700] L:14.01 | V_all: M 2.0 G -0.0 Geo -5.3 Ch 75.1 Rot 0.0 | C:6.59 | Div: 16/32 Ent:8.02 MaxP:0.00
+[Step 23800] L:13.78 | V_all: M 1.7 G -0.0 Geo -5.2 Ch 75.3 Rot 0.0 | C:6.36 | Div: 21/32 Ent:8.11 MaxP:0.00
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+Resuming from checkpoint: data/aurora_v3_1_step_20000.pth
+Resumed at step 20000
+[Step 23900] L:14.02 | V_all: M 1.5 G -0.0 Geo -5.2 Ch 75.4 Rot 0.0 | C:6.66 | Div: 21/32 Ent:7.73 MaxP:0.00
+[Step 20100] L:17.19 | V_all: M 27.3 G -0.0 Geo -5.2 Ch 71.4 Rot 0.0 | C:7.83 | Div: 1/32 Ent:8.81 MaxP:0.00 | w_pot:0.100
+[Step 20200] L:16.27 | V_all: M 19.3 G -0.0 Geo -5.4 Ch 71.0 Rot 0.0 | C:7.77 | Div: 1/32 Ent:8.81 MaxP:0.00 | w_pot:0.100
+[Step 20300] L:14.18 | V_all: M 3.3 G -0.0 Geo -5.1 Ch 70.5 Rot 0.0 | C:7.19 | Div: 5/32 Ent:8.65 MaxP:0.00 | w_pot:0.100
+[Step 20400] L:13.33 | V_all: M 0.8 G -0.0 Geo -5.3 Ch 70.5 Rot 0.0 | C:6.62 | Div: 20/32 Ent:7.98 MaxP:0.00 | w_pot:0.100
+[Step 20500] L:12.99 | V_all: M 1.1 G -0.0 Geo -5.2 Ch 70.7 Rot 0.0 | C:6.14 | Div: 20/32 Ent:8.07 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 20500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 20500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1418.5
+Median Rank: 928
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:2.9e-04 R:1060 | P:自]
+然->语 [GT:6.7e-05 R:2690 | P:然]
+语->言 [GT:9.3e-04 R:267 | P:语]
+言->处 [GT:4.1e-06 R:6419 | P:言]
+处->理 [GT:1.4e-04 R:1715 | P:处]
+理->是 [GT:9.0e-04 R:208 | P:理]
+是->人 [GT:1.3e-04 R:1537 | P:是]
+人->工 [GT:1.3e-04 R:1117 | P:人]
+工->智 [GT:2.2e-04 R:928 | P:工]
+智->能 [GT:2.9e-05 R:2927 | P:智]
+能->的 [GT:4.2e-04 R:749 | P:能]
+的->核 [GT:4.4e-04 R:516 | P:的]
+核->心 [GT:3.4e-04 R:813 | P:核]
+心->技 [GT:1.4e-03 R:104 | P:心]
+技->术 [GT:9.1e-04 R:227 | P:技]
+[Step 20600] L:12.99 | V_all: M 1.2 G -0.0 Geo -5.3 Ch 70.8 Rot 0.0 | C:6.16 | Div: 20/32 Ent:7.73 MaxP:0.00 | w_pot:0.100
+[Step 20700] L:12.90 | V_all: M 1.4 G -0.0 Geo -5.2 Ch 71.0 Rot 0.0 | C:6.00 | Div: 16/32 Ent:7.91 MaxP:0.01 | w_pot:0.100
+[Step 20800] L:12.39 | V_all: M 2.6 G -0.0 Geo -5.2 Ch 71.2 Rot 0.0 | C:5.42 | Div: 16/32 Ent:7.67 MaxP:0.01 | w_pot:0.100
+[Step 20900] L:13.02 | V_all: M 2.7 G -0.0 Geo -5.2 Ch 71.4 Rot 0.0 | C:5.97 | Div: 19/32 Ent:8.09 MaxP:0.00 | w_pot:0.100
+[Step 21000] L:13.12 | V_all: M 1.2 G -0.0 Geo -5.2 Ch 71.5 Rot 0.0 | C:6.13 | Div: 18/32 Ent:7.70 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 21000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 21000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1469.1
+Median Rank: 866
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:2.8e-04 R:1172 | P:自]
+然->语 [GT:9.3e-05 R:2243 | P:然]
+语->言 [GT:8.2e-04 R:319 | P:语]
+言->处 [GT:2.6e-06 R:6885 | P:言]
+处->理 [GT:1.1e-04 R:1717 | P:处]
+理->是 [GT:1.0e-03 R:180 | P:理]
+是->人 [GT:6.7e-05 R:2429 | P:是]
+人->工 [GT:9.4e-05 R:1106 | P:人]
+工->智 [GT:2.8e-04 R:791 | P:工]
+智->能 [GT:3.5e-05 R:2590 | P:智]
+能->的 [GT:4.0e-04 R:866 | P:能]
+的->核 [GT:3.9e-04 R:653 | P:的]
+核->心 [GT:3.9e-04 R:765 | P:核]
+心->技 [GT:1.6e-03 R:74 | P:心]
+技->术 [GT:9.0e-04 R:246 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_21000.pth
+[Step 21100] L:13.32 | V_all: M 2.1 G -0.0 Geo -5.4 Ch 71.7 Rot 0.0 | C:6.35 | Div: 26/32 Ent:7.89 MaxP:0.00 | w_pot:0.100
+[Step 21200] L:12.88 | V_all: M 1.7 G -0.0 Geo -5.2 Ch 71.7 Rot 0.0 | C:5.88 | Div: 21/32 Ent:7.72 MaxP:0.01 | w_pot:0.100
+[Step 21300] L:13.13 | V_all: M 0.6 G -0.0 Geo -5.2 Ch 71.9 Rot 0.0 | C:6.19 | Div: 30/32 Ent:7.89 MaxP:0.00 | w_pot:0.100
+[Step 21400] L:13.23 | V_all: M 1.4 G -0.0 Geo -5.2 Ch 72.0 Rot 0.0 | C:6.19 | Div: 26/32 Ent:7.54 MaxP:0.00 | w_pot:0.100
+[Step 21500] L:13.26 | V_all: M 1.0 G -0.0 Geo -5.1 Ch 72.2 Rot 0.0 | C:6.26 | Div: 24/32 Ent:7.98 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 21500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 21500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1545.7
+Median Rank: 932
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:2.0e-04 R:1454 | P:自]
+然->语 [GT:4.5e-05 R:2817 | P:然]
+语->言 [GT:8.5e-04 R:344 | P:语]
+言->处 [GT:2.4e-06 R:6493 | P:言]
+处->理 [GT:6.7e-05 R:2101 | P:处]
+理->是 [GT:1.1e-03 R:184 | P:理]
+是->人 [GT:7.2e-05 R:2016 | P:是]
+人->工 [GT:8.0e-05 R:1199 | P:人]
+工->智 [GT:2.1e-04 R:932 | P:工]
+智->能 [GT:1.8e-05 R:2985 | P:智]
+能->的 [GT:4.7e-04 R:656 | P:能]
+的->核 [GT:3.3e-04 R:797 | P:的]
+核->心 [GT:3.1e-04 R:877 | P:核]
+心->技 [GT:1.7e-03 R:85 | P:心]
+技->术 [GT:9.8e-04 R:246 | P:技]
+[Step 21600] L:13.18 | V_all: M 1.6 G -0.0 Geo -5.3 Ch 72.4 Rot 0.0 | C:6.18 | Div: 23/32 Ent:7.92 MaxP:0.00 | w_pot:0.100
+[Step 21700] L:13.09 | V_all: M 1.1 G -0.0 Geo -5.1 Ch 72.4 Rot 0.0 | C:6.04 | Div: 22/32 Ent:7.80 MaxP:0.00 | w_pot:0.100
+[Step 21800] L:13.21 | V_all: M 1.4 G -0.0 Geo -5.2 Ch 72.6 Rot 0.0 | C:6.16 | Div: 24/32 Ent:7.86 MaxP:0.00 | w_pot:0.100
+[Step 21900] L:13.24 | V_all: M 7.5 G -0.0 Geo -5.1 Ch 72.8 Rot 0.0 | C:5.63 | Div: 13/32 Ent:7.63 MaxP:0.01 | w_pot:0.100
+[Step 22000] L:13.75 | V_all: M 1.4 G -0.0 Geo -5.6 Ch 73.0 Rot 0.0 | C:6.69 | Div: 23/32 Ent:7.85 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 22000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 22000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1652.2
+Median Rank: 1005
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:1.6e-04 R:1825 | P:自]
+然->语 [GT:3.6e-05 R:3779 | P:然]
+语->言 [GT:1.1e-03 R:157 | P:语]
+言->处 [GT:4.9e-06 R:6074 | P:言]
+处->理 [GT:9.4e-05 R:2069 | P:处]
+理->是 [GT:7.7e-04 R:293 | P:理]
+是->人 [GT:2.4e-04 R:1005 | P:是]
+人->工 [GT:2.7e-04 R:928 | P:人]
+工->智 [GT:1.4e-04 R:1604 | P:工]
+智->能 [GT:1.4e-05 R:3893 | P:智]
+能->的 [GT:2.5e-04 R:1283 | P:能]
+的->核 [GT:3.7e-04 R:619 | P:的]
+核->心 [GT:3.6e-04 R:766 | P:核]
+心->技 [GT:1.1e-03 R:121 | P:心]
+技->术 [GT:7.3e-04 R:367 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_22000.pth
+[Step 22100] L:13.44 | V_all: M 1.4 G -0.0 Geo -5.2 Ch 73.1 Rot 0.0 | C:6.32 | Div: 18/32 Ent:7.94 MaxP:0.00 | w_pot:0.100
+[Step 22200] L:13.59 | V_all: M 1.0 G -0.0 Geo -5.2 Ch 73.1 Rot 0.0 | C:6.49 | Div: 22/32 Ent:8.06 MaxP:0.00 | w_pot:0.100
+[Step 22300] L:13.77 | V_all: M 2.0 G -0.0 Geo -5.3 Ch 73.3 Rot 0.0 | C:6.49 | Div: 21/32 Ent:7.91 MaxP:0.00 | w_pot:0.100
+[Step 22400] L:13.53 | V_all: M 1.3 G -0.0 Geo -5.3 Ch 73.4 Rot 0.0 | C:6.38 | Div: 14/32 Ent:7.83 MaxP:0.01 | w_pot:0.100
+[Step 22500] L:13.75 | V_all: M 4.5 G -0.0 Geo -5.4 Ch 73.6 Rot 0.0 | C:6.33 | Div: 14/32 Ent:7.90 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 22500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 22500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1556.7
+Median Rank: 1325
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:3.7e-04 R:929 | P:自]
+然->语 [GT:1.9e-04 R:1545 | P:然]
+语->言 [GT:7.5e-04 R:227 | P:语]
+言->处 [GT:5.7e-06 R:6765 | P:言]
+处->理 [GT:5.5e-05 R:2075 | P:处]
+理->是 [GT:3.4e-04 R:807 | P:理]
+是->人 [GT:7.1e-05 R:2049 | P:是]
+人->工 [GT:8.7e-05 R:1325 | P:人]
+工->智 [GT:6.7e-05 R:2578 | P:工]
+智->能 [GT:6.3e-05 R:1718 | P:智]
+能->的 [GT:2.4e-04 R:1390 | P:能]
+的->核 [GT:6.9e-04 R:298 | P:的]
+核->心 [GT:1.6e-04 R:1247 | P:核]
+心->技 [GT:1.1e-03 R:153 | P:心]
+技->术 [GT:7.9e-04 R:244 | P:技]
+[Step 22600] L:13.46 | V_all: M 1.6 G -0.0 Geo -5.3 Ch 73.7 Rot 0.0 | C:6.24 | Div: 23/32 Ent:8.03 MaxP:0.00 | w_pot:0.100
+[Step 22700] L:13.50 | V_all: M 0.9 G -0.0 Geo -5.2 Ch 73.7 Rot 0.0 | C:6.39 | Div: 19/32 Ent:7.90 MaxP:0.00 | w_pot:0.100
+[Step 22800] L:13.63 | V_all: M 2.0 G -0.0 Geo -5.2 Ch 73.8 Rot 0.0 | C:6.33 | Div: 21/32 Ent:7.86 MaxP:0.00 | w_pot:0.100
+[Step 22900] L:13.75 | V_all: M 1.3 G -0.0 Geo -5.2 Ch 74.0 Rot 0.0 | C:6.46 | Div: 19/32 Ent:7.84 MaxP:0.00 | w_pot:0.100
+[Step 23000] L:13.53 | V_all: M 1.9 G -0.0 Geo -5.2 Ch 74.0 Rot 0.0 | C:6.30 | Div: 14/32 Ent:7.62 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 23000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 23000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1795.7
+Median Rank: 1363
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:9.9e-05 R:2196 | P:自]
+然->语 [GT:1.5e-05 R:4605 | P:然]
+语->言 [GT:1.4e-03 R:112 | P:语]
+言->处 [GT:4.2e-06 R:5696 | P:言]
+处->理 [GT:6.0e-05 R:2206 | P:处]
+理->是 [GT:7.1e-04 R:413 | P:理]
+是->人 [GT:9.9e-05 R:1562 | P:是]
+人->工 [GT:1.6e-04 R:1095 | P:人]
+工->智 [GT:8.7e-05 R:1786 | P:工]
+智->能 [GT:8.3e-06 R:3770 | P:智]
+能->的 [GT:2.1e-04 R:1363 | P:能]
+的->核 [GT:4.8e-04 R:499 | P:的]
+核->心 [GT:1.9e-04 R:1074 | P:核]
+心->技 [GT:1.1e-03 R:214 | P:心]
+技->术 [GT:8.1e-04 R:344 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_23000.pth
+[Step 23100] L:13.73 | V_all: M 1.8 G -0.0 Geo -5.3 Ch 74.2 Rot 0.0 | C:6.50 | Div: 21/32 Ent:7.78 MaxP:0.00 | w_pot:0.100
+[Step 23200] L:13.88 | V_all: M 1.6 G -0.0 Geo -5.2 Ch 74.3 Rot 0.0 | C:6.60 | Div: 15/32 Ent:7.96 MaxP:0.00 | w_pot:0.100
+[Step 23300] L:13.52 | V_all: M 1.2 G -0.0 Geo -5.1 Ch 74.4 Rot 0.0 | C:6.21 | Div: 19/32 Ent:7.98 MaxP:0.01 | w_pot:0.100
+[Step 23400] L:13.70 | V_all: M 2.3 G -0.0 Geo -5.1 Ch 74.5 Rot 0.0 | C:6.35 | Div: 17/32 Ent:8.08 MaxP:0.00 | w_pot:0.100
+[Step 23500] L:13.75 | V_all: M 3.8 G -0.0 Geo -5.1 Ch 74.6 Rot 0.0 | C:6.20 | Div: 17/32 Ent:8.13 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 23500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 23500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1941.1
+Median Rank: 1164
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:8.5e-05 R:2376 | P:自]
+然->语 [GT:1.8e-04 R:1164 | P:然]
+语->言 [GT:8.6e-04 R:251 | P:语]
+言->处 [GT:2.3e-06 R:6329 | P:言]
+处->理 [GT:1.1e-05 R:3067 | P:处]
+理->是 [GT:2.6e-04 R:646 | P:理]
+是->人 [GT:1.1e-04 R:883 | P:是]
+人->工 [GT:9.5e-05 R:1301 | P:人]
+工->智 [GT:1.9e-05 R:2723 | P:工]
+智->能 [GT:6.5e-06 R:3160 | P:智]
+能->的 [GT:1.5e-05 R:4168 | P:能]
+的->核 [GT:1.7e-04 R:849 | P:的]
+核->心 [GT:8.9e-05 R:924 | P:核]
+心->技 [GT:8.0e-04 R:360 | P:心]
+技->术 [GT:2.1e-04 R:915 | P:技]
+[Step 23600] L:13.34 | V_all: M 0.7 G -0.0 Geo -5.2 Ch 74.7 Rot 0.0 | C:6.06 | Div: 20/32 Ent:7.85 MaxP:0.01 | w_pot:0.100
+[Step 23700] L:13.99 | V_all: M 2.8 G -0.0 Geo -5.4 Ch 74.8 Rot 0.0 | C:6.56 | Div: 14/32 Ent:7.96 MaxP:0.00 | w_pot:0.100
+[Step 23800] L:13.73 | V_all: M 2.5 G -0.0 Geo -5.2 Ch 74.9 Rot 0.0 | C:6.31 | Div: 21/32 Ent:8.03 MaxP:0.00 | w_pot:0.100
+[Step 23900] L:13.68 | V_all: M 2.3 G -0.0 Geo -5.3 Ch 75.0 Rot 0.0 | C:6.30 | Div: 24/32 Ent:7.66 MaxP:0.00 | w_pot:0.100
+[Step 24000] L:13.52 | V_all: M 1.7 G -0.0 Geo -5.0 Ch 75.1 Rot 0.0 | C:6.05 | Div: 18/32 Ent:7.81 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 24000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 24000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1715.8
+Median Rank: 1619
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:1.5e-04 R:1837 | P:自]
+然->语 [GT:1.1e-04 R:1681 | P:然]
+语->言 [GT:8.1e-04 R:237 | P:语]
+言->处 [GT:4.9e-06 R:6056 | P:言]
+处->理 [GT:2.2e-05 R:2629 | P:处]
+理->是 [GT:2.7e-04 R:912 | P:理]
+是->人 [GT:2.8e-05 R:2458 | P:是]
+人->工 [GT:6.8e-05 R:1207 | P:人]
+工->智 [GT:7.1e-05 R:1619 | P:工]
+智->能 [GT:1.7e-05 R:2364 | P:智]
+能->的 [GT:7.3e-05 R:2608 | P:能]
+的->核 [GT:5.1e-04 R:448 | P:的]
+核->心 [GT:1.8e-04 R:963 | P:核]
+心->技 [GT:1.3e-03 R:194 | P:心]
+技->术 [GT:6.1e-04 R:524 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_24000.pth
+[Step 24100] L:13.76 | V_all: M 2.3 G -0.0 Geo -5.1 Ch 75.2 Rot 0.0 | C:6.29 | Div: 16/32 Ent:7.89 MaxP:0.01 | w_pot:0.100
+[Step 24200] L:13.48 | V_all: M 1.3 G -0.0 Geo -5.2 Ch 75.2 Rot 0.0 | C:6.15 | Div: 20/32 Ent:7.66 MaxP:0.00 | w_pot:0.100
+[Step 24300] L:13.63 | V_all: M 1.5 G -0.0 Geo -5.2 Ch 75.4 Rot 0.0 | C:6.18 | Div: 13/32 Ent:7.61 MaxP:0.01 | w_pot:0.100
+[Step 24400] L:13.94 | V_all: M 2.3 G -0.0 Geo -5.4 Ch 75.5 Rot 0.0 | C:6.48 | Div: 20/32 Ent:7.87 MaxP:0.01 | w_pot:0.100
+[Step 24500] L:13.88 | V_all: M 2.4 G -0.0 Geo -5.3 Ch 75.6 Rot 0.0 | C:6.45 | Div: 16/32 Ent:8.05 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 24500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 24500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1908.9
+Median Rank: 1347
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:4.1e-04 R:804 | P:自]
+然->语 [GT:2.1e-04 R:1347 | P:然]
+语->言 [GT:7.8e-04 R:171 | P:语]
+言->处 [GT:9.8e-06 R:6141 | P:言]
+处->理 [GT:1.6e-05 R:3306 | P:处]
+理->是 [GT:3.6e-05 R:3579 | P:理]
+是->人 [GT:2.6e-04 R:447 | P:是]
+人->工 [GT:1.0e-04 R:1531 | P:人]
+工->智 [GT:2.8e-05 R:3000 | P:工]
+智->能 [GT:4.1e-05 R:1930 | P:智]
+能->的 [GT:3.9e-05 R:3672 | P:能]
+的->核 [GT:3.8e-04 R:502 | P:的]
+核->心 [GT:1.6e-04 R:825 | P:核]
+心->技 [GT:1.1e-03 R:196 | P:心]
+技->术 [GT:1.4e-04 R:1182 | P:技]
+[Step 24600] L:13.85 | V_all: M 2.0 G -0.0 Geo -5.2 Ch 75.6 Rot 0.0 | C:6.46 | Div: 17/32 Ent:8.08 MaxP:0.00 | w_pot:0.100
+[Step 24700] L:13.63 | V_all: M 2.1 G -0.0 Geo -5.2 Ch 75.7 Rot 0.0 | C:6.02 | Div: 19/32 Ent:7.77 MaxP:0.01 | w_pot:0.100
+[Step 24800] L:13.79 | V_all: M 1.7 G -0.0 Geo -5.2 Ch 75.8 Rot 0.0 | C:6.30 | Div: 19/32 Ent:8.04 MaxP:0.00 | w_pot:0.100
+[Step 24900] L:13.63 | V_all: M 2.4 G -0.0 Geo -5.1 Ch 75.9 Rot 0.0 | C:6.11 | Div: 17/32 Ent:8.16 MaxP:0.01 | w_pot:0.100
+[Step 25000] L:13.63 | V_all: M 1.3 G -0.0 Geo -5.2 Ch 75.9 Rot 0.0 | C:6.18 | Div: 21/32 Ent:7.73 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 25000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 25000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1943.9
+Median Rank: 1843
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:9.8e-05 R:2167 | P:自]
+然->语 [GT:5.9e-05 R:1915 | P:然]
+语->言 [GT:9.0e-04 R:242 | P:语]
+言->处 [GT:1.6e-06 R:6838 | P:言]
+处->理 [GT:5.3e-06 R:3338 | P:处]
+理->是 [GT:2.4e-04 R:877 | P:理]
+是->人 [GT:6.7e-05 R:1268 | P:是]
+人->工 [GT:4.3e-05 R:1843 | P:人]
+工->智 [GT:2.5e-05 R:2249 | P:工]
+智->能 [GT:6.7e-06 R:2719 | P:智]
+能->的 [GT:4.7e-05 R:2896 | P:能]
+的->核 [GT:3.1e-04 R:656 | P:的]
+核->心 [GT:3.4e-05 R:1491 | P:核]
+心->技 [GT:5.8e-04 R:427 | P:心]
+技->术 [GT:1.3e-03 R:232 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_25000.pth
+[Step 25100] L:13.59 | V_all: M 2.9 G -0.0 Geo -5.1 Ch 76.1 Rot 0.0 | C:6.03 | Div: 16/32 Ent:7.70 MaxP:0.01 | w_pot:0.100
+[Step 25200] L:13.43 | V_all: M 2.1 G -0.0 Geo -5.1 Ch 76.1 Rot 0.0 | C:5.80 | Div: 17/32 Ent:7.64 MaxP:0.01 | w_pot:0.100
+[Step 25300] L:14.28 | V_all: M 3.1 G -0.0 Geo -5.2 Ch 76.2 Rot 0.0 | C:6.73 | Div: 17/32 Ent:7.98 MaxP:0.00 | w_pot:0.100
+[Step 25400] L:13.75 | V_all: M 3.0 G -0.0 Geo -5.0 Ch 76.2 Rot 0.0 | C:6.10 | Div: 14/32 Ent:7.71 MaxP:0.00 | w_pot:0.100
+[Step 25500] L:13.47 | V_all: M 1.7 G -0.0 Geo -5.2 Ch 76.4 Rot 0.0 | C:5.89 | Div: 19/32 Ent:7.44 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 25500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 25500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 2151.8
+Median Rank: 2019
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:1.5e-05 R:3830 | P:自]
+然->语 [GT:2.8e-05 R:2068 | P:然]
+语->言 [GT:9.8e-04 R:254 | P:语]
+言->处 [GT:1.8e-06 R:5975 | P:言]
+处->理 [GT:3.1e-06 R:3832 | P:处]
+理->是 [GT:3.0e-04 R:567 | P:理]
+是->人 [GT:3.9e-05 R:1367 | P:是]
+人->工 [GT:2.5e-05 R:2019 | P:人]
+工->智 [GT:2.0e-05 R:2111 | P:工]
+智->能 [GT:2.8e-06 R:3432 | P:智]
+能->的 [GT:1.5e-05 R:3690 | P:能]
+的->核 [GT:1.7e-04 R:723 | P:的]
+核->心 [GT:3.7e-05 R:1263 | P:核]
+心->技 [GT:6.6e-04 R:487 | P:心]
+技->术 [GT:3.2e-04 R:659 | P:技]
+[Step 25600] L:13.71 | V_all: M 2.7 G -0.0 Geo -5.1 Ch 76.4 Rot 0.0 | C:6.11 | Div: 19/32 Ent:7.64 MaxP:0.00 | w_pot:0.100
+[Step 25700] L:13.83 | V_all: M 5.0 G -0.0 Geo -5.2 Ch 76.5 Rot 0.0 | C:5.99 | Div: 22/32 Ent:7.18 MaxP:0.01 | w_pot:0.100
+[Step 25800] L:13.55 | V_all: M 2.1 G -0.0 Geo -5.2 Ch 76.6 Rot 0.0 | C:5.95 | Div: 17/32 Ent:7.93 MaxP:0.01 | w_pot:0.100
+[Step 25900] L:13.66 | V_all: M 2.4 G -0.0 Geo -5.2 Ch 76.7 Rot 0.0 | C:5.97 | Div: 14/32 Ent:7.62 MaxP:0.01 | w_pot:0.100
+[Step 26000] L:13.49 | V_all: M 3.9 G -0.0 Geo -5.0 Ch 76.7 Rot 0.0 | C:5.73 | Div: 17/32 Ent:7.72 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 26000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 26000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 2000.7
+Median Rank: 1802
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:3.5e-05 R:2936 | P:自]
+然->语 [GT:3.7e-05 R:2006 | P:然]
+语->言 [GT:9.2e-04 R:225 | P:语]
+言->处 [GT:1.6e-06 R:6317 | P:言]
+处->理 [GT:4.5e-06 R:3414 | P:处]
+理->是 [GT:3.6e-04 R:653 | P:理]
+是->人 [GT:2.8e-05 R:1802 | P:是]
+人->工 [GT:1.6e-05 R:2397 | P:人]
+工->智 [GT:2.9e-05 R:1571 | P:工]
+智->能 [GT:4.7e-06 R:2781 | P:智]
+能->的 [GT:2.7e-05 R:3145 | P:能]
+的->核 [GT:3.2e-04 R:586 | P:的]
+核->心 [GT:4.6e-05 R:1391 | P:核]
+心->技 [GT:9.5e-04 R:320 | P:心]
+技->术 [GT:5.7e-04 R:467 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_26000.pth
+[Step 26100] L:14.01 | V_all: M 6.3 G -0.0 Geo -5.1 Ch 76.9 Rot 0.0 | C:5.99 | Div: 20/32 Ent:7.67 MaxP:0.01 | w_pot:0.100
+[Step 26200] L:13.68 | V_all: M 7.1 G -0.0 Geo -5.1 Ch 77.0 Rot 0.0 | C:5.65 | Div: 15/32 Ent:7.88 MaxP:0.01 | w_pot:0.100
+[Step 26300] L:16.27 | V_all: M 31.4 G -0.0 Geo -5.2 Ch 77.0 Rot 0.0 | C:5.94 | Div: 7/32 Ent:7.99 MaxP:0.00 | w_pot:0.100
+[Step 26400] L:14.15 | V_all: M 4.1 G -0.0 Geo -5.3 Ch 77.0 Rot 0.0 | C:6.43 | Div: 18/32 Ent:7.97 MaxP:0.00 | w_pot:0.100
+[Step 26500] L:13.58 | V_all: M 2.7 G -0.0 Geo -5.1 Ch 77.0 Rot 0.0 | C:5.85 | Div: 15/32 Ent:7.68 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 26500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 26500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 2082.5
+Median Rank: 2205
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:5.2e-05 R:2686 | P:自]
+然->语 [GT:2.6e-05 R:2205 | P:然]
+语->言 [GT:1.0e-03 R:177 | P:语]
+言->处 [GT:2.1e-06 R:6123 | P:言]
+处->理 [GT:3.4e-06 R:3797 | P:处]
+理->是 [GT:1.0e-04 R:1121 | P:理]
+是->人 [GT:4.2e-05 R:1186 | P:是]
+人->工 [GT:2.0e-05 R:2225 | P:人]
+工->智 [GT:1.2e-05 R:2389 | P:工]
+智->能 [GT:4.5e-06 R:2674 | P:智]
+能->的 [GT:2.8e-05 R:3259 | P:能]
+的->核 [GT:2.3e-04 R:758 | P:的]
+核->心 [GT:3.6e-05 R:1290 | P:核]
+心->技 [GT:5.3e-04 R:537 | P:心]
+技->术 [GT:1.8e-04 R:810 | P:技]
+[Step 26600] L:13.64 | V_all: M 3.5 G -0.0 Geo -5.2 Ch 77.1 Rot 0.0 | C:5.82 | Div: 15/32 Ent:7.70 MaxP:0.01 | w_pot:0.100
+[Step 26700] L:14.29 | V_all: M 1.3 G -0.0 Geo -5.2 Ch 77.1 Rot 0.0 | C:6.68 | Div: 19/32 Ent:7.62 MaxP:0.01 | w_pot:0.100
+[Step 26800] L:13.74 | V_all: M 1.3 G -0.0 Geo -5.3 Ch 77.2 Rot 0.0 | C:6.10 | Div: 22/32 Ent:7.11 MaxP:0.01 | w_pot:0.100
+[Step 26900] L:13.68 | V_all: M 2.6 G -0.0 Geo -5.2 Ch 77.3 Rot 0.0 | C:5.85 | Div: 23/32 Ent:7.48 MaxP:0.01 | w_pot:0.100
+[Step 27000] L:14.08 | V_all: M 1.3 G -0.0 Geo -5.3 Ch 77.3 Rot 0.0 | C:6.48 | Div: 22/32 Ent:7.63 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 27000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 27000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 2026.7
+Median Rank: 1579
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:2.3e-04 R:1371 | P:自]
+然->语 [GT:8.0e-05 R:1975 | P:然]
+语->言 [GT:8.9e-04 R:128 | P:语]
+言->处 [GT:6.6e-06 R:6108 | P:言]
+处->理 [GT:7.4e-06 R:3900 | P:处]
+理->是 [GT:9.5e-05 R:1668 | P:理]
+是->人 [GT:6.4e-05 R:1103 | P:是]
+人->工 [GT:1.9e-05 R:3065 | P:人]
+工->智 [GT:1.1e-05 R:3366 | P:工]
+智->能 [GT:2.6e-05 R:1504 | P:智]
+能->的 [GT:5.8e-05 R:2957 | P:能]
+的->核 [GT:8.9e-04 R:278 | P:的]
+核->心 [GT:4.9e-05 R:1579 | P:核]
+心->技 [GT:7.8e-04 R:392 | P:心]
+技->术 [GT:9.9e-05 R:1006 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_27000.pth
+[Step 27100] L:13.59 | V_all: M 2.6 G -0.0 Geo -5.2 Ch 77.4 Rot 0.0 | C:5.75 | Div: 20/32 Ent:7.74 MaxP:0.01 | w_pot:0.100
+[Step 27200] L:13.74 | V_all: M 2.4 G -0.0 Geo -5.0 Ch 77.4 Rot 0.0 | C:6.04 | Div: 14/32 Ent:7.90 MaxP:0.01 | w_pot:0.100
+[Step 27300] L:13.64 | V_all: M 2.6 G -0.0 Geo -5.1 Ch 77.5 Rot 0.0 | C:5.85 | Div: 17/32 Ent:7.79 MaxP:0.01 | w_pot:0.100
+[Step 27400] L:13.30 | V_all: M 2.1 G -0.0 Geo -5.2 Ch 77.5 Rot 0.0 | C:5.60 | Div: 17/32 Ent:7.48 MaxP:0.01 | w_pot:0.100
+[Step 27500] L:13.57 | V_all: M 1.3 G -0.0 Geo -5.2 Ch 77.6 Rot 0.0 | C:5.81 | Div: 26/32 Ent:7.04 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 27500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 27500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1909.3
+Median Rank: 1136
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:1.3e-04 R:1753 | P:自]
+然->语 [GT:2.5e-05 R:2921 | P:然]
+语->言 [GT:1.0e-03 R:244 | P:语]
+言->处 [GT:7.6e-07 R:7828 | P:言]
+处->理 [GT:1.3e-05 R:2242 | P:处]
+理->是 [GT:5.0e-04 R:612 | P:理]
+是->人 [GT:6.5e-05 R:1663 | P:是]
+人->工 [GT:6.6e-06 R:4211 | P:人]
+工->智 [GT:6.7e-05 R:1018 | P:工]
+智->能 [GT:9.1e-06 R:2803 | P:智]
+能->的 [GT:2.6e-04 R:1136 | P:能]
+的->核 [GT:4.9e-04 R:595 | P:的]
+核->心 [GT:1.8e-04 R:1107 | P:核]
+心->技 [GT:2.7e-03 R:64 | P:心]
+技->术 [GT:7.0e-04 R:443 | P:技]
+[Step 27600] L:13.63 | V_all: M 2.4 G -0.0 Geo -5.1 Ch 77.7 Rot 0.0 | C:5.81 | Div: 24/32 Ent:7.42 MaxP:0.01 | w_pot:0.100
+[Step 27700] L:13.93 | V_all: M 1.9 G -0.0 Geo -5.2 Ch 77.7 Rot 0.0 | C:6.12 | Div: 23/32 Ent:7.40 MaxP:0.01 | w_pot:0.100
+[Step 27800] L:14.06 | V_all: M 2.5 G -0.0 Geo -5.3 Ch 77.8 Rot 0.0 | C:6.29 | Div: 21/32 Ent:7.64 MaxP:0.01 | w_pot:0.100
+[Step 27900] L:13.70 | V_all: M 2.7 G -0.0 Geo -5.2 Ch 77.8 Rot 0.0 | C:5.97 | Div: 19/32 Ent:7.87 MaxP:0.00 | w_pot:0.100
+[Step 28000] L:13.37 | V_all: M 3.1 G -0.0 Geo -5.2 Ch 77.8 Rot 0.0 | C:5.52 | Div: 20/32 Ent:7.52 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 28000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 28000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 2006.4
+Median Rank: 1579
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:1.6e-04 R:1690 | P:自]
+然->语 [GT:5.0e-05 R:2244 | P:然]
+语->言 [GT:9.2e-04 R:189 | P:语]
+言->处 [GT:1.2e-06 R:7534 | P:言]
+处->理 [GT:1.7e-05 R:2191 | P:处]
+理->是 [GT:3.1e-04 R:852 | P:理]
+是->人 [GT:6.6e-05 R:1394 | P:是]
+人->工 [GT:3.9e-06 R:6056 | P:人]
+工->智 [GT:2.6e-05 R:1313 | P:工]
+智->能 [GT:1.1e-05 R:2181 | P:智]
+能->的 [GT:1.2e-04 R:1962 | P:能]
+的->核 [GT:7.6e-04 R:357 | P:的]
+核->心 [GT:7.1e-05 R:1579 | P:核]
+心->技 [GT:1.8e-03 R:140 | P:心]
+技->术 [GT:5.2e-04 R:414 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_28000.pth
+[Step 28100] L:13.56 | V_all: M 3.8 G -0.0 Geo -5.2 Ch 77.9 Rot 0.0 | C:5.66 | Div: 17/32 Ent:7.53 MaxP:0.01 | w_pot:0.100
+[Step 28200] L:13.88 | V_all: M 1.3 G -0.0 Geo -5.2 Ch 78.0 Rot 0.0 | C:6.03 | Div: 20/32 Ent:7.37 MaxP:0.01 | w_pot:0.100
+[Step 28300] L:13.87 | V_all: M 3.7 G -0.0 Geo -5.3 Ch 78.0 Rot 0.0 | C:5.95 | Div: 14/32 Ent:7.78 MaxP:0.01 | w_pot:0.100
+[Step 28400] L:13.74 | V_all: M 2.3 G -0.0 Geo -5.3 Ch 78.1 Rot 0.0 | C:6.03 | Div: 20/32 Ent:7.25 MaxP:0.01 | w_pot:0.100
+[Step 28500] L:13.84 | V_all: M 2.2 G -0.0 Geo -5.2 Ch 78.1 Rot 0.0 | C:6.05 | Div: 24/32 Ent:7.52 MaxP:0.01 | w_pot:0.100
+Generating probe text...
+[Step 28500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 28500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 1752.5
+Median Rank: 908
+Top50 Rate: 0.07
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:2.4e-04 R:1281 | P:自]
+然->语 [GT:6.7e-05 R:2440 | P:然]
+语->言 [GT:9.0e-04 R:232 | P:语]
+言->处 [GT:1.2e-06 R:7888 | P:言]
+处->理 [GT:4.1e-05 R:1715 | P:处]
+理->是 [GT:5.6e-04 R:529 | P:理]
+是->人 [GT:1.3e-04 R:1493 | P:是]
+人->工 [GT:8.2e-06 R:4138 | P:人]
+工->智 [GT:1.5e-04 R:908 | P:工]
+智->能 [GT:2.1e-05 R:2985 | P:智]
+能->的 [GT:4.0e-04 R:824 | P:能]
+的->核 [GT:5.7e-04 R:468 | P:的]
+核->心 [GT:4.6e-04 R:804 | P:核]
+心->技 [GT:2.2e-03 R:29 | P:心]
+技->术 [GT:5.9e-04 R:554 | P:技]
+[Step 28600] L:13.88 | V_all: M 2.1 G -0.0 Geo -5.2 Ch 78.1 Rot 0.0 | C:6.13 | Div: 16/32 Ent:7.68 MaxP:0.01 | w_pot:0.100
+Device: cuda
+Loading Entropy Stats...
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+Resuming from checkpoint: data/aurora_v3_1_step_23000.pth
+Resumed at step 23000
+[Step 23100] L:17.16 | V_all: M 24.9 G -0.0 Geo -5.2 Ch 73.3 Rot 0.0 | C:7.85 | Div: 3/32 Ent:8.84 MaxP:0.00 | w_pot:0.100
+[Step 23200] L:17.67 | V_all: M 27.6 G -0.0 Geo -5.4 Ch 72.9 Rot 0.0 | C:8.15 | Div: 1/32 Ent:9.05 MaxP:0.00 | w_pot:0.100
+[Step 23300] L:18.08 | V_all: M 36.6 G -0.0 Geo -5.2 Ch 72.5 Rot 0.0 | C:7.68 | Div: 2/32 Ent:8.81 MaxP:0.00 | w_pot:0.100
+[Step 23400] L:17.84 | V_all: M 33.6 G -0.0 Geo -5.4 Ch 72.2 Rot 0.0 | C:7.80 | Div: 5/32 Ent:8.66 MaxP:0.00 | w_pot:0.100
+[Step 23500] L:17.97 | V_all: M 36.0 G -0.0 Geo -5.3 Ch 71.8 Rot 0.0 | C:7.72 | Div: 1/32 Ent:8.64 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 23500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 23500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 516.5
+Median Rank: 282
+Top50 Rate: 0.00
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:3.3e-04 R:135 | P:自]
+然->语 [GT:2.7e-04 R:587 | P:然]
+语->言 [GT:2.8e-04 R:54 | P:语]
+言->处 [GT:1.9e-04 R:1643 | P:言]
+处->理 [GT:2.6e-04 R:704 | P:处]
+理->是 [GT:3.1e-04 R:179 | P:理]
+是->人 [GT:3.9e-04 R:165 | P:是]
+人->工 [GT:3.7e-04 R:258 | P:人]
+工->智 [GT:2.8e-04 R:534 | P:工]
+智->能 [GT:1.9e-04 R:1781 | P:智]
+能->的 [GT:3.2e-04 R:282 | P:能]
+的->核 [GT:3.5e-04 R:544 | P:的]
+核->心 [GT:2.3e-04 R:736 | P:核]
+心->技 [GT:3.2e-04 R:68 | P:心]
+技->术 [GT:2.9e-04 R:77 | P:技]
+[Step 23600] L:18.33 | V_all: M 38.0 G -0.0 Geo -5.3 Ch 71.5 Rot 0.0 | C:7.90 | Div: 14/32 Ent:8.68 MaxP:0.00 | w_pot:0.100
+[Step 23700] L:17.63 | V_all: M 32.3 G -0.0 Geo -5.3 Ch 71.2 Rot 0.0 | C:7.81 | Div: 5/32 Ent:8.62 MaxP:0.00 | w_pot:0.100
+[Step 23800] L:17.68 | V_all: M 34.7 G -0.0 Geo -5.3 Ch 70.9 Rot 0.0 | C:7.66 | Div: 7/32 Ent:8.63 MaxP:0.00 | w_pot:0.100
+[Step 23900] L:18.41 | V_all: M 42.1 G -0.0 Geo -5.2 Ch 70.6 Rot 0.0 | C:7.67 | Div: 3/32 Ent:8.62 MaxP:0.00 | w_pot:0.100
+[Step 24000] L:17.67 | V_all: M 33.9 G -0.0 Geo -5.2 Ch 70.2 Rot 0.0 | C:7.78 | Div: 7/32 Ent:8.62 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 24000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 24000] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 516.1
+Median Rank: 273
+Top50 Rate: 0.07
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:3.3e-04 R:154 | P:自]
+然->语 [GT:2.7e-04 R:578 | P:然]
+语->言 [GT:2.9e-04 R:39 | P:语]
+言->处 [GT:1.9e-04 R:1717 | P:言]
+处->理 [GT:2.6e-04 R:747 | P:处]
+理->是 [GT:3.1e-04 R:171 | P:理]
+是->人 [GT:3.8e-04 R:198 | P:是]
+人->工 [GT:3.8e-04 R:259 | P:人]
+工->智 [GT:2.8e-04 R:465 | P:工]
+智->能 [GT:1.9e-04 R:1751 | P:智]
+能->的 [GT:3.3e-04 R:273 | P:能]
+的->核 [GT:3.5e-04 R:541 | P:的]
+核->心 [GT:2.4e-04 R:713 | P:核]
+心->技 [GT:3.2e-04 R:67 | P:心]
+技->术 [GT:2.9e-04 R:68 | P:技]
+Saved checkpoint to data/aurora_v3_1_step_24000.pth
+[Step 24100] L:17.48 | V_all: M 31.5 G -0.0 Geo -5.4 Ch 69.9 Rot 0.0 | C:7.87 | Div: 2/32 Ent:8.64 MaxP:0.00 | w_pot:0.100
+[Step 24200] L:16.93 | V_all: M 27.9 G -0.0 Geo -5.3 Ch 69.6 Rot 0.0 | C:7.72 | Div: 4/32 Ent:8.61 MaxP:0.00 | w_pot:0.100
+[Step 24300] L:17.08 | V_all: M 29.5 G -0.0 Geo -5.3 Ch 69.2 Rot 0.0 | C:7.74 | Div: 1/32 Ent:8.63 MaxP:0.00 | w_pot:0.100
+[Step 24400] L:17.11 | V_all: M 28.4 G -0.0 Geo -5.2 Ch 68.8 Rot 0.0 | C:7.90 | Div: 9/32 Ent:8.63 MaxP:0.00 | w_pot:0.100
+[Step 24500] L:17.16 | V_all: M 30.9 G -0.0 Geo -5.3 Ch 68.5 Rot 0.0 | C:7.75 | Div: 6/32 Ent:8.62 MaxP:0.00 | w_pot:0.100
+Generating probe text...
+[Step 24500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 24500] TF Probe:
+
+=== Trend Metrics ===
+Avg Rank: 507.6
+Median Rank: 272
+Top50 Rate: 0.07
+Top20 Rate: 0.00
+Identity Bias: 1.00
+Detailed:
+自->然 [GT:3.3e-04 R:166 | P:自]
+然->语 [GT:2.8e-04 R:558 | P:然]
+语->言 [GT:2.9e-04 R:30 | P:语]
+言->处 [GT:1.9e-04 R:1730 | P:言]
+处->理 [GT:2.7e-04 R:749 | P:处]
+理->是 [GT:3.1e-04 R:172 | P:理]
+是->人 [GT:3.8e-04 R:237 | P:是]
+人->工 [GT:3.8e-04 R:272 | P:人]
+工->智 [GT:2.9e-04 R:418 | P:工]
+智->能 [GT:2.0e-04 R:1679 | P:智]
+能->的 [GT:3.3e-04 R:265 | P:能]
+的->核 [GT:3.5e-04 R:522 | P:的]
+核->心 [GT:2.4e-04 R:693 | P:核]
+心->技 [GT:3.2e-04 R:70 | P:心]
+技->术 [GT:3.0e-04 R:53 | P:技]
+[Step 24600] L:17.13 | V_all: M 31.7 G -0.0 Geo -5.2 Ch 68.1 Rot 0.0 | C:7.67 | Div: 6/32 Ent:8.65 MaxP:0.00 | w_pot:0.100
+[Step 24700] L:16.94 | V_all: M 29.7 G -0.0 Geo -5.1 Ch 67.7 Rot 0.0 | C:7.71 | Div: 8/32 Ent:8.59 MaxP:0.00 | w_pot:0.100
+[Step 24800] L:16.50 | V_all: M 25.9 G -0.0 Geo -5.3 Ch 67.3 Rot 0.0 | C:7.71 | Div: 4/32 Ent:8.68 MaxP:0.00 | w_pot:0.100

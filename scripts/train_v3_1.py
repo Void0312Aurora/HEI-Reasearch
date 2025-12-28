@@ -143,6 +143,98 @@ def eval_probe(injector, entropy_stats, id_to_char, ff, prompt="你好", dim=DIM
     injector.train()
     return gen_text
 
+    
+def eval_tf_probe_stats(injector, entropy_stats, id_to_char, char_to_id, ff, text="其中最重要的是", dim=DIM, device='cpu'):
+    """TF Probe with Trend Metrics (Rank, Hits, Identity Bias)."""
+    injector.eval()
+    readout = ReadoutMechanism(injector, entropy_stats, id_to_char)
+    integrator = LieIntegrator()
+    
+    active_q, active_m, active_J = [], [], []
+    
+    gt_ranks = []
+    is_identity = []
+    top50_hit = []
+    top20_hit = []
+    
+    detailed_log = []
+    
+    with torch.no_grad():
+         pass # dummy context for injector if needed, but we do manual grad toggle inside
+         
+    for i in range(len(text) - 1):
+        curr_char = text[i]
+        next_char_gt = text[i+1]
+        
+        # Inject
+        codepoint = ord(curr_char)
+        x_norm = float(codepoint) / 65535.0
+        r_val = entropy_stats.get_radial_target(curr_char)
+        x_t = torch.tensor([[x_norm]], dtype=torch.float, device=device)
+        r_t = torch.tensor([[r_val]], dtype=torch.float, device=device)
+        
+        with torch.no_grad():
+             m, q, J, p = injector(x_t, r_t)
+        q.requires_grad_(True)
+        
+        active_q.append(q); active_m.append(m); active_J.append(J)
+        
+        # Integrate
+        q_in = torch.cat(active_q, dim=0)
+        m_in = torch.cat(active_m, dim=0)
+        J_in = torch.cat(active_J, dim=0)
+        last_p = torch.zeros_like(q)
+        dt = 0.1
+        
+        q_next_pred, _, _ = integrator.step(q_in, last_p.expand(q_in.size(0), -1), J_in, m_in, ff, dt=dt)
+        q_target_pred = q_next_pred[-1].unsqueeze(0)
+        
+        # Readout
+        with torch.no_grad():
+            probs = readout.read_prob(q_target_pred, beta=10.0)
+            
+            # 1. Rank & Hits
+            gt_id = char_to_id.get(next_char_gt, -1)
+            sorted_probs, sorted_indices = torch.sort(probs[0], descending=True)
+            
+            if gt_id != -1:
+                rank = (sorted_indices == gt_id).nonzero(as_tuple=True)[0].item() + 1
+                gt_ranks.append(rank)
+                top50_hit.append(1 if rank <= 50 else 0)
+                top20_hit.append(1 if rank <= 20 else 0)
+            else:
+                rank = -1
+                
+            # 2. Identity Bias
+            pred_id = probs.argmax().item()
+            pred_char = id_to_char.get(pred_id, '?')
+            if pred_char == curr_char:
+                is_identity.append(1)
+            else:
+                is_identity.append(0)
+            
+            # Log Line
+            gt_prob = probs[0, gt_id].item() if gt_id != -1 else 0.0
+            detailed_log.append(f"{curr_char}->{next_char_gt} [GT:{gt_prob:.1e} R:{rank} | P:{pred_char}]")
+            
+        if len(active_q) > 20:
+             active_q.pop(0); active_m.pop(0); active_J.pop(0)
+
+    injector.train()
+    
+    # Compute Aggregate Stats
+    avg_rank = sum(gt_ranks) / len(gt_ranks) if gt_ranks else 0
+    # median rank
+    gt_ranks.sort()
+    med_rank = gt_ranks[len(gt_ranks)//2] if gt_ranks else 0
+    
+    t50_rate = sum(top50_hit) / len(top50_hit) if top50_hit else 0
+    t20_rate = sum(top20_hit) / len(top20_hit) if top20_hit else 0
+    id_rate = sum(is_identity) / len(is_identity) if is_identity else 0
+    
+    summary = f"\n=== Trend Metrics ===\nAvg Rank: {avg_rank:.1f}\nMedian Rank: {med_rank}\nTop50 Rate: {t50_rate:.2f}\nTop20 Rate: {t20_rate:.2f}\nIdentity Bias: {id_rate:.2f}\nDetailed:\n" + "\n".join(detailed_log)
+    return summary
+
 def train(args):
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     logger = logging.getLogger("AuroraTrain")
@@ -194,9 +286,25 @@ def train(args):
     step_cnt = 0
     loss_smooth = 0
     
+    # Resume Logic
+    if args.resume_from and os.path.exists(args.resume_from):
+        logger.info(f"Resuming from checkpoint: {args.resume_from}")
+        checkpoint = torch.load(args.resume_from, map_location=device)
+        injector.load_state_dict(checkpoint['injector_state'])
+        ff.load_state_dict(checkpoint['ff_state'])
+        # Optimize: Check if ltm_state exists (for backward compatibility if needed, though this is v3.1 new)
+        if 'ltm_state' in checkpoint:
+            ltm.load_state_dict(checkpoint['ltm_state'])
+            ltm.ptr = checkpoint.get('ltm_ptr', 0)
+            ltm.size = checkpoint.get('ltm_size', 0)
+        
+        step_cnt = checkpoint.get('step', 0)
+        logger.info(f"Resumed at step {step_cnt}")
+    
     batch_gen = stream.stream_batches(batch_size=BATCH_SIZE)
     
-    pbar = tqdm(range(args.steps))
+    # Adjust range for resume
+    pbar = tqdm(range(step_cnt, args.steps))
     for _ in pbar:
         step_cnt += 1
         
@@ -320,27 +428,31 @@ def train(args):
             # This forces p and Forces/Connection to work together to reach q_next.
             loss_consist = torch.mean((q_int - q_next_target)**2)
             
-        # E. Contrastive Loss (Meaning Basin)
-        # Contrastive uses discrete target ID but continuous q
-        # read_prob uses precomputed prototypes
-        probs = readout.read_prob(q_b, beta=10.0)
-        # targets is (B,)
-        # Filter targets to match q_b (some might have been filtered out? No, x_list was synced)
-        # valid_indices was for batch_chars vs char_to_id.
-        # But x_list and targets are synced?
-        # x_list has ALL chars. targets has only known chars.
-        # Length mismatch possible?
-        # x_list loops batch_chars. targets appends if in char_to_id.
-        # So q_b corresponds to full batch. targets is smaller.
-        # We need to mask q_b to valid indices.
+        # E. Contrastive Loss (Meaning Basin) - NEXT TOKEN PREDICTION
+        # Critique Fix: Train Readout on Evolved State (q_int) -> Next Char
+        # q_int is (B-1, DIM), predicting indices 1 to B-1
         
-        valid_mask = torch.tensor(valid_indices, device=device)
-        if len(valid_mask) > 0:
-            q_valid = q_b[valid_mask]
-            probs_valid = readout.read_prob(q_valid, beta=10.0)
-            # Fix: Use NLL Loss on Log Probs (Cross Entropy expects logits)
-            # probs_valid is Softmax output. 
-            loss_contrast = F.nll_loss(torch.log(probs_valid + 1e-9), target_ids)
+        next_chars = batch_chars[1:] # The targets corresponding to q_int
+        next_valid_indices = []
+        next_target_ids = []
+        
+        for i, char in enumerate(next_chars):
+            if char in char_to_id:
+                next_valid_indices.append(i)
+                next_target_ids.append(char_to_id[char])
+                
+        next_target_tensor = torch.tensor(next_target_ids, dtype=torch.long, device=device)
+        next_mask = torch.tensor(next_valid_indices, dtype=torch.long, device=device)
+        
+        if len(next_mask) > 0:
+            # Use Evolved State (q_int) for Readout
+            q_evolved_valid = q_int[next_mask]
+            
+            # Readout Probabilities
+            probs_next = readout.read_prob(q_evolved_valid, beta=10.0)
+            
+            # NLL Loss
+            loss_contrast = F.nll_loss(torch.log(probs_next + 1e-9), next_target_tensor)
         else:
             loss_contrast = torch.tensor(0.0, device=device)
             
@@ -375,7 +487,16 @@ def train(args):
                 v_c = ff.potential_chemical(m_all).item()
                 v_r = 0.001 * torch.sum(J_all**2).item()
                 
-            log_msg = f"[Step {step_cnt}] L:{loss.item():.2f} | V_all: M {v_m:.1f} G {v_u:.1f} Geo {v_g:.1f} Ch {v_c:.1f} Rot {v_r:.1f} | C:{loss_contrast.item():.2f}"
+                # Batch Diversity Stats
+                # Recalculate probs for q_b (Current State Readout) to monitor diversity/collapse
+                probs = readout.read_prob(q_b, beta=10.0)
+                pred_ids = probs.argmax(dim=1)
+                unique_count = len(torch.unique(pred_ids))
+                max_probs = probs.max(dim=1)[0].mean().item()
+                # Entropy
+                entropy = -torch.sum(probs * torch.log(probs + 1e-9), dim=1).mean().item()
+
+            log_msg = f"[Step {step_cnt}] L:{loss.item():.2f} | V_all: M {v_m:.1f} G {v_u:.1f} Geo {v_g:.1f} Ch {v_c:.1f} Rot {v_r:.1f} | C:{loss_contrast.item():.2f} | Div: {unique_count}/{BATCH_SIZE} Ent:{entropy:.2f} MaxP:{max_probs:.2f} | w_pot:{w_pot:.3f}"
             tqdm.write(log_msg)
             logger.info(log_msg)
             
@@ -393,21 +514,50 @@ def train(args):
         active_J.append(J_b.detach())
         
         if step_cnt % args.probe_freq == 0:
-             txt = eval_probe(injector, entropy_stats, id_to_char, ff, device=device)
-             msg = f"\n[Step {step_cnt}] Probe: {txt}"
-             tqdm.write(msg)
-             logger.info(msg)
+            logger.info("Generating probe text...")
+            probe_out = eval_probe(injector, entropy_stats, id_to_char, ff, device=args.device)
+            tqdm.write(f"\n[Step {step_cnt}] Probe: {probe_out}")
+            logger.info(f"[Step {step_cnt}] Probe: {probe_out}")
+            
+            # Teacher Forcing Probe
+            tf_prompt = "自然语言处理是人工智能的核心技术" # A standard balanced sentence
+            tf_out = eval_tf_probe_stats(injector, entropy_stats, id_to_char, char_to_id, ff, text=tf_prompt, device=args.device)
+            tqdm.write(f"[Step {step_cnt}] TF Probe:\n{tf_out}\n")
+            logger.info(f"[Step {step_cnt}] TF Probe:\n{tf_out}")
              
         if step_cnt % args.save_freq == 0:
-            torch.save(injector.state_dict(), args.model_path)
+            checkpoint = {
+                'step': step_cnt,
+                'injector_state': injector.state_dict(),
+                'ff_state': ff.state_dict(),
+                'ltm_state': ltm.state_dict(),
+                'ltm_ptr': ltm.ptr,
+                'ltm_size': ltm.size
+            }
+            # Numbered Checkpoint
+            step_suffix = f"_step_{step_cnt}.pth"
+            numbered_path = args.model_path.replace(".pth", step_suffix)
+            torch.save(checkpoint, numbered_path)
+            # Latest
+            torch.save(checkpoint, args.model_path)
+            logger.info(f"Saved checkpoint to {numbered_path}")
             
-    torch.save(injector.state_dict(), args.model_path)
+    # Final Save
+    checkpoint = {
+        'step': step_cnt,
+        'injector_state': injector.state_dict(),
+        'ff_state': ff.state_dict(),
+        'ltm_state': ltm.state_dict(),
+        'ltm_ptr': ltm.ptr,
+        'ltm_size': ltm.size
+    }
+    torch.save(checkpoint, args.model_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--steps", type=int, default=50000)
     parser.add_argument("--device", type=str, default='cpu')
-    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--resume_from", type=str, default=None, help="Path to checkpoint to resume from")
     parser.add_argument("--model_path", type=str, default="data/aurora_v3_1.pth")
     parser.add_argument("--probe_freq", type=int, default=1000)
     parser.add_argument("--save_freq", type=int, default=5000)
