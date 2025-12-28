@@ -24,9 +24,13 @@ class ReadoutMechanism:
         self.psi_cache = {} # id -> (m, q, J)
         self._precompute_prototypes()
         
+    def update_prototypes(self):
+        """Recompute Psi based on current Injector weights."""
+        self._precompute_prototypes()
+
     def _precompute_prototypes(self):
         """Precompute Psi for all chars in vocab (Context-free)."""
-        print("Precomputing readout prototypes...")
+        # print("Precomputing readout prototypes...") # Reduce spam
         device = next(self.injector.parameters()).device
         
         # Prepare Batch of all vocab chars

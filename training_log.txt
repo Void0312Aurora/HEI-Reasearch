@@ -399,3 +399,663 @@ Starting Training for 50000 steps...
 [Step 7500] Probe: 好好好好好好好好好好好好好好好好好好好好
 [Step 7600] L:5.95 | V_all: M 0.5 G -0.1 Geo -3.0 Ch 23.9 Rot 0.0 | C:3.51
 [Step 7700] L:6.10 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 24.1 Rot 0.0 | C:3.70
+[Step 7800] L:5.98 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 24.3 Rot 0.0 | C:3.51
+[Step 7900] L:5.75 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 24.4 Rot 0.0 | C:3.37
+[Step 8000] L:6.06 | V_all: M 1.0 G -0.1 Geo -3.1 Ch 24.5 Rot 0.0 | C:3.55
+
+[Step 8000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 8100] L:6.21 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 24.8 Rot 0.0 | C:3.73
+[Step 8200] L:6.08 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 24.9 Rot 0.0 | C:3.55
+[Step 8300] L:6.16 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 25.2 Rot 0.0 | C:3.63
+[Step 8400] L:6.17 | V_all: M 0.2 G -0.1 Geo -3.1 Ch 25.3 Rot 0.0 | C:3.67
+[Step 8500] L:6.13 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 25.5 Rot 0.0 | C:3.59
+
+[Step 8500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 8600] L:6.28 | V_all: M 0.3 G -0.1 Geo -3.1 Ch 25.6 Rot 0.0 | C:3.75
+[Step 8700] L:6.28 | V_all: M 0.6 G -0.1 Geo -3.1 Ch 25.8 Rot 0.0 | C:3.69
+[Step 8800] L:6.26 | V_all: M 0.3 G -0.1 Geo -3.1 Ch 26.1 Rot 0.0 | C:3.63
+[Step 8900] L:5.82 | V_all: M 0.3 G -0.1 Geo -3.1 Ch 26.3 Rot 0.0 | C:3.28
+[Step 9000] L:6.51 | V_all: M 0.7 G -0.1 Geo -3.0 Ch 26.4 Rot 0.0 | C:3.86
+
+[Step 9000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 9100] L:6.45 | V_all: M 0.3 G -0.1 Geo -3.2 Ch 26.6 Rot 0.0 | C:3.85
+[Step 9200] L:6.57 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 26.8 Rot 0.0 | C:3.87
+[Step 9300] L:6.44 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 27.0 Rot 0.0 | C:3.71
+[Step 9400] L:6.70 | V_all: M 0.3 G -0.1 Geo -3.1 Ch 27.1 Rot 0.0 | C:3.98
+[Step 9500] L:6.52 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 27.3 Rot 0.0 | C:3.79
+
+[Step 9500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 9600] L:6.62 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 27.5 Rot 0.0 | C:3.90
+[Step 9700] L:6.65 | V_all: M 0.3 G -0.1 Geo -3.0 Ch 27.7 Rot 0.0 | C:3.86
+[Step 9800] L:6.57 | V_all: M 0.4 G -0.1 Geo -3.1 Ch 27.9 Rot 0.0 | C:3.81
+[Step 9900] L:6.59 | V_all: M 0.5 G -0.1 Geo -3.1 Ch 28.1 Rot 0.0 | C:3.79
+[Step 10000] L:6.71 | V_all: M 0.3 G -0.1 Geo -3.1 Ch 28.3 Rot 0.0 | C:3.89
+
+[Step 10000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 10100] L:6.65 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 28.5 Rot 0.0 | C:3.88
+[Step 10200] L:6.85 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 28.7 Rot 0.0 | C:4.04
+[Step 10300] L:6.80 | V_all: M 0.5 G -0.1 Geo -3.0 Ch 28.8 Rot 0.0 | C:3.94
+[Step 10400] L:6.86 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 29.0 Rot 0.0 | C:3.93
+[Step 10500] L:6.95 | V_all: M 0.6 G -0.1 Geo -3.0 Ch 29.3 Rot 0.0 | C:4.05
+
+[Step 10500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 10600] L:6.61 | V_all: M 0.2 G -0.0 Geo -4.0 Ch 29.6 Rot 0.0 | C:3.82
+[Step 10700] L:7.01 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 29.6 Rot 0.0 | C:4.04
+[Step 10800] L:7.00 | V_all: M 0.5 G -0.0 Geo -3.2 Ch 29.8 Rot 0.0 | C:4.03
+[Step 10900] L:7.04 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 30.0 Rot 0.0 | C:4.11
+[Step 11000] L:6.91 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 30.3 Rot 0.0 | C:3.90
+
+[Step 11000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 11100] L:7.07 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 30.4 Rot 0.0 | C:4.10
+[Step 11200] L:7.34 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 30.5 Rot 0.0 | C:4.32
+[Step 11300] L:7.26 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 30.7 Rot 0.0 | C:4.21
+[Step 11400] L:7.19 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 30.9 Rot 0.0 | C:4.10
+[Step 11500] L:7.41 | V_all: M 1.1 G -0.0 Geo -3.0 Ch 31.1 Rot 0.0 | C:4.26
+
+[Step 11500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 11600] L:7.14 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 31.2 Rot 0.0 | C:4.04
+[Step 11700] L:7.37 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 31.5 Rot 0.0 | C:4.29
+[Step 11800] L:7.43 | V_all: M 0.2 G -0.0 Geo -3.0 Ch 31.6 Rot 0.0 | C:4.34
+[Step 11900] L:7.65 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 31.8 Rot 0.0 | C:4.49
+[Step 12000] L:7.33 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 32.0 Rot 0.0 | C:4.15
+
+[Step 12000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 12100] L:7.37 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 32.2 Rot 0.0 | C:4.16
+[Step 12200] L:7.51 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 32.3 Rot 0.0 | C:4.31
+[Step 12300] L:7.75 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 32.5 Rot 0.0 | C:4.52
+[Step 12400] L:7.68 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 32.7 Rot 0.0 | C:4.41
+[Step 12500] L:7.77 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 32.8 Rot 0.0 | C:4.53
+
+[Step 12500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 12600] L:8.18 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 33.0 Rot 0.0 | C:4.91
+[Step 12700] L:7.64 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 33.2 Rot 0.0 | C:4.36
+[Step 12800] L:7.86 | V_all: M 0.3 G -0.0 Geo -3.3 Ch 33.4 Rot 0.0 | C:4.60
+[Step 12900] L:7.67 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 33.5 Rot 0.0 | C:4.41
+[Step 13000] L:8.05 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 33.8 Rot 0.0 | C:4.72
+
+[Step 13000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 13100] L:7.98 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 33.9 Rot 0.0 | C:4.62
+[Step 13200] L:8.01 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 34.1 Rot 0.0 | C:4.68
+[Step 13300] L:8.01 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 34.3 Rot 0.0 | C:4.66
+[Step 13400] L:7.58 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 34.5 Rot 0.0 | C:4.19
+[Step 13500] L:7.89 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 34.6 Rot 0.0 | C:4.54
+
+[Step 13500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 13600] L:8.32 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 34.7 Rot 0.0 | C:4.90
+[Step 13700] L:8.07 | V_all: M 0.2 G -0.0 Geo -3.0 Ch 34.9 Rot 0.0 | C:4.63
+[Step 13800] L:8.25 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 35.1 Rot 0.0 | C:4.88
+[Step 13900] L:7.69 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 35.3 Rot 0.0 | C:4.19
+[Step 14000] L:8.01 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 35.4 Rot 0.0 | C:4.54
+
+[Step 14000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 14100] L:8.32 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 35.5 Rot 0.0 | C:4.84
+[Step 14200] L:8.17 | V_all: M 0.1 G -0.0 Geo -3.0 Ch 35.7 Rot 0.0 | C:4.71
+[Step 14300] L:7.86 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 35.9 Rot 0.0 | C:4.32
+[Step 14400] L:8.58 | V_all: M 0.2 G -0.0 Geo -3.0 Ch 36.0 Rot 0.0 | C:5.01
+[Step 14500] L:8.82 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 36.2 Rot 0.0 | C:5.27
+
+[Step 14500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 14600] L:9.11 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 36.3 Rot 0.0 | C:5.52
+[Step 14700] L:8.50 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 36.5 Rot 0.0 | C:4.96
+[Step 14800] L:8.45 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 36.7 Rot 0.0 | C:4.89
+[Step 14900] L:9.38 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 36.8 Rot 0.0 | C:5.85
+[Step 15000] L:8.64 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 37.0 Rot 0.0 | C:5.03
+
+[Step 15000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 15100] L:8.70 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 37.1 Rot 0.0 | C:5.04
+[Step 15200] L:8.66 | V_all: M 0.1 G -0.0 Geo -3.1 Ch 37.3 Rot 0.0 | C:5.02
+[Step 15300] L:8.79 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 37.4 Rot 0.0 | C:5.14
+[Step 15400] L:8.95 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 37.5 Rot 0.0 | C:5.30
+[Step 15500] L:8.74 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 37.7 Rot 0.0 | C:5.03
+
+[Step 15500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 15600] L:8.72 | V_all: M 0.2 G -0.0 Geo -3.0 Ch 37.9 Rot 0.0 | C:5.04
+[Step 15700] L:9.02 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 38.0 Rot 0.0 | C:5.24
+[Step 15800] L:8.76 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 38.1 Rot 0.0 | C:5.01
+[Step 15900] L:9.07 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 38.3 Rot 0.0 | C:5.33
+[Step 16000] L:9.11 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 38.4 Rot 0.0 | C:5.36
+
+[Step 16000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 16100] L:8.91 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 38.6 Rot 0.0 | C:5.14
+[Step 16200] L:9.44 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 38.7 Rot 0.0 | C:5.64
+[Step 16300] L:9.00 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 38.8 Rot 0.0 | C:5.18
+[Step 16400] L:9.37 | V_all: M 0.2 G -0.0 Geo -3.2 Ch 39.0 Rot 0.0 | C:5.55
+[Step 16500] L:8.97 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 39.1 Rot 0.0 | C:5.09
+
+[Step 16500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 16600] L:9.15 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 39.2 Rot 0.0 | C:5.32
+[Step 16700] L:9.02 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 39.4 Rot 0.0 | C:5.19
+[Step 16800] L:9.47 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 39.5 Rot 0.0 | C:5.67
+[Step 16900] L:9.14 | V_all: M 0.1 G -0.0 Geo -3.0 Ch 39.6 Rot 0.0 | C:5.29
+[Step 17000] L:9.22 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 39.8 Rot 0.0 | C:5.37
+
+[Step 17000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 17100] L:9.28 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 39.9 Rot 0.0 | C:5.37
+[Step 17200] L:9.19 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 40.0 Rot 0.0 | C:5.26
+[Step 17300] L:9.41 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 40.1 Rot 0.0 | C:5.54
+[Step 17400] L:9.53 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 40.3 Rot 0.0 | C:5.61
+[Step 17500] L:9.28 | V_all: M 0.1 G -0.0 Geo -3.1 Ch 40.4 Rot 0.0 | C:5.39
+
+[Step 17500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 17600] L:9.51 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 40.5 Rot 0.0 | C:5.59
+[Step 17700] L:10.03 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 40.6 Rot 0.0 | C:6.11
+[Step 17800] L:9.47 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 40.8 Rot 0.0 | C:5.50
+[Step 17900] L:9.97 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 40.9 Rot 0.0 | C:5.99
+[Step 18000] L:9.66 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 41.0 Rot 0.0 | C:5.70
+
+[Step 18000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 18100] L:9.21 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 41.1 Rot 0.0 | C:5.23
+[Step 18200] L:9.95 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 41.2 Rot 0.0 | C:5.96
+[Step 18300] L:9.57 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 41.3 Rot 0.0 | C:5.55
+[Step 18400] L:9.66 | V_all: M 0.1 G -0.0 Geo -3.1 Ch 41.5 Rot 0.0 | C:5.68
+[Step 18500] L:9.77 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 41.6 Rot 0.0 | C:5.75
+
+[Step 18500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 18600] L:9.96 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 41.7 Rot 0.0 | C:5.94
+[Step 18700] L:9.78 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 41.8 Rot 0.0 | C:5.70
+[Step 18800] L:9.97 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 41.9 Rot 0.0 | C:5.90
+[Step 18900] L:9.99 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 42.0 Rot 0.0 | C:5.93
+[Step 19000] L:10.08 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 42.1 Rot 0.0 | C:6.01
+
+[Step 19000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 19100] L:9.72 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 42.2 Rot 0.0 | C:5.59
+[Step 19200] L:9.92 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 42.3 Rot 0.0 | C:5.82
+[Step 19300] L:10.03 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 42.4 Rot 0.0 | C:5.96
+[Step 19400] L:10.07 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 42.5 Rot 0.0 | C:5.98
+[Step 19500] L:9.94 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 42.6 Rot 0.0 | C:5.82
+
+[Step 19500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 19600] L:10.23 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 42.7 Rot 0.0 | C:6.08
+[Step 19700] L:10.08 | V_all: M 0.2 G -0.0 Geo -3.0 Ch 42.8 Rot 0.0 | C:5.96
+[Step 19800] L:10.41 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 42.9 Rot 0.0 | C:6.27
+[Step 19900] L:9.85 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 43.0 Rot 0.0 | C:5.67
+[Step 20000] L:10.10 | V_all: M 0.1 G -0.0 Geo -3.1 Ch 43.1 Rot 0.0 | C:5.95
+
+[Step 20000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 20100] L:10.11 | V_all: M 0.2 G -0.0 Geo -3.0 Ch 43.2 Rot 0.0 | C:5.93
+[Step 20200] L:10.55 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 43.3 Rot 0.0 | C:6.40
+[Step 20300] L:10.41 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 43.4 Rot 0.0 | C:6.20
+[Step 20400] L:10.51 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 43.4 Rot 0.0 | C:6.30
+[Step 20500] L:10.08 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 43.5 Rot 0.0 | C:5.86
+
+[Step 20500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 20600] L:10.18 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 43.6 Rot 0.0 | C:5.92
+[Step 20700] L:10.77 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 43.7 Rot 0.0 | C:6.56
+[Step 20800] L:10.44 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 43.8 Rot 0.0 | C:6.21
+[Step 20900] L:10.92 | V_all: M 0.2 G -0.0 Geo -3.2 Ch 43.9 Rot 0.0 | C:6.71
+[Step 21000] L:10.64 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 44.0 Rot 0.0 | C:6.36
+
+[Step 21000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 21100] L:10.46 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 44.0 Rot 0.0 | C:6.21
+[Step 21200] L:10.15 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 44.1 Rot 0.0 | C:5.86
+[Step 21300] L:10.97 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 44.2 Rot 0.0 | C:6.64
+[Step 21400] L:10.62 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 44.3 Rot 0.0 | C:6.32
+[Step 21500] L:10.29 | V_all: M 0.2 G -0.0 Geo -3.0 Ch 44.3 Rot 0.0 | C:6.01
+
+[Step 21500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 21600] L:10.22 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 44.4 Rot 0.0 | C:5.90
+[Step 21700] L:10.92 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 44.5 Rot 0.0 | C:6.61
+[Step 21800] L:10.41 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 44.6 Rot 0.0 | C:6.13
+[Step 21900] L:11.07 | V_all: M 0.1 G -0.0 Geo -3.2 Ch 44.6 Rot 0.0 | C:6.83
+[Step 22000] L:10.83 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 44.7 Rot 0.0 | C:6.52
+
+[Step 22000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 22100] L:10.99 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 44.8 Rot 0.0 | C:6.66
+[Step 22200] L:10.90 | V_all: M 0.8 G -0.0 Geo -3.1 Ch 44.8 Rot 0.0 | C:6.56
+[Step 22300] L:10.58 | V_all: M 0.7 G -0.0 Geo -3.1 Ch 44.9 Rot 0.0 | C:6.25
+[Step 22400] L:10.23 | V_all: M 0.8 G -0.0 Geo -3.1 Ch 45.0 Rot 0.0 | C:5.80
+[Step 22500] L:11.16 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.0 Rot 0.0 | C:6.78
+
+[Step 22500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 22600] L:11.23 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 45.1 Rot 0.0 | C:6.90
+[Step 22700] L:10.64 | V_all: M 0.2 G -0.0 Geo -3.0 Ch 45.1 Rot 0.0 | C:6.27
+[Step 22800] L:11.04 | V_all: M 0.1 G -0.0 Geo -3.1 Ch 45.2 Rot 0.0 | C:6.67
+[Step 22900] L:10.83 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.3 Rot 0.0 | C:6.46
+[Step 23000] L:10.72 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 45.3 Rot 0.0 | C:6.30
+
+[Step 23000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 23100] L:10.82 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.4 Rot 0.0 | C:6.43
+[Step 23200] L:10.38 | V_all: M 0.7 G -0.0 Geo -3.1 Ch 45.4 Rot 0.0 | C:5.97
+[Step 23300] L:10.84 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 45.5 Rot 0.0 | C:6.44
+[Step 23400] L:10.72 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.33
+[Step 23500] L:10.85 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.43
+
+[Step 23500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 23600] L:10.81 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 45.7 Rot 0.0 | C:6.37
+[Step 23700] L:10.69 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.28
+[Step 23800] L:10.94 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.54
+[Step 23900] L:11.05 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.65
+[Step 24000] L:10.98 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 45.9 Rot 0.0 | C:6.51
+
+[Step 24000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 24100] L:9.89 | V_all: M 1.3 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:5.40
+[Step 24200] L:11.00 | V_all: M 2.1 G -0.0 Geo -3.0 Ch 45.9 Rot 0.0 | C:6.41
+[Step 24300] L:10.93 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 46.0 Rot 0.0 | C:6.45
+[Step 24400] L:10.64 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 46.0 Rot 0.0 | C:6.17
+[Step 24500] L:10.92 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.1 Rot 0.0 | C:6.49
+
+[Step 24500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 24600] L:10.84 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 46.1 Rot 0.0 | C:6.42
+[Step 24700] L:11.67 | V_all: M 3.5 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:6.93
+[Step 24800] L:11.11 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 46.2 Rot 0.0 | C:6.67
+[Step 24900] L:11.25 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:6.80
+[Step 25000] L:10.94 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.44
+
+[Step 25000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 25100] L:10.83 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.40
+[Step 25200] L:11.06 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.3 Rot 0.0 | C:6.56
+[Step 25300] L:10.77 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.28
+[Step 25400] L:10.45 | V_all: M 1.0 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:5.92
+[Step 25500] L:11.57 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:7.10
+
+[Step 25500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 25600] L:10.76 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.32
+[Step 25700] L:10.95 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.41
+[Step 25800] L:11.37 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.85
+[Step 25900] L:11.07 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.6 Rot 0.0 | C:6.54
+[Step 26000] L:11.08 | V_all: M 1.4 G -0.0 Geo -3.3 Ch 46.6 Rot 0.0 | C:6.53
+
+[Step 26000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 26100] L:11.00 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.6 Rot 0.0 | C:6.51
+[Step 26200] L:10.99 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.7 Rot 0.0 | C:6.44
+[Step 26300] L:11.20 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.7 Rot 0.0 | C:6.68
+[Step 26400] L:11.07 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.7 Rot 0.0 | C:6.57
+[Step 26500] L:11.42 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.7 Rot 0.0 | C:6.87
+
+[Step 26500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 26600] L:11.29 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.7 Rot 0.0 | C:6.72
+[Step 26700] L:11.27 | V_all: M 1.5 G -0.0 Geo -3.1 Ch 46.8 Rot 0.0 | C:6.64
+[Step 26800] L:11.14 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.8 Rot 0.0 | C:6.60
+[Step 26900] L:10.87 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.8 Rot 0.0 | C:6.34
+[Step 27000] L:11.09 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.8 Rot 0.0 | C:6.53
+
+[Step 27000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 27100] L:10.79 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.9 Rot 0.0 | C:6.29
+[Step 27200] L:10.86 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 46.9 Rot 0.0 | C:6.28
+[Step 27300] L:11.37 | V_all: M 0.7 G -0.0 Geo -3.1 Ch 46.9 Rot 0.0 | C:6.79
+[Step 27400] L:11.00 | V_all: M 1.3 G -0.0 Geo -3.1 Ch 46.9 Rot 0.0 | C:6.38
+[Step 27500] L:11.15 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 46.9 Rot 0.0 | C:6.62
+
+[Step 27500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 27600] L:11.27 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 46.9 Rot 0.0 | C:6.73
+[Step 27700] L:10.98 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.46
+[Step 27800] L:10.99 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.47
+[Step 27900] L:10.97 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 47.0 Rot 0.0 | C:6.39
+[Step 28000] L:11.00 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.45
+
+[Step 28000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 28100] L:11.06 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.43
+[Step 28200] L:11.20 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.60
+[Step 28300] L:11.56 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 47.1 Rot 0.0 | C:6.96
+[Step 28400] L:10.88 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.30
+[Step 28500] L:11.07 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.50
+
+[Step 28500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 28600] L:11.04 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.39
+[Step 28700] L:10.98 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.39
+[Step 28800] L:11.19 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.60
+[Step 28900] L:11.74 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:7.17
+[Step 29000] L:11.25 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.68
+
+[Step 29000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 29100] L:11.09 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.50
+[Step 29200] L:11.13 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.58
+[Step 29300] L:10.98 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.39
+[Step 29400] L:11.26 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 47.2 Rot 0.0 | C:6.67
+[Step 29500] L:11.46 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 47.2 Rot 0.0 | C:6.83
+
+[Step 29500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 29600] L:11.10 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.2 Rot 0.0 | C:6.54
+[Step 29700] L:11.15 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.2 Rot 0.0 | C:6.58
+[Step 29800] L:11.68 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 47.2 Rot 0.0 | C:7.10
+[Step 29900] L:11.56 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.2 Rot 0.0 | C:6.98
+[Step 30000] L:11.22 | V_all: M 0.6 G -0.0 Geo -3.2 Ch 47.2 Rot 0.0 | C:6.66
+
+[Step 30000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 30100] L:10.73 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.2 Rot 0.0 | C:6.14
+[Step 30200] L:11.33 | V_all: M 0.5 G -0.0 Geo -3.2 Ch 47.2 Rot 0.0 | C:6.76
+[Step 30300] L:11.14 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.2 Rot 0.0 | C:6.56
+[Step 30400] L:10.70 | V_all: M 0.8 G -0.0 Geo -3.1 Ch 47.2 Rot 0.0 | C:6.09
+[Step 30500] L:11.13 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.2 Rot 0.0 | C:6.56
+
+[Step 30500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 30600] L:11.02 | V_all: M 15.3 G -0.0 Geo -3.2 Ch 47.2 Rot 0.0 | C:5.09
+[Step 30700] L:10.77 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.20
+[Step 30800] L:11.27 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.69
+[Step 30900] L:11.47 | V_all: M 0.7 G -0.0 Geo -3.2 Ch 47.1 Rot 0.0 | C:6.85
+[Step 31000] L:11.23 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.63
+
+[Step 31000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 31100] L:10.86 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 47.1 Rot 0.0 | C:6.28
+[Step 31200] L:11.01 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.40
+[Step 31300] L:11.72 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 47.1 Rot 0.0 | C:7.19
+[Step 31400] L:11.20 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.62
+[Step 31500] L:11.29 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.69
+
+[Step 31500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 31600] L:11.20 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.65
+[Step 31700] L:11.27 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.69
+[Step 31800] L:11.38 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.77
+[Step 31900] L:10.79 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.23
+[Step 32000] L:10.81 | V_all: M 2.0 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.04
+
+[Step 32000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 32100] L:11.10 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.53
+[Step 32200] L:11.39 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.83
+[Step 32300] L:10.89 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.32
+[Step 32400] L:11.55 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 47.1 Rot 0.0 | C:6.98
+[Step 32500] L:11.20 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 47.1 Rot 0.0 | C:6.59
+
+[Step 32500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 32600] L:11.21 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.60
+[Step 32700] L:11.04 | V_all: M 0.8 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.44
+[Step 32800] L:10.97 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.35
+[Step 32900] L:10.72 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 47.1 Rot 0.0 | C:6.15
+[Step 33000] L:10.77 | V_all: M 1.4 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.20
+
+[Step 33000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 33100] L:11.44 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.88
+[Step 33200] L:11.21 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.66
+[Step 33300] L:11.05 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.48
+[Step 33400] L:11.59 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:7.02
+[Step 33500] L:10.85 | V_all: M 0.4 G -0.0 Geo -3.3 Ch 47.0 Rot 0.0 | C:6.31
+
+[Step 33500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 33600] L:11.08 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.52
+[Step 33700] L:11.67 | V_all: M 1.9 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.93
+[Step 33800] L:10.94 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 47.0 Rot 0.0 | C:6.32
+[Step 33900] L:11.08 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 47.0 Rot 0.0 | C:6.51
+[Step 34000] L:11.24 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.9 Rot 0.0 | C:6.69
+
+[Step 34000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 34100] L:11.44 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.9 Rot 0.0 | C:6.84
+[Step 34200] L:11.49 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 46.9 Rot 0.0 | C:6.94
+[Step 34300] L:11.19 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.9 Rot 0.0 | C:6.66
+[Step 34400] L:11.57 | V_all: M 2.3 G -0.0 Geo -3.2 Ch 46.6 Rot 0.0 | C:6.94
+[Step 34500] L:11.01 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.6 Rot 0.0 | C:6.47
+
+[Step 34500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 34600] L:11.21 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.6 Rot 0.0 | C:6.68
+[Step 34700] L:10.45 | V_all: M 1.8 G -0.0 Geo -3.1 Ch 46.6 Rot 0.0 | C:5.90
+[Step 34800] L:10.99 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.6 Rot 0.0 | C:6.43
+[Step 34900] L:10.63 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.6 Rot 0.0 | C:6.12
+[Step 35000] L:11.16 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.6 Rot 0.0 | C:6.63
+
+[Step 35000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 35100] L:10.91 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.6 Rot 0.0 | C:6.41
+[Step 35200] L:10.89 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.6 Rot 0.0 | C:6.36
+[Step 35300] L:11.71 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 46.6 Rot 0.0 | C:7.23
+[Step 35400] L:10.79 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 46.6 Rot 0.0 | C:6.21
+[Step 35500] L:11.59 | V_all: M 0.5 G -0.0 Geo -3.2 Ch 46.5 Rot 0.0 | C:7.11
+
+[Step 35500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 35600] L:10.74 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.26
+[Step 35700] L:11.32 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 46.5 Rot 0.0 | C:6.79
+[Step 35800] L:11.25 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.71
+[Step 35900] L:11.28 | V_all: M 1.0 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.73
+[Step 36000] L:10.69 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 46.5 Rot 0.0 | C:6.10
+
+[Step 36000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 36100] L:11.08 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.56
+[Step 36200] L:11.30 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 46.5 Rot 0.0 | C:6.77
+[Step 36300] L:11.81 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 46.5 Rot 0.0 | C:7.27
+[Step 36400] L:11.61 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:7.02
+[Step 36500] L:11.12 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.5 Rot 0.0 | C:6.58
+
+[Step 36500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 36600] L:10.97 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.45
+[Step 36700] L:11.02 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.5 Rot 0.0 | C:6.49
+[Step 36800] L:11.35 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.83
+[Step 36900] L:11.20 | V_all: M 0.7 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.64
+[Step 37000] L:10.87 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.39
+
+[Step 37000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 37100] L:11.37 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.87
+[Step 37200] L:10.91 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.4 Rot 0.0 | C:6.37
+[Step 37300] L:11.02 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.54
+[Step 37400] L:11.01 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.53
+[Step 37500] L:11.12 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.62
+
+[Step 37500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 37600] L:11.25 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 46.4 Rot 0.0 | C:6.77
+[Step 37700] L:11.01 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.4 Rot 0.0 | C:6.49
+[Step 37800] L:11.59 | V_all: M 0.7 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:7.08
+[Step 37900] L:11.32 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 46.4 Rot 0.0 | C:6.84
+[Step 38000] L:11.44 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.93
+
+[Step 38000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 38100] L:10.80 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.31
+[Step 38200] L:11.36 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.86
+[Step 38300] L:10.95 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 46.3 Rot 0.0 | C:6.46
+[Step 38400] L:11.17 | V_all: M 0.5 G -0.0 Geo -3.2 Ch 46.3 Rot 0.0 | C:6.62
+[Step 38500] L:10.94 | V_all: M 0.8 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.43
+
+[Step 38500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 38600] L:11.05 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.55
+[Step 38700] L:11.20 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.70
+[Step 38800] L:10.95 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.46
+[Step 38900] L:11.30 | V_all: M 0.7 G -0.0 Geo -3.1 Ch 46.3 Rot 0.0 | C:6.78
+[Step 39000] L:10.70 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.3 Rot 0.0 | C:6.19
+
+[Step 39000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 39100] L:10.92 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:6.43
+[Step 39200] L:10.71 | V_all: M 1.0 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:6.22
+[Step 39300] L:11.05 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:6.56
+[Step 39400] L:10.91 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:6.45
+[Step 39500] L:10.60 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 46.2 Rot 0.0 | C:6.06
+
+[Step 39500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 39600] L:10.88 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 46.2 Rot 0.0 | C:6.35
+[Step 39700] L:11.09 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:6.59
+[Step 39800] L:10.88 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:6.32
+[Step 39900] L:11.34 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 46.2 Rot 0.0 | C:6.85
+[Step 40000] L:11.52 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:7.03
+
+[Step 40000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 40100] L:11.30 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 46.2 Rot 0.0 | C:6.87
+[Step 40200] L:11.60 | V_all: M 1.1 G -0.0 Geo -3.1 Ch 46.2 Rot 0.0 | C:7.08
+[Step 40300] L:10.67 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.1 Rot 0.0 | C:6.20
+[Step 40400] L:11.27 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.1 Rot 0.0 | C:6.77
+[Step 40500] L:11.36 | V_all: M 0.5 G -0.0 Geo -3.2 Ch 46.1 Rot 0.0 | C:6.91
+
+[Step 40500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 40600] L:11.29 | V_all: M 2.1 G -0.0 Geo -3.3 Ch 46.1 Rot 0.0 | C:6.74
+[Step 40700] L:11.22 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.1 Rot 0.0 | C:6.74
+[Step 40800] L:10.85 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 46.1 Rot 0.0 | C:6.37
+[Step 40900] L:11.24 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.1 Rot 0.0 | C:6.75
+[Step 41000] L:10.52 | V_all: M 0.9 G -0.0 Geo -3.0 Ch 46.1 Rot 0.0 | C:5.98
+
+[Step 41000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 41100] L:11.09 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.1 Rot 0.0 | C:6.63
+[Step 41200] L:11.38 | V_all: M 0.9 G -0.0 Geo -3.1 Ch 46.0 Rot 0.0 | C:6.87
+[Step 41300] L:11.13 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 46.0 Rot 0.0 | C:6.63
+[Step 41400] L:11.08 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 46.0 Rot 0.0 | C:6.53
+[Step 41500] L:11.17 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 46.0 Rot 0.0 | C:6.71
+
+[Step 41500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 41600] L:11.35 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.0 Rot 0.0 | C:6.78
+[Step 41700] L:10.01 | V_all: M 5.1 G -0.0 Geo -3.0 Ch 46.0 Rot 0.0 | C:5.11
+[Step 41800] L:10.98 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.0 Rot 0.0 | C:6.56
+[Step 41900] L:10.72 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 46.0 Rot 0.0 | C:6.22
+[Step 42000] L:11.00 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.0 Rot 0.0 | C:6.56
+
+[Step 42000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 42100] L:11.26 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 46.0 Rot 0.0 | C:6.79
+[Step 42200] L:10.78 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 46.0 Rot 0.0 | C:6.28
+[Step 42300] L:11.23 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 46.0 Rot 0.0 | C:6.77
+[Step 42400] L:10.67 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.19
+[Step 42500] L:10.74 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 45.9 Rot 0.0 | C:6.26
+
+[Step 42500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 42600] L:11.26 | V_all: M 0.7 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.71
+[Step 42700] L:10.87 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.39
+[Step 42800] L:10.98 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.54
+[Step 42900] L:11.01 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.55
+[Step 43000] L:10.97 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.51
+
+[Step 43000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 43100] L:10.72 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.25
+[Step 43200] L:10.93 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.49
+[Step 43300] L:10.71 | V_all: M 0.5 G -0.0 Geo -3.0 Ch 45.9 Rot 0.0 | C:6.23
+[Step 43400] L:11.13 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.53
+[Step 43500] L:11.18 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 45.9 Rot 0.0 | C:6.68
+
+[Step 43500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 43600] L:11.06 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.59
+[Step 43700] L:11.04 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.56
+[Step 43800] L:11.23 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 45.8 Rot 0.0 | C:6.77
+[Step 43900] L:11.63 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 45.8 Rot 0.0 | C:7.16
+[Step 44000] L:10.88 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 45.8 Rot 0.0 | C:6.43
+
+[Step 44000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 44100] L:11.15 | V_all: M 0.7 G -0.0 Geo -3.2 Ch 45.8 Rot 0.0 | C:6.63
+[Step 44200] L:10.60 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 45.8 Rot 0.0 | C:6.15
+[Step 44300] L:10.61 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.18
+[Step 44400] L:10.97 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 45.8 Rot 0.0 | C:6.49
+[Step 44500] L:11.09 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.66
+
+[Step 44500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 44600] L:10.68 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.24
+[Step 44700] L:10.89 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.44
+[Step 44800] L:10.96 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.50
+[Step 44900] L:11.01 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.55
+[Step 45000] L:11.05 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.66
+
+[Step 45000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 45100] L:10.99 | V_all: M 0.7 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.54
+[Step 45200] L:11.09 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.67
+[Step 45300] L:10.90 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 45.8 Rot 0.0 | C:6.48
+[Step 45400] L:11.14 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.72
+[Step 45500] L:11.09 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.64
+
+[Step 45500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 45600] L:11.09 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.64
+[Step 45700] L:10.64 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.20
+[Step 45800] L:11.11 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.69
+[Step 45900] L:11.52 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:7.06
+[Step 46000] L:10.87 | V_all: M 0.2 G -0.0 Geo -3.2 Ch 45.7 Rot 0.0 | C:6.42
+
+[Step 46000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 46100] L:11.41 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.98
+[Step 46200] L:11.25 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 45.7 Rot 0.0 | C:6.82
+[Step 46300] L:10.69 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 45.7 Rot 0.0 | C:6.21
+[Step 46400] L:10.69 | V_all: M 0.5 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.27
+[Step 46500] L:11.00 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 45.7 Rot 0.0 | C:6.57
+
+[Step 46500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 46600] L:10.92 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.39
+[Step 46700] L:10.73 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.30
+[Step 46800] L:11.21 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.75
+[Step 46900] L:10.70 | V_all: M 1.0 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.27
+[Step 47000] L:10.86 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.40
+
+[Step 47000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 47100] L:11.02 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.60
+[Step 47200] L:10.98 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.7 Rot 0.0 | C:6.55
+[Step 47300] L:10.92 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.47
+[Step 47400] L:10.79 | V_all: M 0.3 G -0.0 Geo -3.2 Ch 45.6 Rot 0.0 | C:6.34
+[Step 47500] L:11.78 | V_all: M 2.3 G -0.0 Geo -3.2 Ch 45.6 Rot 0.0 | C:7.13
+
+[Step 47500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 47600] L:11.27 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.87
+[Step 47700] L:10.60 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 45.6 Rot 0.0 | C:6.16
+[Step 47800] L:10.97 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.57
+[Step 47900] L:11.14 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.75
+[Step 48000] L:10.37 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 45.6 Rot 0.0 | C:5.93
+
+[Step 48000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 48100] L:11.21 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 45.6 Rot 0.0 | C:6.75
+[Step 48200] L:10.86 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.41
+[Step 48300] L:11.46 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:7.02
+[Step 48400] L:11.41 | V_all: M 0.4 G -0.0 Geo -3.2 Ch 45.6 Rot 0.0 | C:6.98
+[Step 48500] L:11.56 | V_all: M 0.3 G -0.0 Geo -3.3 Ch 45.6 Rot 0.0 | C:7.12
+
+[Step 48500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 48600] L:10.43 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:5.98
+[Step 48700] L:10.90 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.43
+[Step 48800] L:11.25 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 45.6 Rot 0.0 | C:6.86
+[Step 48900] L:10.79 | V_all: M 0.3 G -0.0 Geo -3.0 Ch 45.5 Rot 0.0 | C:6.34
+[Step 49000] L:11.06 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 45.5 Rot 0.0 | C:6.60
+
+[Step 49000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 49100] L:11.16 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.5 Rot 0.0 | C:6.71
+[Step 49200] L:10.55 | V_all: M 0.4 G -0.0 Geo -3.0 Ch 45.5 Rot 0.0 | C:6.13
+[Step 49300] L:10.90 | V_all: M 0.4 G -0.0 Geo -3.1 Ch 45.5 Rot 0.0 | C:6.44
+[Step 49400] L:11.24 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 45.5 Rot 0.0 | C:6.82
+[Step 49500] L:11.00 | V_all: M 0.7 G -0.0 Geo -3.0 Ch 45.5 Rot 0.0 | C:6.52
+
+[Step 49500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 49600] L:10.59 | V_all: M 0.3 G -0.0 Geo -3.1 Ch 45.5 Rot 0.0 | C:6.14
+[Step 49700] L:10.59 | V_all: M 0.6 G -0.0 Geo -3.0 Ch 45.5 Rot 0.0 | C:6.17
+[Step 49800] L:10.64 | V_all: M 0.2 G -0.0 Geo -3.1 Ch 45.5 Rot 0.0 | C:6.23
+[Step 49900] L:10.99 | V_all: M 1.3 G -0.0 Geo -3.2 Ch 45.5 Rot 0.0 | C:6.44
+[Step 50000] L:11.25 | V_all: M 0.6 G -0.0 Geo -3.1 Ch 45.5 Rot 0.0 | C:6.83
+
+[Step 50000] Probe: 好好好好好好好好好好好好好好好好好好好好
+Device: cuda
+Loading Entropy Stats...
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 5000 steps...
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] L:3.97 | V_all: M 4.9 G -0.7 Geo -5.2 Ch 94.7 Rot 0.3 | C:3.71
+[Step 200] L:3.33 | V_all: M 4.5 G -0.5 Geo -5.4 Ch 95.5 Rot 0.3 | C:3.01
+[Step 300] L:3.23 | V_all: M 5.7 G -0.5 Geo -5.2 Ch 96.0 Rot 0.3 | C:2.86
+[Step 400] L:2.89 | V_all: M 4.1 G -0.4 Geo -5.4 Ch 96.0 Rot 0.2 | C:2.55
+[Step 500] L:2.81 | V_all: M 4.0 G -0.4 Geo -5.3 Ch 96.7 Rot 0.2 | C:2.44
+
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 600] L:2.69 | V_all: M 6.6 G -0.4 Geo -5.3 Ch 94.9 Rot 0.2 | C:2.30
+[Step 700] L:2.66 | V_all: M 6.3 G -0.4 Geo -5.2 Ch 95.1 Rot 0.2 | C:2.28
+[Step 800] L:2.51 | V_all: M 5.0 G -0.4 Geo -5.3 Ch 97.2 Rot 0.2 | C:2.22
+[Step 900] L:2.57 | V_all: M 8.2 G -0.4 Geo -5.2 Ch 97.5 Rot 0.2 | C:2.17
+[Step 1000] L:2.62 | V_all: M 7.0 G -0.3 Geo -5.3 Ch 96.7 Rot 0.2 | C:2.18
+
+[Step 1000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1100] L:2.45 | V_all: M 7.0 G -0.3 Geo -5.4 Ch 96.8 Rot 0.2 | C:2.00
+[Step 1200] L:2.48 | V_all: M 4.9 G -0.3 Geo -5.3 Ch 95.8 Rot 0.2 | C:2.08
+[Step 1300] L:2.51 | V_all: M 4.0 G -0.3 Geo -5.2 Ch 95.3 Rot 0.2 | C:2.08
+[Step 1400] L:2.52 | V_all: M 4.8 G -0.3 Geo -5.3 Ch 95.2 Rot 0.2 | C:2.06
+[Step 1500] L:2.46 | V_all: M 5.0 G -0.3 Geo -5.3 Ch 94.8 Rot 0.2 | C:2.06
+
+[Step 1500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1600] L:2.43 | V_all: M 4.7 G -0.3 Geo -5.3 Ch 95.7 Rot 0.2 | C:2.04
+[Step 1700] L:2.57 | V_all: M 6.3 G -0.3 Geo -5.1 Ch 95.5 Rot 0.1 | C:2.13
+[Step 1800] L:2.45 | V_all: M 4.3 G -0.3 Geo -5.3 Ch 95.8 Rot 0.1 | C:2.04
+[Step 1900] L:2.49 | V_all: M 9.8 G -0.4 Geo -5.2 Ch 97.0 Rot 0.1 | C:2.15
+[Step 2000] L:2.36 | V_all: M 2.4 G -0.2 Geo -5.6 Ch 95.7 Rot 0.1 | C:1.83
+
+[Step 2000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2100] L:3.45 | V_all: M 4.2 G -0.3 Geo -5.2 Ch 95.2 Rot 0.1 | C:2.11
+[Step 2200] L:4.35 | V_all: M 5.1 G -0.3 Geo -5.3 Ch 93.5 Rot 0.1 | C:2.04
+[Step 2300] L:5.14 | V_all: M 3.7 G -0.2 Geo -5.4 Ch 92.0 Rot 0.1 | C:1.96
+[Step 2400] L:6.08 | V_all: M 5.2 G -0.2 Geo -5.4 Ch 90.3 Rot 0.1 | C:2.05
+[Step 2500] L:6.97 | V_all: M 9.5 G -0.2 Geo -5.5 Ch 85.6 Rot 0.1 | C:2.04
+
+[Step 2500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2600] L:7.43 | V_all: M 3.6 G -0.2 Geo -5.3 Ch 83.2 Rot 0.1 | C:2.07
+[Step 2700] L:7.75 | V_all: M 3.3 G -0.2 Geo -5.3 Ch 77.6 Rot 0.1 | C:2.05
+[Step 2800] L:8.38 | V_all: M 4.6 G -0.2 Geo -5.3 Ch 74.4 Rot 0.1 | C:2.03
+[Step 2900] L:8.50 | V_all: M 3.1 G -0.2 Geo -5.3 Ch 69.6 Rot 0.1 | C:1.99
+[Step 3000] L:9.02 | V_all: M 4.1 G -0.2 Geo -5.3 Ch 66.5 Rot 0.1 | C:2.04
+
+[Step 3000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3100] L:8.44 | V_all: M 2.5 G -0.2 Geo -5.4 Ch 62.5 Rot 0.1 | C:2.04
+[Step 3200] L:8.13 | V_all: M 4.0 G -0.2 Geo -5.4 Ch 58.3 Rot 0.1 | C:2.00
+[Step 3300] L:7.82 | V_all: M 2.5 G -0.2 Geo -5.2 Ch 55.8 Rot 0.1 | C:2.12
+[Step 3400] L:7.63 | V_all: M 2.2 G -0.2 Geo -5.3 Ch 54.1 Rot 0.1 | C:2.10
+[Step 3500] L:7.79 | V_all: M 5.0 G -0.2 Geo -5.2 Ch 52.3 Rot 0.1 | C:2.15
+
+[Step 3500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 3600] L:7.21 | V_all: M 1.6 G -0.2 Geo -5.3 Ch 50.7 Rot 0.1 | C:2.09
+[Step 3700] L:7.13 | V_all: M 3.0 G -0.2 Geo -5.4 Ch 48.8 Rot 0.1 | C:2.03
+[Step 3800] L:6.98 | V_all: M 2.1 G -0.2 Geo -5.3 Ch 47.6 Rot 0.1 | C:2.09
+[Step 3900] L:6.84 | V_all: M 1.7 G -0.2 Geo -5.3 Ch 46.4 Rot 0.1 | C:2.15
+[Step 4000] L:6.87 | V_all: M 2.8 G -0.2 Geo -5.1 Ch 45.3 Rot 0.1 | C:2.16
+
+[Step 4000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4100] L:6.77 | V_all: M 2.7 G -0.2 Geo -5.2 Ch 44.4 Rot 0.1 | C:2.17
+[Step 4200] L:6.66 | V_all: M 2.0 G -0.2 Geo -5.3 Ch 43.7 Rot 0.1 | C:2.16
+[Step 4300] L:6.64 | V_all: M 2.3 G -0.2 Geo -5.2 Ch 42.9 Rot 0.1 | C:2.26

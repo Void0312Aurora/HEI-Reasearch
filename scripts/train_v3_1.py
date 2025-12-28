@@ -284,10 +284,12 @@ def train(args):
             q_next_target = q_seq[1:].detach()
             
             # Simple Flow
-            q_pred_simple = geometry.exp_map(q_curr, p_curr)
+            # Consistent with Integrator: q_next = exp(q, v * dt)
+            dt = 0.1
+            q_pred_simple = geometry.exp_map(q_curr, p_curr * dt)
             loss_flow = torch.mean((q_pred_simple - q_next_target)**2)
             
-            # D. Integrator Consistency (Bridge to Phase 2) [New Axiom]
+            # D. Integrator Consistency
             # Requires that 1-step integration matches Flow Prediction
             dt = 0.1
             # Run integrator on the batch sequence (detached context for speed?)
@@ -336,7 +338,9 @@ def train(args):
         if len(valid_mask) > 0:
             q_valid = q_b[valid_mask]
             probs_valid = readout.read_prob(q_valid, beta=10.0)
-            loss_contrast = F.cross_entropy(torch.log(probs_valid + 1e-9), target_ids)
+            # Fix: Use NLL Loss on Log Probs (Cross Entropy expects logits)
+            # probs_valid is Softmax output. 
+            loss_contrast = F.nll_loss(torch.log(probs_valid + 1e-9), target_ids)
         else:
             loss_contrast = torch.tensor(0.0, device=device)
             
@@ -374,6 +378,12 @@ def train(args):
             log_msg = f"[Step {step_cnt}] L:{loss.item():.2f} | V_all: M {v_m:.1f} G {v_u:.1f} Geo {v_g:.1f} Ch {v_c:.1f} Rot {v_r:.1f} | C:{loss_contrast.item():.2f}"
             tqdm.write(log_msg)
             logger.info(log_msg)
+            
+            # Update Readout Prototypes (Fix Staleness)
+            readout.update_prototypes()
+
+        # Update LTM
+        ltm.add(q_b.detach(), m_b.detach(), J_b.detach(), p_batch.detach())
 
         # Buffer Update
         if len(active_q) > 5:
