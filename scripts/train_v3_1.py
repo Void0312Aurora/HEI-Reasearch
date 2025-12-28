@@ -36,10 +36,10 @@ HIDDEN_DIM = 256
 LR = 0.005 # Lower LR for stability with new dynamics
 YIELD_STRESS = 0.001 
 ELASTIC_K = 0.0001
-MAX_ATOMS = 64 # Reduced for DIM=16 and full graph
-CONTEXT_K = 5
+MAX_ATOMS = 32 # Reduced for OOM
+CONTEXT_K = 2 # Reduced for OOM
+BATCH_SIZE = 16 # Reduced for OOM
 MEMORY_SIZE = 20000
-BATCH_SIZE = 32 # OOM Fix
 
 def eval_probe(injector, entropy_stats, id_to_char, ff, prompt="你好", dim=DIM, device='cpu'):
     """Generate text WITH Full Dynamics (Route B PT)."""
@@ -150,7 +150,7 @@ def eval_tf_probe_stats(injector, entropy_stats, id_to_char, char_to_id, ff, tex
     readout = ReadoutMechanism(injector, entropy_stats, id_to_char)
     integrator = LieIntegrator()
     
-    active_q, active_m, active_J = [], [], []
+    active_q, active_m, active_J, active_p = [], [], [], []
     
     gt_ranks = []
     is_identity = []
@@ -160,7 +160,7 @@ def eval_tf_probe_stats(injector, entropy_stats, id_to_char, char_to_id, ff, tex
     detailed_log = []
     
     with torch.no_grad():
-         pass # dummy context for injector if needed, but we do manual grad toggle inside
+         pass 
          
     for i in range(len(text) - 1):
         curr_char = text[i]
@@ -176,17 +176,20 @@ def eval_tf_probe_stats(injector, entropy_stats, id_to_char, char_to_id, ff, tex
         with torch.no_grad():
              m, q, J, p = injector(x_t, r_t)
         q.requires_grad_(True)
+        # p needs grad? In probe we don't train, so no.
         
-        active_q.append(q); active_m.append(m); active_J.append(J)
+        active_q.append(q); active_m.append(m); active_J.append(J); active_p.append(p)
         
-        # Integrate
+        # Integrate with full history context
         q_in = torch.cat(active_q, dim=0)
         m_in = torch.cat(active_m, dim=0)
         J_in = torch.cat(active_J, dim=0)
-        last_p = torch.zeros_like(q)
+        p_in = torch.cat(active_p, dim=0)
+        
         dt = 0.1
         
-        q_next_pred, _, _ = integrator.step(q_in, last_p.expand(q_in.size(0), -1), J_in, m_in, ff, dt=dt)
+        # Use actual momentum p_in
+        q_next_pred, _, _ = integrator.step(q_in, p_in, J_in, m_in, ff, dt=dt)
         q_target_pred = q_next_pred[-1].unsqueeze(0)
         
         # Readout
@@ -218,7 +221,7 @@ def eval_tf_probe_stats(injector, entropy_stats, id_to_char, char_to_id, ff, tex
             detailed_log.append(f"{curr_char}->{next_char_gt} [GT:{gt_prob:.1e} R:{rank} | P:{pred_char}]")
             
         if len(active_q) > 20:
-             active_q.pop(0); active_m.pop(0); active_J.pop(0)
+             active_q.pop(0); active_m.pop(0); active_J.pop(0); active_p.pop(0)
 
     injector.train()
     
@@ -300,6 +303,8 @@ def train(args):
         
         step_cnt = checkpoint.get('step', 0)
         logger.info(f"Resumed at step {step_cnt}")
+    
+    start_step = step_cnt # For safe w_pot ramp
     
     batch_gen = stream.stream_batches(batch_size=BATCH_SIZE)
     
@@ -400,29 +405,23 @@ def train(args):
             # D. Integrator Consistency
             # Requires that 1-step integration matches Flow Prediction
             dt = 0.1
-            # Run integrator on the batch sequence (detached context for speed?)
-            # Or just local pair? Integrator involves forces from neighbors.
-            # Using integrator on q_curr with current context implies full N^2 force.
-            # We can use q_all, but we need gradients flow back to p_curr.
-            # Let's run integrator on q_curr (detached from context to save memory?)
-            # ForceField handles inputs.
             
-            # We only care about p_curr evolving q_curr correctly.
-            # Forces might be noisy. Let's require q_next ~ Integrator(q_curr, p_curr)
-            # including forces from q_next (future) is cheating? No, forces from q_curr neighbors.
-            # For efficiency: Just use simple flow loss dominant, plus small consistency.
-            
+            # Context for Integrator = Memory + Active History
+            # DETACH CONTEXT to prevent OOM (Truncated BPTT)
+            q_mem_t = torch.cat(q_mem_l + active_q, dim=0).detach() if (q_mem_l or active_q) else None
+            m_mem_t = torch.cat(m_mem_l + active_m, dim=0).detach() if (m_mem_l or active_m) else None
+            J_mem_t = torch.cat(J_mem_l + active_J, dim=0).detach() if (J_mem_l or active_J) else None
+
             # Consistency: q_integrator vs q_flow
             # q_int, p_int, J_int = lie_integrator.step(q_curr, p_curr, J_curr, m_curr, ff, dt)
-            # If we run this, we backprop through ForceField.connection! This trains the gauge connection.
-            # This is crucial for Route B PT.
             
             # We need J_curr and m_curr
             J_curr = J_b[:-1]
             m_curr = m_b[:-1]
             
-            # 1-step Rollout
-            q_int, _, _ = lie_integrator.step(q_curr, p_curr, J_curr, m_curr, ff, dt)
+            # 1-step Rollout with Context
+            q_int, _, _ = lie_integrator.step(q_curr, p_curr, J_curr, m_curr, ff, dt, 
+                                              ctx_q=q_mem_t, ctx_m=m_mem_t, ctx_J=J_mem_t)
             
             # Consistency: Integrator result should match Target (Real Next Char)
             # This forces p and Forces/Connection to work together to reach q_next.
@@ -457,11 +456,9 @@ def train(args):
             loss_contrast = torch.tensor(0.0, device=device)
             
         # Total Loss
-        # w_pot annealing: Delay physics until step 2000
-        if step_cnt < 2000:
-            w_pot = 0.0
-        else:
-            w_pot = min(0.1, 0.0 + (step_cnt - 2000) * 0.0001)
+        # w_pot annealing: Restart Ramp Logic (Safe Resume)
+        # Ramp from 0.0 to 0.1 over 1000 steps from start_step
+        w_pot = min(0.1, 0.0 + (step_cnt - start_step) * 0.0001)
         loss = loss_r + w_pot * E_pot + 5.0 * loss_flow + 5.0 * loss_consist + 1.0 * loss_contrast
         
         if torch.isnan(loss):
@@ -507,7 +504,7 @@ def train(args):
         ltm.add(q_b.detach(), m_b.detach(), J_b.detach(), p_batch.detach())
 
         # Buffer Update
-        if len(active_q) > 5:
+        if len(active_q) > 2:
              active_q.pop(0); active_m.pop(0); active_J.pop(0)
         active_q.append(q_b.detach())
         active_m.append(m_b.detach())

@@ -19,53 +19,58 @@ class LieIntegrator:
     def __init__(self, method='euler'):
         self.method = method
     
-    def step(self, q, p, J, m, force_field, dt=0.01):
+    def step(self, q, p, J, m, force_field, dt=0.01, ctx_q=None, ctx_m=None, ctx_J=None):
         """
-        Single step integration.
+        Single step integration with context interaction.
         Args:
-            q: (B, D)
+            q: (B, D) Active particles
             p: (B, D) Tangent vector at q
             J: (B, D, D) Gauge charge
             m: (B, 1) Mass
-            force_field: Module with .compute_forces() and .connection()
+            force_field: Module with .compute_forces()
             dt: Time step
+            ctx_q: (C, D) Context particles (LTM + Active History)
+            ctx_m: (C, 1)
+            ctx_J: (C, D, D)
         Returns:
             q_next, p_next, J_next
         """
-        # 1. Compute forces at current step (Gradient of Potential)
-        # F_tan = -Grad_R V
-        F_tan, _ = force_field.compute_forces(q, m, J)
+        # 1. Compute forces (Gradient of Potential)
+        # We need forces ON q FROM (q + ctx)
+        
+        if ctx_q is not None:
+            # Combine System: [Context, Active]
+            # Forces computation usually expects full batch.
+            # We want forces on Active indices (last B).
+            q_all = torch.cat([ctx_q, q], dim=0)
+            m_all = torch.cat([ctx_m, m], dim=0)
+            J_all = torch.cat([ctx_J, J], dim=0)
+            
+            # Compute Full Forces
+            F_total, _ = force_field.compute_forces(q_all, m_all, J_all)
+            
+            # Extract Forces for Active particles
+            B = q.size(0)
+            F_tan = F_total[-B:]
+        else:
+            # Local only
+            F_tan, _ = force_field.compute_forces(q, m, J)
         
         # 2. Update Momentum (Symplectic-like: p += F * dt)
-        # Apply dissipative forces? F_diss = -gamma * p
         gamma = 2.0 # Friction
         p_star = p + (F_tan - gamma * p) * dt
         
         # 3. Update Position (Exponential Map)
-        # v = p / m? Or p is velocity?
-        # In current scaling, assume p is velocity-like (m=1 effective inertia) OR p_mass = p/m.
-        # Let's assume p is velocity direction (kinematic).
-        v = p_star # If p is velocity
-        
+        v = p_star 
         q_next = geometry.exp_map(q, v * dt)
         q_next = geometry.check_boundary(q_next)
         
         # 4. Parallel Transport Momentum (Levi-Civita)
-        # Move p_star from T_q to T_{q_next}
         p_next = geometry.parallel_transport(q, q_next, p_star)
         
         # 5. Parallel Transport Gauge Charge (Gauge Connection)
-        # J_next = PT_{gauge} J PT_{gauge}^T
-        # Compute relative movement for connection
-        # diff = -q (+) q_next
         diff = geometry.mobius_add(-q, q_next)
-        
-        # Get matrix from connection net
-        pt_gauge = force_field.connection(diff) # (B, D, D)
-        
-        # Apply Adjoint action
-        # J: (B, D, D)
-        # PT: (B, D, D)
+        pt_gauge = force_field.connection(diff)
         J_next = torch.matmul(pt_gauge, torch.matmul(J, pt_gauge.transpose(1, 2)))
         
         return q_next, p_next, J_next
