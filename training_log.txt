@@ -1059,3 +1059,76 @@ Starting Training for 50000 steps...
 [Step 4100] L:6.77 | V_all: M 2.7 G -0.2 Geo -5.2 Ch 44.4 Rot 0.1 | C:2.17
 [Step 4200] L:6.66 | V_all: M 2.0 G -0.2 Geo -5.3 Ch 43.7 Rot 0.1 | C:2.16
 [Step 4300] L:6.64 | V_all: M 2.3 G -0.2 Geo -5.2 Ch 42.9 Rot 0.1 | C:2.26
+[Step 4400] L:6.43 | V_all: M 1.8 G -0.1 Geo -5.5 Ch 42.6 Rot 0.1 | C:2.14
+[Step 4500] L:6.43 | V_all: M 2.4 G -0.2 Geo -5.3 Ch 41.7 Rot 0.1 | C:2.16
+
+[Step 4500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 4600] L:6.57 | V_all: M 2.1 G -0.2 Geo -5.2 Ch 41.8 Rot 0.1 | C:2.31
+[Step 4700] L:6.47 | V_all: M 1.8 G -0.2 Geo -5.3 Ch 41.5 Rot 0.1 | C:2.30
+[Step 4800] L:6.42 | V_all: M 1.5 G -0.2 Geo -5.4 Ch 41.1 Rot 0.1 | C:2.24
+[Step 4900] L:6.51 | V_all: M 2.5 G -0.2 Geo -5.2 Ch 40.6 Rot 0.1 | C:2.33
+[Step 5000] L:6.45 | V_all: M 1.8 G -0.2 Geo -5.2 Ch 40.5 Rot 0.1 | C:2.33
+
+[Step 5000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5100] L:6.33 | V_all: M 1.4 G -0.2 Geo -5.3 Ch 40.7 Rot 0.1 | C:2.26
+[Step 5200] L:6.48 | V_all: M 2.3 G -0.2 Geo -5.2 Ch 40.1 Rot 0.1 | C:2.33
+[Step 5300] L:6.34 | V_all: M 1.4 G -0.1 Geo -5.3 Ch 40.1 Rot 0.1 | C:2.33
+[Step 5400] L:6.50 | V_all: M 3.3 G -0.2 Geo -5.1 Ch 39.8 Rot 0.0 | C:2.30
+[Step 5500] L:6.37 | V_all: M 1.8 G -0.1 Geo -5.2 Ch 39.9 Rot 0.0 | C:2.33
+
+[Step 5500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 5600] L:6.57 | V_all: M 3.2 G -0.2 Geo -5.2 Ch 39.9 Rot 0.0 | C:2.35
+[Step 5700] L:6.27 | V_all: M 1.4 G -0.1 Geo -5.2 Ch 40.1 Rot 0.0 | C:2.33
+[Step 5800] L:6.32 | V_all: M 1.6 G -0.1 Geo -5.2 Ch 39.8 Rot 0.0 | C:2.32
+[Step 5900] L:6.35 | V_all: M 1.5 G -0.1 Geo -5.2 Ch 39.8 Rot 0.0 | C:2.34
+[Step 6000] L:6.67 | V_all: M 2.9 G -0.1 Geo -5.1 Ch 39.9 Rot 0.0 | C:2.51
+
+[Step 6000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6100] L:6.35 | V_all: M 2.1 G -0.1 Geo -5.2 Ch 40.5 Rot 0.0 | C:2.26
+[Step 6200] L:6.41 | V_all: M 3.1 G -0.2 Geo -5.2 Ch 40.8 Rot 0.0 | C:2.23
+[Step 6300] L:6.67 | V_all: M 5.4 G -0.2 Geo -5.3 Ch 41.4 Rot 0.0 | C:2.24
+[Step 6400] L:6.40 | V_all: M 1.1 G -0.1 Geo -5.4 Ch 40.4 Rot 0.0 | C:2.41
+[Step 6500] L:6.61 | V_all: M 2.9 G -0.1 Geo -5.2 Ch 40.5 Rot 0.0 | C:2.38
+
+[Step 6500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 6600] L:6.44 | V_all: M 1.6 G -0.1 Geo -5.2 Ch 40.7 Rot 0.0 | C:2.40
+[Step 6700] L:6.41 | V_all: M 0.9 G -0.1 Geo -5.5 Ch 40.7 Rot 0.0 | C:2.38
+[Step 6800] L:6.55 | V_all: M 1.7 G -0.1 Geo -5.3 Ch 40.8 Rot 0.0 | C:2.39
+Device: cuda
+Loading Entropy Stats...
+Starting Training for 50000 steps...
+[Step 100] L:3.65 | V_all: M 5.2 G -0.8 Geo -5.2 Ch 97.4 Rot 0.3 | C:3.36
+[Step 200] L:3.18 | V_all: M 5.1 G -0.6 Geo -5.4 Ch 97.7 Rot 0.3 | C:2.83
+[Step 300] L:3.02 | V_all: M 5.8 G -0.6 Geo -5.2 Ch 97.2 Rot 0.3 | C:2.68
+[Step 400] L:2.81 | V_all: M 4.1 G -0.5 Geo -5.4 Ch 97.4 Rot 0.2 | C:2.43
+[Step 500] L:2.75 | V_all: M 4.1 G -0.4 Geo -5.3 Ch 98.2 Rot 0.2 | C:2.35
+
+[Step 500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 600] L:2.70 | V_all: M 6.6 G -0.4 Geo -5.3 Ch 97.1 Rot 0.2 | C:2.32
+[Step 700] L:2.63 | V_all: M 6.8 G -0.4 Geo -5.3 Ch 97.8 Rot 0.2 | C:2.22
+[Step 800] L:2.51 | V_all: M 5.0 G -0.4 Geo -5.3 Ch 98.9 Rot 0.2 | C:2.20
+[Step 900] L:2.60 | V_all: M 8.2 G -0.5 Geo -5.2 Ch 99.1 Rot 0.2 | C:2.21
+[Step 1000] L:2.57 | V_all: M 7.1 G -0.4 Geo -5.3 Ch 97.7 Rot 0.2 | C:2.14
+
+[Step 1000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1100] L:2.46 | V_all: M 7.2 G -0.4 Geo -5.4 Ch 98.2 Rot 0.2 | C:2.00
+[Step 1200] L:2.55 | V_all: M 4.9 G -0.3 Geo -5.3 Ch 98.2 Rot 0.2 | C:2.14
+[Step 1300] L:2.54 | V_all: M 4.2 G -0.3 Geo -5.2 Ch 98.5 Rot 0.2 | C:2.12
+[Step 1400] L:2.53 | V_all: M 4.8 G -0.3 Geo -5.3 Ch 97.8 Rot 0.2 | C:2.08
+[Step 1500] L:2.56 | V_all: M 5.3 G -0.3 Geo -5.3 Ch 98.3 Rot 0.2 | C:2.09
+
+[Step 1500] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 1600] L:2.44 | V_all: M 4.9 G -0.3 Geo -5.3 Ch 99.0 Rot 0.2 | C:2.08
+[Step 1700] L:2.55 | V_all: M 6.7 G -0.3 Geo -5.1 Ch 98.4 Rot 0.1 | C:2.11
+[Step 1800] L:2.47 | V_all: M 4.3 G -0.3 Geo -5.3 Ch 98.8 Rot 0.1 | C:2.05
+[Step 1900] L:2.43 | V_all: M 10.0 G -0.4 Geo -5.2 Ch 99.7 Rot 0.1 | C:2.14
+[Step 2000] L:2.35 | V_all: M 2.5 G -0.2 Geo -5.6 Ch 98.3 Rot 0.1 | C:1.84
+
+[Step 2000] Probe: 好好好好好好好好好好好好好好好好好好好好
+[Step 2100] L:3.46 | V_all: M 4.3 G -0.3 Geo -5.2 Ch 98.5 Rot 0.1 | C:2.10
+[Step 2200] L:4.44 | V_all: M 5.6 G -0.3 Geo -5.3 Ch 96.6 Rot 0.1 | C:2.04
+[Step 2300] L:5.21 | V_all: M 3.8 G -0.2 Geo -5.4 Ch 95.2 Rot 0.1 | C:1.97
+[Step 2400] L:6.21 | V_all: M 5.5 G -0.2 Geo -5.4 Ch 92.6 Rot 0.1 | C:2.06
+[Step 2500] L:7.08 | V_all: M 9.3 G -0.3 Geo -5.5 Ch 88.7 Rot 0.1 | C:2.03
+
+[Step 2500] Probe: 好好好好好好好好好好好好好好好好好好好好
