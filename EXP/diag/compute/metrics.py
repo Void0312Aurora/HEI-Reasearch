@@ -2,42 +2,59 @@ import torch
 import numpy as np
 from typing import Dict, List
 
-def compute_d1_offline_non_degenerate(traj_x: torch.Tensor, traj_v: torch.Tensor) -> Dict[str, float]:
+def compute_d1_offline_non_degenerate(traj_q: torch.Tensor, traj_v: torch.Tensor) -> Dict[str, float]:
     """
     D1: Check if offline trajectory is non-degenerate.
+    traj_q: State
+    traj_v: Velocity/Momentum
     Returns:
         is_fixed_point: 1.0 if velocity is near zero.
         is_periodic: >0 if high autocorrelation.
         variance: state variance (should be > 0).
     """
-    # traj_x: Time x Batch x Dim
+    # traj_x (q): Time x Batch x Dim
     # We take the mean across batch for simplified metric
     
     # 1. Variance Check
-    var = torch.var(traj_x, dim=0).mean().item()
+    var = torch.var(traj_q, dim=0).mean().item()
     
     # 2. Fixed Point Check (Velocity Magnitude)
     # v is already passed or can be diff of x
     avg_speed = torch.norm(traj_v, dim=-1).mean().item()
     is_fixed_point = 1.0 if avg_speed < 1e-3 else 0.0
     
-    # 3. Periodicity (Autocorrelation of speed)
+    # 4. Periodicity (Autocorrelation of speed)
     # Simple lag-1 autocorrelation of speed
     speed = torch.norm(traj_v, dim=-1).mean(dim=1) # Time
     if speed.shape[0] > 10 and speed.std() > 1e-5:
         speed_centered = speed - speed.mean()
-        # Lag 5
-        lag = 5
-        ac = (speed_centered[lag:] * speed_centered[:-lag]).mean() / (speed.var() + 1e-8)
-        periodicity = ac.item()
+        # Lag 1 for basic trend
+        lag1 = 1
+        ac1 = (speed_centered[lag1:] * speed_centered[:-lag1]).mean() / (speed.var() + 1e-8)
+        periodicity = ac1.item()
+        
+        # Lag 5 for short-period check
+        lag5 = 5
+        if speed.shape[0] > lag5:
+            ac5 = (speed_centered[lag5:] * speed_centered[:-lag5]).mean() / (speed.var() + 1e-8)
+            lag_corr = ac5.item()
+        else:
+            lag_corr = 0.0
     else:
         periodicity = 0.0
+        lag_corr = 0.0
+        
+    # 5. Growth Check (Log Norm Slope or Max Excursion)
+    # Check if state explodes
+    max_excursion = torch.norm(traj_q, dim=-1).max().item() # Max displacement
         
     return {
         "d1_variance": var,
         "d1_speed": avg_speed,
         "d1_fixed_point": is_fixed_point,
-        "d1_periodicity": periodicity
+        "d1_periodicity": periodicity,
+        "d1_lag5_corr": lag_corr,
+        "d1_max_excursion": max_excursion
     }
 
 def compute_d3_port_loop(traj_x: torch.Tensor, u_self_traj: torch.Tensor) -> Dict[str, float]:
