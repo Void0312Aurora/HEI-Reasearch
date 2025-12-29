@@ -83,19 +83,12 @@ class ContactKernel(BaseKernel):
         
     def H(self, q, p, s):
         # Contact Hamiltonian H = 0.5*p^2 + U(q) + alpha*s
-        # For simple dissipation: H = K(p) + V(q) + alpha*S 
-        # Standard contact dynamics with dissipation: H = p^2/2 + V(q)
-        # Evolution:
-        # dot_q = dH/dp = p
-        # dot_p = -dH/dq - p * dH/ds = -dV/dq - p * 0 (Wait, need dependency on s or explicit dissipation)
-        # Actually in Contact geometry, damping often comes from H depending on s or the contact form.
-        # Let's use the explicit equations from the theoretical doc:
-        # dot_p = -(dH/dq + p * dH/ds)
-        # dot_s = p * dH/dp - H
-        # If we want damping alpha*p, we set H = p^2/2 + V(q) + alpha*s
-        # Then dH/ds = alpha.
-        # dot_p = -dV/dq - alpha * p. (Rayleigh damping!)
-        return 0.5 * (p**2).sum(dim=1, keepdim=True) + self.net_U(q) + self.damping * s
+        # Soft Boundary: Add potential barrier if ||q|| > bound
+        # bound = 5.0 (match env)
+        q_norm = (q**2).sum(dim=1, keepdim=True)
+        boundary_pot = torch.relu(q_norm - 20.0) ** 2 # Soft barrier at r^2=20 (r~4.5)
+        
+        return 0.5 * (p**2).sum(dim=1, keepdim=True) + self.net_U(q) + boundary_pot + self.damping * s
         
     def forward(self, x_int: torch.Tensor, u_t: torch.Tensor) -> torch.Tensor:
         # x_int = [q, p, s]

@@ -15,7 +15,7 @@ print(f"DEBUG: Available dirs in base_path: {os.listdir(base_path) if os.path.ex
 from proto.env.point_mass import PointMassEnv
 from proto.kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel
 from proto.scheduler.scheduler import Scheduler
-from diag.compute.metrics import compute_d1_offline_non_degenerate, compute_d3_port_loop
+from diag.compute.metrics import compute_d1_offline_non_degenerate, compute_d3_port_loop, compute_d2_spectral
 
 def run_experiment(config):
     # Setup
@@ -81,7 +81,10 @@ def run_experiment(config):
         if hasattr(kernel, 'dim_q'):
              # x_int has q, p, maybe s
              p_curr = x_int[:, dim_q:2*dim_q]
-             u_self = 0.5 * p_curr
+             # Iteration 0.2 Stabilization: Change positive feedback to negative feedback (damping)
+             # Old: u_self = 0.5 * p_curr
+             # New: u_self = -0.05 * p_curr (ensure net dissipation if damping=0.1)
+             u_self = -0.05 * p_curr
              
         if force_u_self_zero:
             u_self = torch.zeros_like(u_self)
@@ -131,14 +134,21 @@ def run_experiment(config):
         q_off = traj_x_int[offline_mask, :dim_q]
         p_off = traj_x_int[offline_mask, dim_q:2*dim_q]
         d1 = compute_d1_offline_non_degenerate(q_off.unsqueeze(1), p_off.unsqueeze(1))
-    
+        
+        # D2: Spectral Diagnostics (Iter 0.2)
+        # Compute on the last offline state
+        x_final = torch.tensor(log["x_int"][-1]).clone().detach()
+        u_last = torch.tensor(log["u_t"][-1]).clone().detach()
+        
+        d2 = compute_d2_spectral(kernel, x_final, u_last)
+        
     # D3: Whole trajectory
     d3 = compute_d3_port_loop(traj_x_int[:, :dim_q].unsqueeze(1), traj_u_self.unsqueeze(1))
     
     # Return metrics and log for external verification scripts
-    return d1, d3, log
+    return d1, d2, d3, log
 
-def save_report(config, d1, d3):
+def save_report(config, d1, d2, d3):
     report_dir = config['output_dir']
     run_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     os.makedirs(os.path.join(report_dir, run_name), exist_ok=True)
@@ -149,6 +159,9 @@ def save_report(config, d1, d3):
         f.write(f"Config: {config}\n\n")
         f.write("## D1: Offline Non-degenerate\n")
         for k, v in d1.items():
+            f.write(f"- {k}: {v:.4f}\n")
+        f.write("\n## D2: Spectral Diagnostics\n")
+        for k, v in d2.items():
             f.write(f"- {k}: {v:.4f}\n")
         f.write("\n## D3: Port Loop Amplification\n")
         for k, v in d3.items():
@@ -164,5 +177,5 @@ if __name__ == "__main__":
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
         
-    d1, d3, _ = run_experiment(config)
-    save_report(config, d1, d3)
+    d1, d2, d3, _ = run_experiment(config)
+    save_report(config, d1, d2, d3)

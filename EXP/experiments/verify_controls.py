@@ -23,10 +23,11 @@ def run_verification(config_path):
     print("Running Baseline...")
     config_base = base_config.copy()
     config_base['force_u_self_zero'] = False
-    d1_base, d3_base, log_base = run_experiment(config_base)
+    d1_base, d2_base, d3_base, log_base = run_experiment(config_base)
     
     res_base = {"Condition": "Baseline"}
     res_base.update(d1_base)
+    res_base.update(d2_base)
     res_base.update(d3_base)
     results.append(res_base)
     
@@ -34,11 +35,12 @@ def run_verification(config_path):
     print("Running Ablation (u_self=0)...")
     config_abl = base_config.copy()
     config_abl['force_u_self_zero'] = True
-    d1_abl, d3_abl, log_abl = run_experiment(config_abl)
+    d1_abl, d2_abl, d3_abl, log_abl = run_experiment(config_abl)
     
     res_abl = {"Condition": "Ablation (Zero U)"}
     # D1 might fail/change
     res_abl.update(d1_abl)
+    res_abl.update(d2_abl)
     # D3 should be low/zero
     res_abl.update(d3_abl)
     results.append(res_abl)
@@ -77,7 +79,9 @@ def run_verification(config_path):
     df = pd.DataFrame(results)
     
     # Reorder cols
-    cols = ["Condition"] + [c for c in df.columns if c.startswith("d3")] + [c for c in df.columns if c.startswith("d1") and c not in ["Condition"]]
+    cols = ["Condition"] + [c for c in df.columns if c.startswith("D2") or c.startswith("d2")] + \
+           [c for c in df.columns if c.startswith("d3")] + \
+           [c for c in df.columns if c.startswith("d1") and c not in ["Condition"]]
     df = df[cols]
     
     print("\n=== Verification Results (Iteration 0.1) ===\n")

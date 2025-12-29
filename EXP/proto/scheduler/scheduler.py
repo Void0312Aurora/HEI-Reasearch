@@ -38,21 +38,24 @@ class Scheduler:
     def process_input(self, u_env: torch.Tensor, u_self: torch.Tensor, meta: Dict) -> torch.Tensor:
         """
         Combines u_env and u_self based on the current phase.
+        Includes mandatory port clipping (Passivity v0).
         """
+        # 1. Combine
         if meta["phase"] == "online":
             # Online: u = u_env + w * u_self
-            # For MVS v0, let's assume simple addition or just u_env for pure online
-            # But "Port Loop" implies u_self is always there.
-            return u_env + u_self
+            u_combined = u_env + u_self
         else:
             # Offline: u_env is blocked or replaced.
             if meta["u_source"] == "internal":
-                # Pure internal: u = u_self (env blocked)
-                return u_self
+                u_combined = u_self
             elif meta["u_source"] == "replay":
-                # Replay: u = stored_buffer (env blocked)
-                # For v0 simplicity, let's treat replay as a special u_self logic outside, 
-                # here we just block u_env.
-                return u_self
+                u_combined = u_self
             else:
-                return u_self
+                u_combined = u_self
+                
+        # 2. Clip (Stabilization)
+        # Limit magnitude to avoid energy injection explosion
+        clip_val = self.config.get("u_clip", 1.0)
+        u_combined = torch.clamp(u_combined, -clip_val, clip_val)
+        
+        return u_combined
