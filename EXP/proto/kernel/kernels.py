@@ -231,3 +231,71 @@ class ResonantKernel(ContactKernel):
     def init_state(self, batch_size: int = 1) -> torch.Tensor:
         # 4*dim + 1
         return torch.zeros(batch_size, 4 * self.dim_q + 1)
+
+class PlasticKernel(ResonantKernel):
+    """
+    Iteration 1.3: Causal Plasticity.
+    Adds a plastic weight matrix W that learns correlations between input u_t and resonator state r.
+    State: (q, p, s, r, v_r, w_flat)
+    W is dim x dim (coupling u to r). Flattened in state.
+    Update Rule: dW/dt = eta * (u_t * r - decay * W) (Oja-like or simple Hebbian)
+    """
+    def __init__(self, dim_q: int = 2, damping: float = 0.1, omega: float = 1.0, eta: float = 0.01):
+        super().__init__(dim_q, damping, omega)
+        self.eta = eta # Learning rate
+        
+    def forward(self, x_int: torch.Tensor, u_t: torch.Tensor) -> torch.Tensor:
+        # State layout:
+        # ResonantKernel: [q(d), p(d), s(1), r(d), vr(d)] (Total 4d+1)
+        # Plastic: + W(d*d) flattened.
+        
+        d = self.dim_q
+        base_dim = 4*d + 1
+        w_dim = d*d
+        
+        # Split base state and weights
+        # Note: torch.split needs explicit sizes
+        base_state = x_int[:, :base_dim]
+        w_flat = x_int[:, base_dim:]
+        
+        # Evolve base dynamics (ResonantKernel)
+        # We need to call super().forward(). 
+        # But super().forward() takes x_int matching its size.
+        # We can pass base_state, but we need to ensure the returned state is handled.
+        
+        # 1. Component Dynamics
+        base_next = super().forward(base_state, u_t)
+        
+        # Unpack essential variables for plasticity
+        # r is at index [2d+1 : 3d+1] in base state
+        q, p, s, r, v_r = torch.split(base_state, [d, d, 1, d, d], dim=1)
+        
+        # 2. Plasticity Rule
+        # dW = eta * (u * r^T - gamma * W)
+        # Let's align dimensions:
+        # u_t: [B, d]
+        # r: [B, d]
+        # W: [B, d*d] -> [B, d, d]
+        
+        W = w_flat.view(-1, d, d)
+        
+        # Outer product u * r
+        # u.unsqueeze(2) -> [B, d, 1]
+        # r.unsqueeze(1) -> [B, 1, d]
+        # product -> [B, d, d]
+        Hebbian = torch.bmm(u_t.unsqueeze(2), r.unsqueeze(1))
+        
+        decay = 0.1 # Weight decay to prevent explosion
+        dW = self.eta * (Hebbian - decay * W)
+        
+        dt = 0.1
+        W_new = W + dW * dt
+        w_flat_new = W_new.view(-1, d*d)
+        
+        return torch.cat([base_next, w_flat_new], dim=1)
+        
+    def init_state(self, batch_size: int = 1) -> torch.Tensor:
+        d = self.dim_q
+        base_state = super().init_state(batch_size)
+        w_state = torch.zeros(batch_size, d*d)
+        return torch.cat([base_state, w_state], dim=1)

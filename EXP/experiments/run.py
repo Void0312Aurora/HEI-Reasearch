@@ -13,7 +13,7 @@ print(f"DEBUG: sys.path augmented with: {base_path}")
 print(f"DEBUG: Available dirs in base_path: {os.listdir(base_path) if os.path.exists(base_path) else 'Path not found'}")
 
 from proto.env.point_mass import PointMassEnv
-from proto.kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel, ResonantKernel
+from proto.kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel, ResonantKernel, PlasticKernel
 from proto.scheduler.scheduler import Scheduler
 from diag.compute.metrics import compute_d1_offline_non_degenerate, compute_d3_port_loop, compute_d2_spectral
 
@@ -43,6 +43,10 @@ def run_experiment(config):
         # Default omega=1.0 unless in config
         omega = config.get('omega', 1.0)
         kernel = ResonantKernel(dim_q, damping=config['damping'], omega=omega)
+    elif k_type == 'plastic':
+        omega = config.get('omega', 1.0)
+        eta = config.get('eta', 0.01)
+        kernel = PlasticKernel(dim_q, damping=config['damping'], omega=omega, eta=eta)
     else:
         raise ValueError(f"Unknown kernel type: {k_type}")
         
