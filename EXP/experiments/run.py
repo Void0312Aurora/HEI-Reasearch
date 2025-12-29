@@ -13,7 +13,7 @@ print(f"DEBUG: sys.path augmented with: {base_path}")
 print(f"DEBUG: Available dirs in base_path: {os.listdir(base_path) if os.path.exists(base_path) else 'Path not found'}")
 
 from proto.env.point_mass import PointMassEnv
-from proto.kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel
+from proto.kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel, ResonantKernel
 from proto.scheduler.scheduler import Scheduler
 from diag.compute.metrics import compute_d1_offline_non_degenerate, compute_d3_port_loop, compute_d2_spectral
 
@@ -39,6 +39,10 @@ def run_experiment(config):
         kernel = ContactKernel(dim_q, damping=config['damping'])
     elif k_type == 'fast_slow':
         kernel = FastSlowKernel(dim_q, damping=config['damping'], epsilon=config['epsilon'])
+    elif k_type == 'resonant':
+        # Default omega=1.0 unless in config
+        omega = config.get('omega', 1.0)
+        kernel = ResonantKernel(dim_q, damping=config['damping'], omega=omega)
     else:
         raise ValueError(f"Unknown kernel type: {k_type}")
         
@@ -95,9 +99,48 @@ def run_experiment(config):
              replay_idx = (t) % len(u_env_online_buffer) if len(u_env_online_buffer) > 0 else 0
              
              if config.get("replay_shuffle", False):
-                 # Mismatch: use random frame
+                 # Full Mismatch: random frame
                  replay_idx = np.random.randint(0, len(u_env_online_buffer))
-                 
+             elif config.get("replay_reverse", False):
+                 # Time-Reverse
+                 # Map t to len-t-1 (modulo length)
+                 # effective_t = t % len
+                 # reverse_t = len - effective_t - 1
+                 eff_t = t % len(u_env_online_buffer)
+                 replay_idx = len(u_env_online_buffer) - eff_t - 1
+             elif config.get("replay_block_shuffle", False):
+                 # Block Shuffle (approx implementation)
+                 # Let's say block size = 10% of length
+                 L = len(u_env_online_buffer)
+                 block_size = max(1, int(L * 0.1))
+                 num_blocks = L // block_size
+                 # Has to remain consistent for the run?
+                 # If we do it stateless here, it's hard. 
+                 # run.py is stateless per step.
+                 # We need to pre-compute the index map if we want consistent block shuffle.
+                 # HACK: Use a seeded permutation based on block index.
+                 eff_t = t % L
+                 block_idx = eff_t // block_size
+                 # deterministic shuffle of blocks based on seed
+                 np.random.seed(config['seed'] + 123) # consistent shuffle
+                 perm = np.random.permutation(num_blocks + 1) # simple
+                 # But we can't seed every step or it resets?
+                 # We are inside the loop. 
+                 # OK, for now, simple random block offset?
+                 # Better: Simple Block Swap. 
+                 # Map block i to block (i + N/2) % N? (Cyclic shift)
+                 # Map block i to block N-i? (Block reverse)
+                 # Let's do Block Reverse: Blocks are ordered, but time within block is reversed? No.
+                 # Let's do Block Permutation:
+                 # block_idx -> perm[block_idx]
+                 # We need `perm` to be static.
+                 # Reconstruct perm every step is fine if deterministic.
+                 perm = np.random.permutation(num_blocks if num_blocks > 0 else 1)
+                 new_block_idx = perm[block_idx % len(perm)]
+                 offset = eff_t % block_size
+                 replay_idx = new_block_idx * block_size + offset
+                 if replay_idx >= L: replay_idx = L - 1
+             
              u_env_replay = u_env_online_buffer[replay_idx]
              
              # process_input usually ignores u_env in offline, UNLESS we pass it explicitly as "override"

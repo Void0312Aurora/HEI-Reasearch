@@ -176,3 +176,58 @@ class FastSlowKernel(ContactKernel):
         s_new = s + dot_s * dt
         
         return torch.cat([q_new, p_new, s_new], dim=1)
+
+class ResonantKernel(ContactKernel):
+    """
+    Iteration 1.1: Temporal Resonance.
+    Adds a harmonic oscillator 'resonator' state to detect frequency content.
+    State: (q, p, s, r, v_r) where r is resonator pos, v_r is resonator vel.
+    External input u_t drives the resonator.
+    """
+    def __init__(self, dim_q: int = 2, damping: float = 0.1, omega: float = 1.0):
+        super().__init__(dim_q, damping)
+        self.omega = omega    # Resonant frequency
+        self.zeta = 0.1       # Resonator damping ratio
+        
+    def _potential(self, q):
+        return super()._potential(q)
+
+    def forward(self, x_int: torch.Tensor, u_t: torch.Tensor) -> torch.Tensor:
+        # State layout: 
+        # [q (dim), p (dim), s (1), r (dim), v_r (dim)]
+        # Total dim = 4*dim + 1
+        
+        # Unpack state
+        d = self.dim_q
+        q, p, s, r, v_r = torch.split(x_int, [d, d, 1, d, d], dim=1)
+        dt = 0.1
+        
+        # 1. Base Contact Dynamics for (q, p, s)
+        q.requires_grad_(True)
+        U = self._potential(q).sum()
+        grad_q = torch.autograd.grad(U, q, create_graph=False)[0]
+        grad_s = self.damping
+        
+        force = u_t
+        
+        p_new = p - (grad_q + p * grad_s) * dt + force * dt
+        q_new = q + p_new * dt
+        
+        H_val = 0.5 * (p**2).sum(dim=1, keepdim=True) + self._potential(q).detach() + self.damping * s
+        dot_s = (p**2).sum(dim=1, keepdim=True) - H_val
+        s_new = s + dot_s * dt
+        
+        # 2. Resonator Dynamics (Driven Harmonic Oscillator)
+        # ddot_r + 2*zeta*omega*dot_r + omega^2*r = u_t
+        damping_term = 2 * self.zeta * self.omega * v_r
+        stiffness_term = (self.omega ** 2) * r
+        acc_r = -stiffness_term - damping_term + u_t
+        
+        v_r_new = v_r + acc_r * dt
+        r_new = r + v_r_new * dt
+        
+        return torch.cat([q_new, p_new, s_new, r_new, v_r_new], dim=1)
+        
+    def init_state(self, batch_size: int = 1) -> torch.Tensor:
+        # 4*dim + 1
+        return torch.zeros(batch_size, 4 * self.dim_q + 1)
