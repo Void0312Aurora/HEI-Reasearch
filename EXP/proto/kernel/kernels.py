@@ -81,14 +81,15 @@ class ContactKernel(BaseKernel):
             nn.Linear(16, 1)
         )
         
-    def H(self, q, p, s):
-        # Contact Hamiltonian H = 0.5*p^2 + U(q) + alpha*s
-        # Soft Boundary: Add potential barrier if ||q|| > bound
-        # bound = 5.0 (match env)
+    def _potential(self, q):
+        # Total potential: net_U(q) + boundary_pot
         q_norm = (q**2).sum(dim=1, keepdim=True)
-        boundary_pot = torch.relu(q_norm - 20.0) ** 2 # Soft barrier at r^2=20 (r~4.5)
-        
-        return 0.5 * (p**2).sum(dim=1, keepdim=True) + self.net_U(q) + boundary_pot + self.damping * s
+        boundary_pot = torch.relu(q_norm - 20.0) ** 2
+        return self.net_U(q) + boundary_pot
+
+    def H(self, q, p, s):
+        # Contact Hamiltonian H = 0.5*p^2 + _potential(q) + alpha*s
+        return 0.5 * (p**2).sum(dim=1, keepdim=True) + self._potential(q) + self.damping * s
         
     def forward(self, x_int: torch.Tensor, u_t: torch.Tensor) -> torch.Tensor:
         # x_int = [q, p, s]
@@ -96,7 +97,8 @@ class ContactKernel(BaseKernel):
         dt = 0.1
         
         q.requires_grad_(True)
-        U = self.net_U(q).sum()
+        # Fix: Use total potential (including boundary) for gradient
+        U = self._potential(q).sum()
         grad_q = torch.autograd.grad(U, q, create_graph=False)[0]
         grad_s = self.damping  # dH/ds
         
@@ -111,12 +113,8 @@ class ContactKernel(BaseKernel):
         q_new = q + p_new * dt
         
         # s_new = s + (p*dH/dp - H) * dt
-        # p*dH/dp = p*p
-        # H = 0.5*p*p + U + alpha*s
-        # dot_s = p^2 - (0.5 p^2 + U + alpha s) = 0.5 p^2 - U - alpha s
-        # Use p_new for semi-implicit stability? Let's use p_t for simplicity or p_new for symplectic-like.
-        # Let's use simple Euler for s
-        H_val = 0.5 * (p**2).sum(dim=1, keepdim=True) + self.net_U(q).detach() + self.damping * s
+        # H should also include boundary potential now!
+        H_val = 0.5 * (p**2).sum(dim=1, keepdim=True) + self._potential(q).detach() + self.damping * s
         dot_s = (p**2).sum(dim=1, keepdim=True) - H_val
         s_new = s + dot_s * dt
         
@@ -147,7 +145,8 @@ class FastSlowKernel(ContactKernel):
         dt = 0.1
         
         q.requires_grad_(True)
-        U = self.net_U(q).sum()
+        # Fix: Use _potential from base class
+        U = self._potential(q).sum()
         grad_q = torch.autograd.grad(U, q, create_graph=False)[0]
         grad_s = self.damping
         
@@ -172,7 +171,7 @@ class FastSlowKernel(ContactKernel):
         q_new = q + (p_new * timescale) * dt 
         
         # s evolution
-        H_val = 0.5 * (p**2).sum(dim=1, keepdim=True) + self.net_U(q).detach() + self.damping * s
+        H_val = 0.5 * (p**2).sum(dim=1, keepdim=True) + self._potential(q).detach() + self.damping * s
         dot_s = (p**2).sum(dim=1, keepdim=True) - H_val
         s_new = s + dot_s * dt
         

@@ -135,12 +135,33 @@ def run_experiment(config):
         p_off = traj_x_int[offline_mask, dim_q:2*dim_q]
         d1 = compute_d1_offline_non_degenerate(q_off.unsqueeze(1), p_off.unsqueeze(1))
         
-        # D2: Spectral Diagnostics (Iter 0.2)
-        # Compute on the last offline state
-        x_final = torch.tensor(log["x_int"][-1]).clone().detach()
-        u_last = torch.tensor(log["u_t"][-1]).clone().detach()
+        # D2: Spectral Diagnostics (Iter 0.3 Enhanced)
+        # Sample multiple points from offline phase to get robust stats
+        # step_metas has {phase, u_source, step}
+        # offline_mask is boolean array matching log entries
         
-        d2 = compute_d2_spectral(kernel, x_final, u_last)
+        offline_indices = np.where(offline_mask)[0]
+        if len(offline_indices) > 0:
+            # Sample up to 10 points uniformly
+            num_samples = 10
+            indices = np.linspace(0, len(offline_indices)-1, num_samples, dtype=int)
+            sampled_indices = offline_indices[indices]
+            
+            d2_list = []
+            for idx in sampled_indices:
+                 x_curr = torch.tensor(log["x_int"][idx]).clone().detach()
+                 u_curr = torch.tensor(log["u_t"][idx]).clone().detach()
+                 d2_i = compute_d2_spectral(kernel, x_curr, u_curr)
+                 d2_list.append(d2_i)
+            
+            # Average metrics
+            d2 = {}
+            for k in d2_list[0].keys():
+                vals = [d[k] for d in d2_list]
+                d2[k] = float(np.mean(vals))
+            # Also log std? For now just mean.
+        else:
+            d2 = {"d2_max_eig": 0.0, "d2_gap": 0.0, "d2_ratio": 0.0}
         
     # D3: Whole trajectory
     d3 = compute_d3_port_loop(traj_x_int[:, :dim_q].unsqueeze(1), traj_u_self.unsqueeze(1))

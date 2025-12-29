@@ -75,7 +75,26 @@ def run_verification(config_path):
     res_mis.update(d3_mismatch)
     results.append(res_mis)
     
-    # Output Table
+    # 4. Fast-Slow Epsilon Scan (E2 Evidence)
+    print("Running Fast-Slow Epsilon Scan...")
+    epsilons = [1.0, 0.1, 0.01]
+    for eps in epsilons:
+        print(f"  Testing Epsilon = {eps}...")
+        config_fs = base_config.copy()
+        config_fs['kernel_type'] = 'fast_slow'
+        config_fs['epsilon'] = eps
+        # Use baseline control settings
+        config_fs['force_u_self_zero'] = False 
+        
+        # d1, d2, d3, log = run_experiment(config_fs)
+        # We need to catch if kernel is unknown? run_experiment handles it.
+        d1_fs, d2_fs, d3_fs, _ = run_experiment(config_fs)
+        
+        res_fs = {"Condition": f"FastSlow (e={eps})"}
+        res_fs.update(d1_fs)
+        res_fs.update(d2_fs)
+        res_fs.update(d3_fs)
+        results.append(res_fs)
     df = pd.DataFrame(results)
     
     # Reorder cols
