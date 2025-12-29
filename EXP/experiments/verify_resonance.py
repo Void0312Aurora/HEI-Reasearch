@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import argparse
 import pandas as pd
+from scipy import stats
 
 # Add path to sys.path
 base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -12,118 +13,129 @@ sys.path.append(base_path)
 
 from experiments.run import run_experiment
 
-def run_verification(config_path):
+def run_multiseed_verification(config_path, num_seeds=10):
     with open(config_path, 'r') as f:
         base_config = yaml.safe_load(f)
         
-    results = []
+    conditions = [
+        {"name": "Replay (Ordered)", "mode": "replay", "shuffle": False, "reverse": False, "block": False},
+        {"name": "Mismatch (Reverse)", "mode": "replay", "shuffle": False, "reverse": True, "block": False},
+        {"name": "Mismatch (BlockShuffle)", "mode": "replay", "shuffle": False, "reverse": False, "block": True}
+    ]
     
-    # Use Resonant Kernel for this test
-    # We want to see if Resonator energy distinguishes Replay from Mismatch
+    # Storage for stats
+    # condition -> list of {d1_var, res_energy}
+    raw_data = {c["name"]: {"d1_variance": [], "resonator_energy": []} for c in conditions}
+    
+    # Use Resonant Kernel
     base_config['kernel_type'] = 'resonant'
-    base_config['omega'] = 1.0 # Tune to match expected dynamics? Or generic.
-    
-    print(f"Using Kernel: {base_config['kernel_type']} (omega={base_config.get('omega')})")
-    
-    # 1. Replay (Experience)
-    print("Running Replay (Ordered)...")
-    config_rep = base_config.copy()
-    config_rep['offline_u_source'] = 'replay'
-    config_rep['force_u_self_zero'] = False
-    d1_rep, d2_rep, d3_rep, log_rep = run_experiment(config_rep)
-    
-    # Calculate Resonator Energy (r^2 + v_r^2)
-    # x_int: [q, p, s, r, v_r]
-    # dim_q = 2. indices: q:0-2, p:2-4, s:4-5, r:5-7, vr:7-9
-    x_int_rep = np.array(log_rep['x_int'])
-    if x_int_rep.ndim == 3:
-        x_int_rep = x_int_rep.squeeze(1)
-        
+    base_config['omega'] = 1.0 
     dim_q = base_config['dim_q']
-    # r is at [5, 6], vr at [7, 8] if dim=2
-    # General: q(d), p(d), s(1), r(d), vr(d).
-    # Start of r: 2*d + 1
-    start_r = 2*dim_q + 1
-    r_rep = x_int_rep[:, start_r:start_r+dim_q]
-    vr_rep = x_int_rep[:, start_r+dim_q:start_r+2*dim_q]
-    energy_res_rep = np.mean(r_rep**2 + vr_rep**2)
     
-    res_rep = {"Condition": "Replay (Ordered)"}
-    res_rep.update(d1_rep)
-    res_rep['resonator_energy'] = energy_res_rep
-    results.append(res_rep)
+    # Loop seeds
+    base_seed = base_config.get('seed', 42)
     
-    # 2. Time-Reverse Mismatch
-    # We need to hack run.py or buffer to do this.
-    # run.py doesn't natively support "reverse".
-    # We can pre-record online buffer, reverse it, and feed it?
-    # Or just add a 'replay_mode' to config and run.py?
-    # Let's add 'replay_mode' = 'reverse' support to run.py OR
-    # Temporarily, we can just edit the u_env_online_buffer in memory if we could hook in... but we can't easily.
-    # EASIEST: Expect run.py to support 'replay_reverse' flag.
-    # I will modify run.py to support 'replay_reverse' and 'replay_block_shuffle'.
+    print(f"Running Robust Verification (N={num_seeds}) with Kernel: {base_config['kernel_type']}")
     
-    print("Running Time-Reverse...")
-    config_rev = base_config.copy()
-    config_rev['offline_u_source'] = 'replay'
-    config_rev['replay_reverse'] = True
-    config_rev['force_u_self_zero'] = False
-    d1_rev, d2_rev, d3_rev, log_rev = run_experiment(config_rev)
-    
-    x_int_rev = np.array(log_rev['x_int'])
-    if x_int_rev.ndim == 3:
-        x_int_rev = x_int_rev.squeeze(1)
+    for i in range(num_seeds):
+        curr_seed = base_seed + i
+        print(f"  > Seed {i+1}/{num_seeds} (seed={curr_seed})...")
         
-    r_rev = x_int_rev[:, start_r:start_r+dim_q]
-    vr_rev = x_int_rev[:, start_r+dim_q:start_r+2*dim_q]
-    energy_res_rev = np.mean(r_rev**2 + vr_rev**2)
+        for cond in conditions:
+            # Prepare config
+            cfg = base_config.copy()
+            cfg['seed'] = curr_seed
+            cfg['offline_u_source'] = cond['mode']
+            if cond['shuffle']: cfg['replay_shuffle'] = True
+            if cond['reverse']: cfg['replay_reverse'] = True
+            if cond['block']: cfg['replay_block_shuffle'] = True
+            cfg['force_u_self_zero'] = False
+            
+            # Run
+            d1, d2, d3, log = run_experiment(cfg)
+            
+            # Extract Resonator Energy (Offline Only!)
+            x_int = np.array(log['x_int'])
+            if x_int.ndim == 3: x_int = x_int.squeeze(1)
+            
+            # Mask offline phase
+            step_metas = log["step_meta"]
+            phases = [m["phase"] for m in step_metas]
+            offline_mask = np.array(phases) == "offline"
+            
+            # x_int indices: q(d), p(d), s(1), r(d), vr(d)
+            start_r = 2*dim_q + 1
+            
+            if np.any(offline_mask):
+                x_off = x_int[offline_mask]
+                r = x_off[:, start_r:start_r+dim_q]
+                vr = x_off[:, start_r+dim_q:start_r+2*dim_q]
+                energy = np.mean(r**2 + vr**2)
+            else:
+                energy = 0.0
+                
+            raw_data[cond["name"]]["d1_variance"].append(d1.get("d1_variance", np.nan))
+            raw_data[cond["name"]]["resonator_energy"].append(energy)
+
+    # Statistical Analysis
+    report_rows = []
     
-    res_rev = {"Condition": "Mismatch (Reverse)"}
-    res_rev.update(d1_rev)
-    res_rev['resonator_energy'] = energy_res_rev
-    results.append(res_rev)
+    baseline_name = "Replay (Ordered)"
+    base_energies = raw_data[baseline_name]["resonator_energy"]
+    base_vars = raw_data[baseline_name]["d1_variance"]
     
-    # 3. Block-Shuffle Mismatch
-    print("Running Block-Shuffle...")
-    config_blk = base_config.copy()
-    config_blk['offline_u_source'] = 'replay'
-    config_blk['replay_block_shuffle'] = True
-    config_blk['force_u_self_zero'] = False
-    d1_blk, d2_blk, d3_blk, log_blk = run_experiment(config_blk)
-    
-    x_int_blk = np.array(log_blk['x_int'])
-    if x_int_blk.ndim == 3:
-        x_int_blk = x_int_blk.squeeze(1)
+    for cond_name in raw_data:
+        energies = raw_data[cond_name]["resonator_energy"]
+        vars = raw_data[cond_name]["d1_variance"]
         
-    r_blk = x_int_blk[:, start_r:start_r+dim_q]
-    vr_blk = x_int_blk[:, start_r+dim_q:start_r+2*dim_q]
-    energy_res_blk = np.mean(r_blk**2 + vr_blk**2)
+        # Stats
+        e_mean, e_std = np.mean(energies), np.std(energies)
+        v_mean, v_std = np.mean(vars), np.std(vars)
+        e_ci = 1.96 * e_std / np.sqrt(num_seeds)
+        
+        # Significance (Welch's t-test) vs Baseline
+        p_val_valid = False
+        p_val = 1.0
+        
+        if cond_name != baseline_name:
+            t_stat, p_val = stats.ttest_ind(base_energies, energies, equal_var=False)
+            p_val_valid = True
+            
+        row = {
+            "Condition": cond_name,
+            "ResEnergy (Mean)": f"{e_mean:.3f}",
+            "ResEnergy (Std)": f"{e_std:.3f}",
+            "ResEnergy (CI95)": f"±{e_ci:.3f}",
+            "D1 Var (Mean)": f"{v_mean:.3f}",
+            "p-value (vs Replay)": f"{p_val:.5f}" if p_val_valid else "-"
+        }
+        report_rows.append(row)
+        
+    df = pd.DataFrame(report_rows)
     
-    res_blk = {"Condition": "Mismatch (BlockShuffle)"}
-    res_blk.update(d1_blk)
-    res_blk['resonator_energy'] = energy_res_blk
-    results.append(res_blk)
-    
-    # Output Table
-    df = pd.DataFrame(results)
-    
-    cols = ["Condition", "d1_variance", "resonator_energy", "d1_max_excursion"]
-    valid_cols = [c for c in cols if c in df.columns]
-    df = df[valid_cols]
-    
-    print("\n=== Temporal Resonance Verification (Iteration 1.1) ===\n")
+    print("\n=== Robustness Verification Results (Iteration 1.2) ===\n")
     print(df.to_string(index=False))
     
-    out_file = os.path.join(base_config['output_dir'], "verification_iter_1_1.md")
+    out_file = os.path.join(base_config['output_dir'], "verification_iter_1_2.md")
     with open(out_file, 'w') as f:
-        f.write("# Iteration 1.1 Temporal Resonance\n\n```\n")
+        f.write(f"# Iteration 1.2 Robustness Verification (N={num_seeds})\n")
+        f.write("## Hypothesis: Ordered Replay should have significantly higher Resonator Energy than Mismatched.\n\n")
+        f.write("```\n")
         f.write(df.to_string(index=False))
         f.write("\n```\n")
-    print(f"\nSaved report to {out_file}")
+        
+        f.write("\n## Raw Data Summary\n")
+        for k, v in raw_data.items():
+            f.write(f"### {k}\n")
+            f.write(f"- Energies: {v['resonator_energy']}\n")
+            f.write(f"- Variances: {v['d1_variance']}\n")
+
+    print(f"\nSaved statistical report to {out_file}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
+    parser.add_argument("--seeds", type=int, default=10)
     args = parser.parse_args()
     
-    run_verification(args.config)
+    run_multiseed_verification(args.config, args.seeds)

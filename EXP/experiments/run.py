@@ -67,6 +67,20 @@ def run_experiment(config):
     # Replay Buffer (for u_env)
     u_env_online_buffer = []
     
+    # Pre-compute Block Shuffle Map if needed (Iter 1.2 Clean Implementation)
+    # We can't pre-compute purely based on 't' because len(u_env_online_buffer) is unknown until online phase ends.
+    # But for offline phase, we know the buffer is fixed.
+    # Resolution: Compute map *at the start of offline phase*? 
+    # run.py structure is a single loop.
+    # We can detect phase transition or just compute it on the fly using a robust seeded RNG *instance* rather than global seed.
+    # Better: Use a dedicated RandomState for replay shuffling.
+    replay_rng = np.random.RandomState(config['seed'] + 999)
+    
+    # Store shuffle map once generated
+    # Key: (length, type) -> map
+    # Since only one replay buffer per run, just store it.
+    replay_map = None
+    
     # Ablation control
     force_u_self_zero = config.get("force_u_self_zero", False)
     
@@ -90,58 +104,64 @@ def run_experiment(config):
         # Replay / Mismatch Control (Iter 1.0)
         # If offline and u_source is replay, we need to override u_env
         if phase == "offline" and sched_info["u_source"] == "replay":
-             # replay_index calculation
-             # For simplicity, map t-T_online to recorded buffer
-             # We assume online phase length is fixed or tracked.
-             # sched_info doesn't tell us "step within phase".
-             # Hack: use generic modulo or tracking.
-             # Better: buffer length.
-             replay_idx = (t) % len(u_env_online_buffer) if len(u_env_online_buffer) > 0 else 0
-             
-             if config.get("replay_shuffle", False):
-                 # Full Mismatch: random frame
-                 replay_idx = np.random.randint(0, len(u_env_online_buffer))
-             elif config.get("replay_reverse", False):
-                 # Time-Reverse
-                 # Map t to len-t-1 (modulo length)
-                 # effective_t = t % len
-                 # reverse_t = len - effective_t - 1
-                 eff_t = t % len(u_env_online_buffer)
-                 replay_idx = len(u_env_online_buffer) - eff_t - 1
-             elif config.get("replay_block_shuffle", False):
-                 # Block Shuffle (approx implementation)
-                 # Let's say block size = 10% of length
-                 L = len(u_env_online_buffer)
-                 block_size = max(1, int(L * 0.1))
-                 num_blocks = L // block_size
-                 # Has to remain consistent for the run?
-                 # If we do it stateless here, it's hard. 
-                 # run.py is stateless per step.
-                 # We need to pre-compute the index map if we want consistent block shuffle.
-                 # HACK: Use a seeded permutation based on block index.
-                 eff_t = t % L
-                 block_idx = eff_t // block_size
-                 # deterministic shuffle of blocks based on seed
-                 np.random.seed(config['seed'] + 123) # consistent shuffle
-                 perm = np.random.permutation(num_blocks + 1) # simple
-                 # But we can't seed every step or it resets?
-                 # We are inside the loop. 
-                 # OK, for now, simple random block offset?
-                 # Better: Simple Block Swap. 
-                 # Map block i to block (i + N/2) % N? (Cyclic shift)
-                 # Map block i to block N-i? (Block reverse)
-                 # Let's do Block Reverse: Blocks are ordered, but time within block is reversed? No.
-                 # Let's do Block Permutation:
-                 # block_idx -> perm[block_idx]
-                 # We need `perm` to be static.
-                 # Reconstruct perm every step is fine if deterministic.
-                 perm = np.random.permutation(num_blocks if num_blocks > 0 else 1)
-                 new_block_idx = perm[block_idx % len(perm)]
-                 offset = eff_t % block_size
-                 replay_idx = new_block_idx * block_size + offset
-                 if replay_idx >= L: replay_idx = L - 1
-             
-             u_env_replay = u_env_online_buffer[replay_idx]
+             L = len(u_env_online_buffer)
+             if L > 0:
+                 if config.get("replay_shuffle", False):
+                     # Full Mismatch: random frame
+                     # Use dedicated rng to avoid messing appropriate global state if possible, though config['seed'] was set.
+                     # Just strict mismatch:
+                     replay_idx = replay_rng.randint(0, L)
+                 elif config.get("replay_reverse", False):
+                     # Time-Reverse
+                     eff_t = t % L
+                     replay_idx = L - eff_t - 1
+                 elif config.get("replay_block_shuffle", False):
+                     # Block Shuffle - Precompute/Lazy Init
+                     if replay_map is None or len(replay_map) != L:
+                         # Init block shuffle map
+                         block_size = max(1, int(L * 0.1))
+                         num_blocks = L // block_size
+                         perm = replay_rng.permutation(num_blocks if num_blocks > 0 else 1)
+                         
+                         # Expand perm to full index map
+                         indices = np.arange(L)
+                         for i in range(len(perm)):
+                             # Source block i goes to Target block perm[i]? 
+                             # Or Block i takes content from perm[i]? 
+                             # "Mismatch" -> Disordered.
+                             # Let's say we reconstruct the time series by rearranging blocks.
+                             # Position `t` falls in block `b_t = t // size`.
+                             # We want the content from block `perm[b_t]`.
+                             pass
+                         
+                         replay_map = np.arange(L)
+                         # Fill replay map
+                         for b_idx in range(num_blocks):
+                             target_b = perm[b_idx]
+                             # Copy indices from target_b to b_idx position
+                             start_src = target_b * block_size
+                             start_dst = b_idx * block_size
+                             # Handle remainder? Ignored for simplicity in last block usually
+                             size = block_size
+                             # Verify bounds
+                             if start_src + size <= L and start_dst + size <= L:
+                                 # We want: at time dst, access src.
+                                 replay_map[start_dst:start_dst+size] = np.arange(start_src, start_src+size)
+                         
+                         # Handle remainder (process linearly or random)
+                         pass
+                     
+                     # Use mapped index
+                     eff_t = t % L
+                     replay_idx = replay_map[eff_t]
+                 else:
+                     # Ordered Replay
+                     replay_idx = t % L
+                 
+                 u_env_replay = u_env_online_buffer[replay_idx]
+                 u_env = u_env_replay
+             else:
+                 pass # No buffer, keep u_env as projection (zero or noise)
              
              # process_input usually ignores u_env in offline, UNLESS we pass it explicitly as "override"
              # But scheduler.process_input has logic:
