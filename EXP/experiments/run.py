@@ -16,7 +16,7 @@ from proto.env.point_mass import PointMassEnv
 from proto.env.limit_cycle import LimitCycleEnv
 from proto.kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel, ResonantKernel, PlasticKernel
 from proto.scheduler.scheduler import Scheduler
-from diag.compute.metrics import compute_d1_offline_non_degenerate, compute_d3_port_loop, compute_d2_spectral
+from diag.compute.metrics import compute_d1_offline_non_degenerate, compute_d3_port_loop, compute_d2_spectral, compute_a1_integrity
 
 def run_experiment(config):
     # Setup
@@ -291,6 +291,24 @@ def run_experiment(config):
     # D3: Whole trajectory
     d3 = compute_d3_port_loop(traj_x_int[:, :dim_q].unsqueeze(1), traj_u_self.unsqueeze(1))
     
+    # Compute A1 (Blanket Integrity)
+    # Use first component (q0) for scalar MI check
+    # traj_x_int: [T, Dim]
+    # x_ext_proxy: List of [1, 4] -> [T, 4] (after stack)
+    
+    traj_int_q0 = traj_x_int[:, 0].detach().numpy()
+    traj_ext_stack = np.vstack(log["x_ext_proxy"]) # [T, 4]
+    traj_ext_q0 = traj_ext_stack[:, 0]
+    traj_bln_q0 = traj_x_blanket[:, 0].detach().numpy()
+    
+    a1_metrics = compute_a1_integrity(traj_int_q0, traj_ext_q0, traj_bln_q0)
+    
+    print("\n--- A1 Audit (Information Screening) ---")
+    print(f"MI(Int; Ext):       {a1_metrics['mi_total']:.4f}")
+    print(f"MI(Int; Ext | B):   {a1_metrics['mi_conditional']:.4f}")
+    print(f"Screening Ratio:    {a1_metrics['reduction_ratio']:.2%}")
+    print(f"Pass A1?:           {a1_metrics['is_screened']}")
+
     # Return metrics and log for external verification scripts
     return d1, d2, d3, log
 

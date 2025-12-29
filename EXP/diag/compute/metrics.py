@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from scipy import stats
 from typing import Dict, List
 
 def compute_d1_offline_non_degenerate(traj_q: torch.Tensor, traj_v: torch.Tensor) -> Dict[str, float]:
@@ -117,15 +118,80 @@ def compute_d2_spectral(kernel, x_int: torch.Tensor, u_t: torch.Tensor) -> Dict[
         top_k = [0.0]*4
         
     return {
-        "d2_max_eig": stability, # |lambda_1|
-        "d2_gap12": gap12,
-        "d2_gap23": gap23,
-        "d2_ratio": ratio,
-        "d2_svd_max": sigma_1,
-        "d2_svd_gap": gap_svd,
+        "lambda_1": lambda_1,
+        "lambda_2": lambda_2,
+        "gap": gap12, # Assuming 'gap' refers to gap12
+        "ratio": ratio,
+        "gap23": gap23,
+        "svd_gap": gap_svd, # Assuming 'svd_gap' refers to gap_svd
         "d2_top1": top_k[0],
         "d2_top2": top_k[1],
         "d2_top3": top_k[2]
+    }
+
+def compute_gaussian_mi(x: np.ndarray, y: np.ndarray) -> float:
+    """
+    Computes Mutual Information I(X; Y) assuming Gaussian distribution.
+    I(X; Y) = -0.5 * ln(1 - rho^2)
+    where rho is Pearson correlation coefficient.
+    
+    Args:
+        x: [N] or [N, D] array
+        y: [N] or [N, D] array
+        
+    Returns:
+        mi: Estimated Mutual Information (nats)
+    """
+    x = x.flatten()
+    y = y.flatten()
+    
+    if len(x) != len(y) or len(x) < 2:
+        return 0.0
+        
+    # Pearson Correlation
+    rho, _ = stats.pearsonr(x, y)
+    
+    # Clip rho to avoid log(0)
+    rho = np.clip(rho, -0.9999, 0.9999)
+    
+    mi = -0.5 * np.log(1 - rho**2)
+    return float(mi)
+
+def compute_a1_integrity(x_int: np.ndarray, x_ext: np.ndarray, x_blanket: np.ndarray) -> dict:
+    """
+    Axiom 1 Audit: Conditional Independence Check.
+    Checks if I(Int; Ext | Blanket) is significantly lower than I(Int; Ext).
+    
+    Simplified Metric: 
+    Partial Correlation rho_cond = (r_ie - r_ib * r_eb) / sqrt((1-r_ib^2)(1-r_eb^2))
+    Cond MI = -0.5 * ln(1 - rho_cond^2)
+    """
+    # Flatten all (Minimal Scalar check)
+    x_i = x_int.flatten()
+    x_e = x_ext.flatten()
+    x_b = x_blanket.flatten()
+    
+    # Simple MI
+    mi_ie = compute_gaussian_mi(x_i, x_e)
+    
+    # Conditional MI (via Partial Correlation)
+    r_ie, _ = stats.pearsonr(x_i, x_e)
+    r_ib, _ = stats.pearsonr(x_i, x_b)
+    r_eb, _ = stats.pearsonr(x_e, x_b)
+    
+    # Compute Partial Correlation r_ie|b
+    # Denom
+    denom = np.sqrt((1 - r_ib**2) * (1 - r_eb**2)) + 1e-8
+    r_cond = (r_ie - r_ib * r_eb) / denom
+    r_cond = np.clip(r_cond, -0.9999, 0.9999)
+    
+    mi_cond = -0.5 * np.log(1 - r_cond**2)
+    
+    return {
+        "mi_total": mi_ie,
+        "mi_conditional": mi_cond,
+        "reduction_ratio": 1.0 - (mi_cond / (mi_ie + 1e-8)),
+        "is_screened": mi_cond < 0.1 * mi_ie # Pass if 90% info blocked
     }
 
 def compute_d3_port_loop(traj_x: torch.Tensor, u_self_traj: torch.Tensor) -> Dict[str, float]:
