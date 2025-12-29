@@ -49,7 +49,8 @@ class Scheduler:
             if meta["u_source"] == "internal":
                 u_combined = u_self
             elif meta["u_source"] == "replay":
-                u_combined = u_self
+                # Replay: u = stored_buffer + u_self
+                u_combined = u_env + u_self
             else:
                 u_combined = u_self
                 

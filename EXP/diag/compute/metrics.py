@@ -84,25 +84,48 @@ def compute_d2_spectral(kernel, x_int: torch.Tensor, u_t: torch.Tensor) -> Dict[
         eigvals = np.linalg.eigvals(J_np)
         sorted_indices = np.argsort(np.abs(eigvals))[::-1] # Sort desc
         sorted_eigs = eigvals[sorted_indices]
+        magnitudes = np.abs(sorted_eigs)
         
-        lambda_1 = np.abs(sorted_eigs[0])
-        lambda_2 = np.abs(sorted_eigs[1]) if dim > 1 else 0.0
+        # Top-K (K=4)
+        K = 4
+        top_k = [float(m) for m in magnitudes[:K]]
+        while len(top_k) < K:
+            top_k.append(0.0)
+            
+        lambda_1 = magnitudes[0]
+        lambda_2 = magnitudes[1] if dim > 1 else 0.0
+        lambda_3 = magnitudes[2] if dim > 2 else 0.0
         
         # Stability (Max Eig)
         stability = lambda_1
         
-        # Spectral Gap (lambda_1 - lambda_2) or ratio
-        gap = lambda_1 - lambda_2
+        # Spectral Gaps
+        gap12 = lambda_1 - lambda_2
+        gap23 = lambda_2 - lambda_3
         ratio = lambda_1 / (lambda_2 + 1e-8)
         
+        # SVD (Singular Values)
+        # U, S, Vh = svd(J)
+        U_svd, S_svd, Vh_svd = np.linalg.svd(J_np)
+        sigma_1 = S_svd[0]
+        sigma_2 = S_svd[1] if dim > 1 else 0.0
+        gap_svd = sigma_1 - sigma_2
+        
     except Exception as e:
-        print(f"Eig decomp failed: {e}")
-        stability, gap, ratio = 0.0, 0.0, 0.0
+        print(f"Eig/SVD decomp failed: {e}")
+        stability, gap12, gap23, ratio, gap_svd, sigma_1 = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        top_k = [0.0]*4
         
     return {
-        "d2_max_eig": stability,
-        "d2_gap": gap,
-        "d2_ratio": ratio
+        "d2_max_eig": stability, # |lambda_1|
+        "d2_gap12": gap12,
+        "d2_gap23": gap23,
+        "d2_ratio": ratio,
+        "d2_svd_max": sigma_1,
+        "d2_svd_gap": gap_svd,
+        "d2_top1": top_k[0],
+        "d2_top2": top_k[1],
+        "d2_top3": top_k[2]
     }
 
 def compute_d3_port_loop(traj_x: torch.Tensor, u_self_traj: torch.Tensor) -> Dict[str, float]:

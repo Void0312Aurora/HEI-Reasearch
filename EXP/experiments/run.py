@@ -60,6 +60,9 @@ def run_experiment(config):
     total_steps = config['total_steps']
     u_self = torch.zeros(1, dim_q) # Initial write-back
     
+    # Replay Buffer (for u_env)
+    u_env_online_buffer = []
+    
     # Ablation control
     force_u_self_zero = config.get("force_u_self_zero", False)
     
@@ -77,6 +80,44 @@ def run_experiment(config):
         # u_env from x_ext_proxy (Projection)
         u_env = x_ext_proxy[:, :dim_q] 
         
+        if phase == "online":
+             u_env_online_buffer.append(u_env.clone())
+        
+        # Replay / Mismatch Control (Iter 1.0)
+        # If offline and u_source is replay, we need to override u_env
+        if phase == "offline" and sched_info["u_source"] == "replay":
+             # replay_index calculation
+             # For simplicity, map t-T_online to recorded buffer
+             # We assume online phase length is fixed or tracked.
+             # sched_info doesn't tell us "step within phase".
+             # Hack: use generic modulo or tracking.
+             # Better: buffer length.
+             replay_idx = (t) % len(u_env_online_buffer) if len(u_env_online_buffer) > 0 else 0
+             
+             if config.get("replay_shuffle", False):
+                 # Mismatch: use random frame
+                 replay_idx = np.random.randint(0, len(u_env_online_buffer))
+                 
+             u_env_replay = u_env_online_buffer[replay_idx]
+             
+             # process_input usually ignores u_env in offline, UNLESS we pass it explicitly as "override"
+             # But scheduler.process_input has logic:
+             # if meta["u_source"] == "replay": u_combined = u_self
+             # Wait, scheduler logic I wrote in Step 182 was:
+             # if meta["u_source"] == "replay": u_combined = u_self
+             # That means it ignored u_env!
+             # We need to fix Scheduler logic to actually USE u_env if replay.
+             # Or we do it here:
+             u_t_tensor = u_self + u_env_replay # Add experience to self-loop?
+             # SPEC says: Replay means driving by memory.
+             # If "experience modulated", maybe it's u_self + u_replay.
+             # Let's assume input is additive.
+             
+             pass # continue to normal process_input, but we need to pass this replay u_env
+             # But process_input signature is (u_env, u_self, meta)
+             # So we just pass u_env = u_env_replay
+             u_env = u_env_replay
+
         # u_self generation (Mock Policy/Readout)
         if hasattr(kernel, 'dim_q'):
              # x_int has q, p, maybe s
