@@ -3,7 +3,7 @@
 
 ```
               Condition WeightNorm (Mean) WeightNorm (Std)    CI95 p-value
-       Replay (Ordered)            0.7897           0.1909 ±0.1183       -
-     Mismatch (Reverse)            0.8195           0.1575 ±0.0976 0.72195
-Mismatch (BlockShuffle)            0.7804           0.2034 ±0.1261 0.92119
+       Replay (Ordered)            0.3145           0.0859 ±0.0533       -
+     Mismatch (Reverse)            0.3332           0.0691 ±0.0428 0.61785
+Mismatch (BlockShuffle)            0.2386           0.0816 ±0.0506 0.07044
 ```

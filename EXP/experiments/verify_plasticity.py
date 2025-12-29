@@ -26,10 +26,20 @@ def run_plasticity_verification(config_path, num_seeds=10):
     # Storage
     raw_data = {c["name"]: {"weight_norm": []} for c in conditions}
     
-    # Use Plastic Kernel
+    # Use Plastic Kernel + Limit Cycle Env (Pure Decay Mode)
     base_config['kernel_type'] = 'plastic'
+    base_config['env_type'] = 'limit_cycle' 
+    
+    # E2 Critical Setup: Pure Decay (Transient)
+    # Forward: High -> Low (Damping)
+    # Reverse: Low -> High (Anti-Damping)
+    # This asymmetry is guaranteed if noise is low.
+    base_config['drive_amp'] = 0.0 # No drive
+    base_config['env_noise'] = 0.0 # No noise
+    base_config['env_gamma'] = 0.1 # Slow decay
+    
     base_config['omega'] = 1.0 
-    base_config['eta'] = 0.05 # Higher learning rate for visibility
+    base_config['eta'] = 0.05 
     dim_q = base_config['dim_q']
     
     base_seed = base_config.get('seed', 42)
@@ -95,13 +105,13 @@ def run_plasticity_verification(config_path, num_seeds=10):
         report_rows.append(row)
         
     df = pd.DataFrame(report_rows)
-    print("\n=== Plasticity Verification Results (Iteration 1.3) ===\n")
+    print("\n=== Plasticity Verification Results (Iteration 1.4 - Pure Decay) ===\n")
     print(df.to_string(index=False))
     
-    out_file = os.path.join(base_config['output_dir'], "verification_iter_1_3.md")
+    out_file = os.path.join(base_config['output_dir'], "verification_iter_1_4.md")
     with open(out_file, 'w') as f:
-        f.write(f"# Iteration 1.3 Plasticity Verification (N={num_seeds})\n")
-        f.write("## Hypothesis: Causal Replay -> Higher Learned Weight Norm\n\n```\n")
+        f.write(f"# Iteration 1.4 Structure Verification (Pure Decay, N={num_seeds})\n")
+        f.write("## Hypothesis: Decay (Forward) vs Growth (Reverse) -> Significant Weight Difference\n\n```\n")
         f.write(df.to_string(index=False))
         f.write("\n```\n")
     print(f"\nSaved report to {out_file}")

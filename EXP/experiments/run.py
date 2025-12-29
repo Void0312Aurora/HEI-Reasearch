@@ -13,6 +13,7 @@ print(f"DEBUG: sys.path augmented with: {base_path}")
 print(f"DEBUG: Available dirs in base_path: {os.listdir(base_path) if os.path.exists(base_path) else 'Path not found'}")
 
 from proto.env.point_mass import PointMassEnv
+from proto.env.limit_cycle import LimitCycleEnv
 from proto.kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel, ResonantKernel, PlasticKernel
 from proto.scheduler.scheduler import Scheduler
 from diag.compute.metrics import compute_d1_offline_non_degenerate, compute_d3_port_loop, compute_d2_spectral
@@ -27,7 +28,18 @@ def run_experiment(config):
     np.random.seed(config['seed'])
     
     # Init Env
-    env = PointMassEnv(dt=0.1)
+    env_type = config.get('env_type', 'point_mass')
+    if env_type == 'point_mass':
+        env = PointMassEnv(dt=0.1)
+    elif env_type == 'limit_cycle':
+        env = LimitCycleEnv(dt=config.get('dt', 0.1), 
+                           gamma=config.get('env_gamma', 0.2), 
+                           omega=config.get('env_omega', 1.0),
+                           drive_amp=config.get('drive_amp', 1.0),
+                           drive_freq=config.get('drive_freq', 0.5))
+    else:
+        raise ValueError(f"Unknown env_type: {env_type}")
+        
     obs = env.reset(seed=config['seed'])
     
     # Init Kernel
@@ -94,7 +106,12 @@ def run_experiment(config):
         phase = sched_info['phase']
         
         # 2. Env Step (Get x_ext_proxy)
-        env_action = np.random.uniform(-0.1, 0.1, size=2) # Random world drift
+        noise_scale = config.get('env_noise', 0.1)
+        if noise_scale > 0:
+            env_action = np.random.uniform(-noise_scale, noise_scale, size=2)
+        else:
+            env_action = np.zeros(2)
+            
         obs, _, _, _ = env.step(env_action)
         x_ext_proxy = torch.tensor(obs['x_ext_proxy'], dtype=torch.float32).unsqueeze(0) # [1, 4]
         
