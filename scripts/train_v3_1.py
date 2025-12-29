@@ -38,7 +38,7 @@ YIELD_STRESS = 0.001
 ELASTIC_K = 0.0001
 MAX_ATOMS = 32 # Reduced for OOM
 CONTEXT_K = 2 # Reduced for OOM
-BATCH_SIZE = 16 # Reduced for OOM
+BATCH_SIZE = 32 # Reduced for OOM
 MEMORY_SIZE = 20000
 
 def eval_probe(injector, entropy_stats, id_to_char, ff, prompt="你好", dim=DIM, device='cpu'):

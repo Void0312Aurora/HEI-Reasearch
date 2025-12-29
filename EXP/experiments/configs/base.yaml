@@ -1,0 +1,11 @@
+kernel_type: "contact" # symplectic, contact, fast_slow
+env_type: "point_mass"
+dim_q: 2
+damping: 0.1
+epsilon: 0.1 # for fast_slow
+online_steps: 50
+offline_steps: 50
+total_steps: 100
+seed: 42
+offline_u_source: "internal" # internal, replay
+output_dir: "/home/void0312/HEI-Research/HEI/EXP/reports"
