@@ -1,0 +1,32 @@
+DEBUG: Module Loading
+DEBUG: Script Entry
+=== Phase 20: MNIST Adaptive Damping Training ===
+Mode: adaptive, Drive: 1.0
+DEBUG: contact_dynamics source: /home/void0312/HEI-Research/HEI/he_core/contact_dynamics.py
+Loading RawMNIST from ./data/MNIST/raw/train-images-idx3-ubyte.gz...
+Loaded 60000 samples.
+Loading all data into memory...
+Data Loaded: torch.Size([60000, 1, 28, 28])
+CRASH: 'UnifiedGeometricEntity' object has no attribute 'device'
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_adaptive.py", line 275, in <module>
+    train_mnist()
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_adaptive.py", line 207, in train_mnist
+    logits, energy_seq = model(data)
+                         ^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_adaptive.py", line 98, in forward
+    out = self.entity.forward_tensor(self.entity.state.flat, u_ext, dt)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/HEI-Research/HEI/he_core/entity_v4.py", line 85, in forward_tensor
+    curr_state = ContactState(self.dim_q, batch_size, self.device, state_flat)
+                                                      ^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1962, in __getattr__
+    raise AttributeError(
+AttributeError: 'UnifiedGeometricEntity' object has no attribute 'device'
+DEBUG: Script Exit

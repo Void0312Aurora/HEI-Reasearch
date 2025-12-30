@@ -1,0 +1,20 @@
+=== Phase 21: Fundamental MNIST Adaptive Training ===
+Config: Steps=2, Q=64, Batch=32
+Loading Data...
+Loading RawMNIST from ./data/MNIST/raw/train-images-idx3-ubyte.gz...
+Loaded 60000 samples.
+Data Loaded: torch.Size([60000, 1, 28, 28])
+Ep 0 [3200/60000]: Loss=202822322950766592.0000 Acc=0.09
+Ep 0 [6400/60000]: Loss=149773841848074240.0000 Acc=0.12
+Ep 0 [9600/60000]: Loss=109942108986540032.0000 Acc=0.16
+Ep 0 [12800/60000]: Loss=82786877609869312.0000 Acc=0.09
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_fundamental.py", line 223, in <module>
+    train_fundamental()
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_fundamental.py", line 127, in train_fundamental
+    curr_batch = len(idx)
+                 ^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/_tensor.py", line 1160, in __len__
+    def __len__(self):
+
+KeyboardInterrupt

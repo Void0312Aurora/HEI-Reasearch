@@ -73,37 +73,51 @@ class UnifiedGeometricEntity(nn.Module):
         self.state.p = torch.randn(1, self.dim_q) * scale
         self.state.s = torch.zeros(1, 1)
         
-    def forward_tensor(self, state_flat: torch.Tensor, u_ext: Optional[torch.Tensor], dt: float = 0.1) -> Dict[str, torch.Tensor]:
+    def forward_tensor(self, state_flat: torch.Tensor, u_ext: torch.Tensor, dt: float) -> dict:
         """
-        Differentiable Forward Step.
-        Returns Tensors (maintaining gradients).
+        Forward step on flattened tensor state.
+        Supports Gradient Checkpointing for stability.
         """
-        # Temporary State wrapper
         batch_size = state_flat.shape[0]
-        curr_state = ContactState(self.dim_q, batch_size, device=state_flat.device, flat_tensor=state_flat)
         
-        # 1. Router (Check gradient flow here)
-        chart_weights = self.atlas.router(curr_state.q)
+        # 1. Reconstruct State
+        # We must support 'x' being attached to graph
+        curr_state = ContactState(self.dim_q, batch_size, state_flat.device, state_flat)
         
-        # 2. Dynamics
-        def H_func(s):
-            # Pass weights here!
-            return self.generator(s, u_ext, weights=chart_weights)
+        # 2. Generator definition (closure for step/checkpoint)
+        def run_step(flat_input, u_input):
+            # Re-wrap inside checkpoint context
+            s_in = ContactState(self.dim_q, batch_size, flat_input.device, flat_input)
             
-        next_state = self.integrator.step(curr_state, H_func, dt)
+            # Generator with external drive
+            # Note: We must bind u_input to the generator call
+            def gen_func(s: ContactState):
+                # 1. Router (Check gradient flow here)
+                chart_weights = self.atlas.router(s.q)
+                
+                # 2. Dynamics
+                # Pass weights here!
+                return self.generator(s, u_input, weights=chart_weights)
+                    
+            # Step
+            s_next = self.integrator.step(s_in, gen_func, dt)
+            return s_next.flat
+            
+        # 3. Execution
+        # Use simple checkpointing if available and training
+        # But for now, let's just use it conditionally to avoid overhead in simple cases?
+        # Actually, let's FORCE it for now to fix the crash.
         
-        # 3. Output
-        # ActionInterface implements write(state) -> action
-        action = self.interface.write(next_state)
+        from torch.utils.checkpoint import checkpoint
         
-        # 4. H Value
-        H_val = self.generator(curr_state, u_ext, weights=chart_weights)
+        if state_flat.requires_grad and False: # DISABLED CHECKPOINT FOR DEBUG mixed-grad
+             next_flat = checkpoint(run_step, state_flat, u_ext, use_reentrant=False)
+        else:
+             next_flat = run_step(state_flat, u_ext)
         
         return {
-            "next_state_flat": next_state.flat,
-            "action": action,
-            "chart_weights": chart_weights,
-            "H_val": H_val
+            'next_state_flat': next_flat,
+            # We skip detailed breakout here to save aux outputs from graph
         }
 
     def forward(self, obs: Dict[str, Any], dt: float = 0.1) -> Dict[str, Any]:

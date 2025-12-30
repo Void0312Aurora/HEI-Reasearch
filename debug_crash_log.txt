@@ -1,0 +1,12 @@
+DEBUG: Starting Synthetic Test
+Step 0: Loss=2.2964
+Step 10: Loss=2.3006
+Step 20: Loss=2.3111
+Step 30: Loss=2.3191
+Step 40: Loss=2.2966
+Step 50: Loss=2.3088
+Step 60: Loss=2.2995
+Step 70: Loss=2.3122
+Step 80: Loss=2.3083
+Step 90: Loss=2.3097
+DEBUG: Synthetic Test Passed

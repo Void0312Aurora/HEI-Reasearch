@@ -21,6 +21,26 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
             nn.Softplus() # Ensure alpha >= 0
         )
         
+        self._init_stable_alpha()
+        
+    def _init_stable_alpha(self):
+        """
+        Theoretical Stability:
+        Initialize Alpha(q) to be nearly constant (nabla Alpha ~ 0) but positive.
+        This prevents the -s * grad(Alpha) term from pumping energy during early training.
+        """
+        for name, param in self.net_Alpha.named_parameters():
+            if 'weight' in name:
+                nn.init.normal_(param, mean=0.0, std=1e-5) # Almost zero gradient
+            elif 'bias' in name:
+                # For hidden layers, bias=0
+                # For output layer, bias gives the initial damping level
+                # softplus(x) = alpha. Let alpha=0.1. x ~ -2.2
+                if param.shape[0] == 1: # Output layer (assuming latent=64)
+                    nn.init.constant_(param, -2.0) # Start with small positive damping
+                else:
+                    nn.init.zeros_(param)
+        
     def forward(self, state: ContactState) -> torch.Tensor:
         q, p, s = state.q, state.p, state.s
         

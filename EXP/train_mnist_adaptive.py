@@ -61,7 +61,17 @@ class CognitiveAgent(nn.Module):
         }
         
         self.entity = UnifiedGeometricEntity(config)
-        # Inject custom generator
+        
+        # FIX: Re-wrap Adaptive Generator in PortCoupled Logic
+        # The Entity init creates a default DissipativeGen. We must override the PortCoupled wrapper.
+        from he_core.port_generator import PortCoupledGenerator
+        self.entity.generator = PortCoupledGenerator(
+            self.gen, # The Adaptive Generator
+            dim_u=self.dim_u,
+            learnable_coupling=config['learnable_coupling'],
+            num_charts=config['num_charts']
+        )
+        # self.entity.internal_gen is just a reference, update it too for consistency
         self.entity.internal_gen = self.gen
         
         # 3. Readout (Classifier)
@@ -91,7 +101,7 @@ class CognitiveAgent(nn.Module):
         
         # Evolve
         dt = 0.1
-        steps = 2 # Short inference time (Debug: reduced from 10)
+        steps = 10 # Restored Long Horizon
         energies = []
         
         for _ in range(steps):
@@ -113,6 +123,7 @@ class CognitiveAgent(nn.Module):
 import argparse
 
 def train_mnist():
+    torch.set_num_threads(1) # Fix OpenMP hang
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='adaptive', choices=['adaptive'])
     parser.add_argument('--epochs', type=int, default=5)
@@ -123,6 +134,9 @@ def train_mnist():
     print(f"=== Phase 20: MNIST Adaptive Damping Training ===")
     print(f"Mode: {args.mode}, Drive: {args.drive_scale}")
     
+    import he_core.contact_dynamics
+    print(f"DEBUG: contact_dynamics source: {he_core.contact_dynamics.__file__}")
+    
     # Custom Transform function (Tensor -> Tensor)
     def mnist_norm(img):
         # inputs are [0,1] float tensors from RawMNIST
@@ -131,9 +145,34 @@ def train_mnist():
     from he_core.datasets import RawMNIST
     
     os.makedirs('./data', exist_ok=True)
-    # Force single process loading 
     train_dataset = RawMNIST('./data/MNIST', train=True, transform_func=mnist_norm)
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+    # train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+    
+    # Manual Loader to bypass PyTorch DataLoader crash
+    # Load all data to memory
+    print("Loading all data into memory...")
+    all_data = []
+    all_targets = []
+    for i in range(len(train_dataset)):
+        d, t = train_dataset[i]
+        all_data.append(d)
+        all_targets.append(t)
+    
+    all_data_t = torch.stack(all_data)
+    all_targets_t = torch.tensor(all_targets)
+    print(f"Data Loaded: {all_data_t.shape}")
+    
+    num_samples = len(all_data_t)
+    indices = torch.randperm(num_samples)
+    
+    # Simple iterator generator
+    def get_batch_iterator(batch_size):
+        indices = torch.randperm(num_samples)
+        for start_idx in range(0, num_samples, batch_size):
+            idx = indices[start_idx : start_idx + batch_size]
+            yield all_data_t[idx], all_targets_t[idx]
+            
+    train_loader_len = (num_samples + args.batch_size - 1) // args.batch_size
     
     # Model
     model = CognitiveAgent(dim_q=64)
@@ -161,7 +200,9 @@ def train_mnist():
         steps = 0
         gating_count = 0
         
-        for batch_idx, (data, target) in enumerate(train_loader):
+        batch_iter = get_batch_iterator(args.batch_size)
+        
+        for batch_idx, (data, target) in enumerate(batch_iter):
             optimizer.zero_grad()
             
             # Forward
@@ -207,6 +248,12 @@ def train_mnist():
                     final_loss = loss_cls + args.lambda_penalty * loss_diss
                     gating_count += 1
             
+            elif args.mode == 'adaptive':
+                 # In Adaptive mode, we WANT to minimize Dissipative Loss (forcing physical compliance)
+                 # AND Classification Loss.
+                 # Alpha(q) learns to make the trajectory dissipative.
+                 final_loss = loss_cls + loss_diss
+                 
             elif args.mode == 'ablation_free':
                  pass # Never add dissipative loss
             
@@ -219,7 +266,7 @@ def train_mnist():
             
             if batch_idx % 100 == 0:
                 d_val = loss_diss.item()
-                print(f"Epoch {epoch} [{batch_idx}/{len(train_loader)}]: Loss={final_loss.item():.4f} (Cls={loss_cls.item():.4f}, Diss={d_val:.4f})")
+                print(f"Epoch {epoch} [{batch_idx}/{train_loader_len}]: Loss={final_loss.item():.4f} (Cls={loss_cls.item():.4f}, Diss={d_val:.4f})")
                 
         acc = 100. * correct / total
         print(f"Epoch {epoch}: Accuracy={acc:.2f}%, Gating Events={gating_count}")

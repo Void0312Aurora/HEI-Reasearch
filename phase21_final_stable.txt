@@ -1,0 +1,13 @@
+=== Phase 21: Fundamental MNIST Adaptive Training ===
+Config: Steps=10, Q=64, Batch=32
+Loading Data...
+Loading RawMNIST from ./data/MNIST/raw/train-images-idx3-ubyte.gz...
+Loaded 60000 samples.
+Data Loaded: torch.Size([60000, 1, 28, 28])
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_fundamental.py", line 220, in <module>
+    train_fundamental()
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_fundamental.py", line 194, in train_fundamental
+    print(f"Ep {epoch} [{batches*args.batch_size}/{num_samples}]: Loss={loss.item():.4f} Acc={acc.item():.2f}")
+                                                                                              ^^^
+NameError: name 'acc' is not defined
