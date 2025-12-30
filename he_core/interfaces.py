@@ -30,6 +30,15 @@ class ActionInterface(BaseInterface):
         self.proj = nn.Linear(dim_q, dim_ext) # p -> action
         self.embed = nn.Linear(dim_ext, dim_q) # env -> force
         
+        # Init near Identity
+        with torch.no_grad():
+            if dim_q == dim_ext:
+                self.proj.weight.copy_(torch.eye(dim_q))
+                self.embed.weight.copy_(torch.eye(dim_q))
+            else:
+                self.proj.weight.normal_(0, 0.1)
+                self.embed.weight.normal_(0, 0.1)
+        
     def read(self, u_env: torch.Tensor) -> torch.Tensor:
         # u_env (B, ext) -> (B, q)
         return self.embed(u_env)

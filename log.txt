@@ -1,0 +1,39 @@
+DEBUG: TOP LEVEL START
+DEBUG: Entered run_gate0_campaign
+INFO:LongCampaign:=== Starting Gate-0 Long-Run Campaign ===
+DEBUG: LOADING EXP.train_phase13 START
+DEBUG: Pre-Import
+DEBUG: Post-Import
+DEBUG: EXP.train_phase13 IMPORTS DONE
+INFO:LongCampaign:--- Exp A: W-Only Stability ---
+INFO:LongCampaign:--- Exp A: W-Only Stability ---
+DEBUG: After Logger Info
+DEBUG: Calling train_phase13 object: <function train_phase13 at 0x75b62f823c40>
+DEBUG: TRACE - Entered train_phase13
+DEBUG: TRACE - Entity Initialized
+DEBUG: TRACE - Selecting Params
+DEBUG: TRACE - Getting Coupling Params
+DEBUG: TRACE - Got Coupling Params: 1
+DEBUG: TRACE - Params Count: 1
+INFO:TrainPhase13:Starting Training...
+DEBUG: TRACE - Starting Training Loop
+DEBUG: ERROR - Training Loop Failed: ContactState.__init__() got an unexpected keyword argument 'flat_tensor'
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/EXP/train_phase13.py", line 91, in train_phase13
+    out = entity.forward_tensor(curr_state_flat, u_ext)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/HEI-Research/HEI/he_core/entity_v4.py", line 70, in forward_tensor
+    curr_state = ContactState(self.dim_q, 1, device=state_flat.device, flat_tensor=state_flat)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ContactState.__init__() got an unexpected keyword argument 'flat_tensor'
+DEBUG: train_phase13 returned: FAIL_LOOP
+ERROR:LongCampaign:Exp A Failed!
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/run_campaign_root.py", line 149, in <module>
+    run_gate0_campaign()
+  File "/home/void0312/HEI-Research/HEI/run_campaign_root.py", line 60, in run_gate0_campaign
+    save_report(report)
+  File "/home/void0312/HEI-Research/HEI/run_campaign_root.py", line 145, in save_report
+    json.dump(report, f, indent=2, cls=NumpyEncoder)
+                                       ^^^^^^^^^^^^
+NameError: name 'NumpyEncoder' is not defined

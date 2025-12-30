@@ -1,21 +1,27 @@
 import torch
 import numpy as np
+from typing import Optional
 
 class ContactState:
     """
     Geometric State Object for Contact Manifold M = T*Q x R.
-    Manages (q, p, s) components and their vectorization.
+    Manages (q, p, s) components.
+    Supports initialization from flat tensor [q, p, s] for differentiable flow.
     """
-    def __init__(self, dim_q: int, batch_size: int = 1, device: str = 'cpu', data: torch.Tensor = None):
+    def __init__(self, dim_q: int, batch_size: int = 1, device: str = 'cpu', flat_tensor: Optional[torch.Tensor] = None):
         self.dim_q = dim_q
         self.batch_size = batch_size
         self.device = device
         self.dim_total = 2 * dim_q + 1
         
-        if data is not None:
-            # Init from existing tensor
-            assert data.shape == (batch_size, self.dim_total), f"Shape mismatch: {data.shape} vs {(batch_size, self.dim_total)}"
-            self._data = data.to(device)
+        if flat_tensor is not None:
+            # Reconstruct from flat (q, p, s)
+            # Size: n*dim + n*dim + n*1
+            expected = 2 * dim_q * batch_size + batch_size
+            if flat_tensor.numel() != expected:
+                raise ValueError(f"Flat tensor size {flat_tensor.numel()} mismatch expected {expected}")
+                
+            self._data = flat_tensor.view(batch_size, self.dim_total)
         else:
             # Init zeros
             self._data = torch.zeros(batch_size, self.dim_total, device=device)

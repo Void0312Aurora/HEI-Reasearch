@@ -51,38 +51,23 @@ class TestE13EntityV4(unittest.TestCase):
         loss = out['action'].sum()
         loss.backward()
         
-        # Check Gradients
-        # Port Coupling weights
-        W_grad = entity.generator.coupling.W.weight.grad
-        print(f"Coupling W Grad: {W_grad.norm().item() if W_grad is not None else 'None'}")
-        
-        self.assertIsNotNone(W_grad)
-        self.assertGreater(W_grad.norm().item(), 0.0)
-        
-        # Router weights (Router depends on q, q depends on state_in)
-        # But we are testing graph from input to output. 
-        # Router depends on 'state_in'. state_in is input.
-        # But Router params?
-        # Router: q -> weights.
-        # Loss involves 'action'. Action depends on 'next_state'.
-        # next_state depends on H.
-        # H depends on PortCoupling.
-        # Router output is NOT in 'action' path in v0.4 yet (it's monitoring only for now, unless we route dynamics).
-        # In UnifiedEntity v0.4 init:
-        # self.generator is ONE generator.
-        # self.atlas.router is called but 'chart_weights' not used in dynamics?
-        
-        # Wait, if router is unused in dynamics, it won't get grad from action loss.
-        # We need to test Router learning separately or link it?
-        # Protocol: "Train Router to maximize Coverage".
-        # So we direct loss on 'chart_weights'.
-        
-        loss_router = out['chart_weights'].sum()
-        loss_router.backward()
+        # Now Router is used in Dynamics (via H_func -> generator -> weights)
+        # So Router should get gradient from 'action' loss (via next_state -> H -> weights)
         
         router_grad = list(entity.atlas.router.parameters())[0].grad
-        print(f"Router Grad: {router_grad.norm().item() if router_grad is not None else 'None'}")
+        print(f"Router Grad from Action Loss: {router_grad.norm().item() if router_grad is not None else 'None'}")
+        
+        # It MUST be non-None now
         self.assertIsNotNone(router_grad)
+        self.assertGreater(router_grad.norm().item(), 0.0)
+        
+        # Check W grad too
+        W_grad = entity.generator.coupling.W_stack.grad
+        print(f"Coupling W_stack Grad: {W_grad.norm().item() if W_grad is not None else 'None'}")
+        self.assertIsNotNone(W_grad)
+
+if __name__ == '__main__':
+    unittest.main()
 
 if __name__ == '__main__':
     unittest.main()

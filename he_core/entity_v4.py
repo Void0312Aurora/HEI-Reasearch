@@ -37,7 +37,8 @@ class UnifiedGeometricEntity(nn.Module):
         self.generator = PortCoupledGenerator(
             self.internal_gen, 
             dim_u=self.dim_u, 
-            learnable_coupling=learnable_coupling
+            learnable_coupling=learnable_coupling,
+            num_charts=self.num_charts
         )
         
         # 3. Atlas / Structure
@@ -52,16 +53,10 @@ class UnifiedGeometricEntity(nn.Module):
         # Default ActionInterface
         self.interface = ActionInterface(self.dim_q, self.dim_u)
         
-        # State Container (Single Active State for now, or Atlas manages it?)
-        # Specification says "State managed by ContactState".
-        # We hold a "Current Active State".
-        # If Atlas has multiple charts, they are local coordinates.
-        # Ideally, we track the 'active chart' and 'local state'.
-        # For simplicity in v0.4, we assume a single Global State M, 
-        # and Atlas is a 'Coverage/Attention' mechanism over it (Soft Atlas).
+        # State Container
         self.state = ContactState(self.dim_q, 1)
         
-    def reset(self, scale: float = 1.0):
+    def reset(self, scale: float = 0.1):
         self.state.q = torch.randn(1, self.dim_q) * scale
         self.state.p = torch.randn(1, self.dim_q) * scale
         self.state.s = torch.zeros(1, 1)
@@ -71,11 +66,6 @@ class UnifiedGeometricEntity(nn.Module):
         Differentiable Forward Step.
         Returns Tensors (maintaining gradients).
         """
-        # Reconstruct state from flat?? 
-        # State is mutable object. 
-        # Ideally, we pass simple tensors.
-        # But our generators use ContactState object.
-        
         # Temporary State wrapper
         curr_state = ContactState(self.dim_q, 1, device=state_flat.device, flat_tensor=state_flat)
         
@@ -84,15 +74,17 @@ class UnifiedGeometricEntity(nn.Module):
         
         # 2. Dynamics
         def H_func(s):
-            return self.generator(s, u_ext)
+            # Pass weights here!
+            return self.generator(s, u_ext, weights=chart_weights)
             
         next_state = self.integrator.step(curr_state, H_func, dt)
         
         # 3. Output
-        action = self.interface.project_out(next_state)
+        # ActionInterface implements write(state) -> action
+        action = self.interface.write(next_state)
         
         # 4. H Value
-        H_val = self.generator(curr_state, u_ext)
+        H_val = self.generator(curr_state, u_ext, weights=chart_weights)
         
         return {
             "next_state_flat": next_state.flat,
@@ -123,10 +115,16 @@ class UnifiedGeometricEntity(nn.Module):
         # Update State
         self.state.flat = out['next_state_flat'].detach() # Detach for next step in runtime loop
         
+        # Log weights
+        weights = out['chart_weights'].detach()
+        
+        # H calc for log (using detached weights)
+        H_val = out['H_val'].item()
+        
         return {
             "action": out['action'].detach().numpy().flatten(),
-            "chart_weights": out['chart_weights'].detach().numpy().flatten(),
+            "chart_weights": weights.numpy().flatten(),
             "internal_p": self.state.p.detach().numpy().flatten(),
             "internal_s": self.state.s.item(),
-            "H_val": out['H_val'].item()
+            "H_val": H_val
         }
