@@ -97,8 +97,9 @@ class Entity:
         else:
             u_env = torch.zeros(1, self.dim_q)
             
+            
         # 3. Policy / Readout (Internal -> u_self)
-        u_self = self._compute_u_self()
+        u_self = self._compute_u_self(u_env)
         
         # 4. Input Integration (Scheduler & Memory)
         if phase == 'online':
@@ -174,14 +175,42 @@ class Entity:
             if start_src + size <= L and start_dst + size <= L:
                  self._replay_map[start_dst:start_dst+size] = np.arange(start_src, start_src+size)
 
-    def _compute_u_self(self):
-        # Default Mock Policy (Damping / Negative Feedback)
-        # -0.05 * p
-        p_idx_start = self.dim_q
-        p_curr = self.x_int[:, p_idx_start:2*self.dim_q]
-        
-        # If config forces zero
+    def _compute_u_self(self, u_env=None):
+        # 1. Config Check
         if self.config.get("force_u_self_zero", False):
-            return torch.zeros_like(p_curr)
+            return torch.zeros(1, self.dim_q)
             
+        dim = self.dim_q
+        
+        # 2. Extract State Components
+        p_idx_start = dim
+        p_curr = self.x_int[:, p_idx_start:p_idx_start+dim]
+        
+        # 3. Active Inference Mode
+        if self.config.get("active_mode", False) and isinstance(self.kernel, PlasticKernel) and u_env is not None:
+            # Layout: [q, p, s, r, vr, W]
+            r_idx_start = 2 * dim + 1
+            w_idx_start = 4 * dim + 1
+            
+            r_curr = self.x_int[:, r_idx_start:r_idx_start+dim] # [1, Dim]
+            w_flat = self.x_int[:, w_idx_start:] # [1, Dim*Dim]
+            
+            # Reconstruct W [1, Dim, Dim]
+            W = w_flat.view(1, dim, dim)
+            
+            # Prediction: hat_x = W * r
+            pred_x = torch.bmm(W, r_curr.unsqueeze(2)).squeeze(2)
+            
+            # Prediction Error: e = u_env - pred_x
+            # u_env acts as Sensation (y)
+            error = u_env - pred_x
+            
+            # Action: Minimize Error Squared 
+            # u_self = - K * error (Negative Feedback)
+            gain = self.config.get("active_gain", 1.0)
+            u_active = -1.0 * gain * error
+            
+            return u_active
+            
+        # Fallback: Passive Damping
         return -0.05 * p_curr
