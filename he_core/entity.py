@@ -43,7 +43,8 @@ class Entity:
             return ResonantKernel(dim, omega=config.get('omega', 1.0))
         elif k_type == 'plastic':
             return PlasticKernel(dim, omega=config.get('omega', 1.0), 
-                                eta=config.get('eta', 0.01))
+                                eta=config.get('eta', 0.01),
+                                learning_rule=config.get('learning_rule', 'hebbian'))
         else:
             # Default fallback for v0
             return ContactKernel(dim)

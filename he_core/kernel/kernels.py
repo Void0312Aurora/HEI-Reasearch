@@ -238,11 +238,14 @@ class PlasticKernel(ResonantKernel):
     Adds a plastic weight matrix W that learns correlations between input u_t and resonator state r.
     State: (q, p, s, r, v_r, w_flat)
     W is dim x dim (coupling u to r). Flattened in state.
-    Update Rule: dW/dt = eta * (u_t * r - decay * W) (Oja-like or simple Hebbian)
+    Update Rule: 
+    - Hebbian: dW/dt = eta * (u_t * r - decay * W)
+    - Delta:   dW/dt = eta * ((u_t - W*r) * r - decay * W)
     """
-    def __init__(self, dim_q: int = 2, damping: float = 0.1, omega: float = 1.0, eta: float = 0.01):
+    def __init__(self, dim_q: int = 2, damping: float = 0.1, omega: float = 1.0, eta: float = 0.01, learning_rule: str = 'hebbian'):
         super().__init__(dim_q, damping, omega)
         self.eta = eta # Learning rate
+        self.learning_rule = learning_rule
         
     def forward(self, x_int: torch.Tensor, u_t: torch.Tensor) -> torch.Tensor:
         # State layout:
@@ -283,10 +286,20 @@ class PlasticKernel(ResonantKernel):
         # u.unsqueeze(2) -> [B, d, 1]
         # r.unsqueeze(1) -> [B, 1, d]
         # product -> [B, d, d]
-        Hebbian = torch.bmm(u_t.unsqueeze(2), r.unsqueeze(1))
         
-        decay = 0.1 # Weight decay to prevent explosion
-        dW = self.eta * (Hebbian - decay * W)
+        if self.learning_rule == 'delta':
+            # Delta Rule: error * r^T
+            # Error e = u - W*r
+            # W*r : [B, d, d] x [B, d, 1] -> [B, d, 1] -> squeeze -> [B, d]
+            pred = torch.bmm(W, r.unsqueeze(2)).squeeze(2)
+            error = u_t - pred
+            drive_term = torch.bmm(error.unsqueeze(2), r.unsqueeze(1))
+        else:
+            # Hebbian Rule: u * r^T
+            drive_term = torch.bmm(u_t.unsqueeze(2), r.unsqueeze(1))
+            
+        decay = 0.1 # Weight decay
+        dW = self.eta * (drive_term - decay * W)
         
         dt = 0.1
         W_new = W + dW * dt

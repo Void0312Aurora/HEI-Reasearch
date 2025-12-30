@@ -29,6 +29,7 @@ def run_single_vdp(seed, active_mode=True, eta=0.05, output_dir=None):
         'max_steps': 1500, # Sufficient for Lyapunov
         'active_mode': active_mode,
         'active_gain': 0.1,
+        'learning_rule': 'delta',
         'output_dir': output_dir if output_dir else 'tmp'
     }
     
