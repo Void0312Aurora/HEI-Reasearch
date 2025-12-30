@@ -58,7 +58,7 @@ class TestE2Structure(unittest.TestCase):
             cfg_rep = self.config.copy()
             cfg_rep['seed'] = curr_seed
             cfg_rep['offline_u_source'] = 'replay'
-            d1, d2, d3, log_rep = run_experiment(cfg_rep)
+            d1, d2, d3, _, log_rep = run_experiment(cfg_rep)
             metrics['Replay'].append(self._get_weight_norm(log_rep))
             energies['Replay'].append(self._get_u_energy(log_rep))
             
@@ -67,7 +67,7 @@ class TestE2Structure(unittest.TestCase):
             cfg_shuf['seed'] = curr_seed
             cfg_shuf['offline_u_source'] = 'replay'
             cfg_shuf['replay_block_shuffle'] = True
-            d1, d2, d3, log_shuf = run_experiment(cfg_shuf)
+            d1, d2, d3, _, log_shuf = run_experiment(cfg_shuf)
             metrics['BlockShuffle'].append(self._get_weight_norm(log_shuf))
             energies['BlockShuffle'].append(self._get_u_energy(log_shuf))
             

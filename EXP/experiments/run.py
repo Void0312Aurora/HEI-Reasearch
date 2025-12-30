@@ -310,9 +310,9 @@ def run_experiment(config):
     print(f"Pass A1?:           {a1_metrics['is_screened']}")
 
     # Return metrics and log for external verification scripts
-    return d1, d2, d3, log
+    return d1, d2, d3, a1_metrics, log
 
-def save_report(config, d1, d2, d3):
+def save_report(config, d1, d2, d3, a1_metrics):
     report_dir = config['output_dir']
     run_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     os.makedirs(os.path.join(report_dir, run_name), exist_ok=True)
@@ -330,6 +330,12 @@ def save_report(config, d1, d2, d3):
         f.write("\n## D3: Port Loop Amplification\n")
         for k, v in d3.items():
             f.write(f"- {k}: {v:.4f}\n")
+        f.write("\n## A1: Information Screening (Audit)\n")
+        for k, v in a1_metrics.items():
+             if isinstance(v, float):
+                 f.write(f"- {k}: {v:.4f}\n")
+             else:
+                 f.write(f"- {k}: {v}\n")
             
     print(f"Run completed. Report saved to {report_path}")
 
@@ -341,5 +347,5 @@ if __name__ == "__main__":
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
         
-    d1, d2, d3, _ = run_experiment(config)
-    save_report(config, d1, d2, d3)
+    d1, d2, d3, a1_metrics, _ = run_experiment(config)
+    save_report(config, d1, d2, d3, a1_metrics)

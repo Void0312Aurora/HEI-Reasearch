@@ -58,15 +58,22 @@ class Entity:
         
         # Infer dimensions based on kernel type
         if isinstance(self.kernel, PlasticKernel):
-            # q, p, r, vr, W
-            # W is dim_q * dim_q flattened
-            d_int = 4 * self.dim_q + self.dim_q * self.dim_q
+            # q, p, s, r, vr, W
+            # [2d + 1 + 2d + d*d]
+            d_int = 4 * self.dim_q + 1 + self.dim_q * self.dim_q
         elif isinstance(self.kernel, ResonantKernel):
-            d_int = 4 * self.dim_q
+            # q, p, s, r, vr
+            d_int = 4 * self.dim_q + 1
         elif isinstance(self.kernel, FastSlowKernel):
-             d_int = 4 * self.dim_q
+             # q, p, s
+             d_int = 2 * self.dim_q + 1
         else: # Contact/Symplectic
-            d_int = 2 * self.dim_q
+            # Contact: q, p, s => 2d + 1
+            # Symplectic: q, p => 2d
+            if isinstance(self.kernel, SymplecticKernel):
+                d_int = 2 * self.dim_q
+            else:
+                d_int = 2 * self.dim_q + 1
             
         self.x_int = torch.randn(1, d_int) * 0.1
         self.x_blanket = torch.zeros(1, 2 * self.dim_q) # [u_env, u_self]
@@ -93,12 +100,13 @@ class Entity:
         # 3. Policy / Readout (Internal -> u_self)
         u_self = self._compute_u_self()
         
-        # 4. Input Integration (Scheduler)
-        # Handle Replay Logic here or in Scheduler?
-        # For Entity Core, we delegate decision to Scheduler but we enable replay buffer access
-        
+        # 4. Input Integration (Scheduler & Memory)
         if phase == 'online':
             self.u_env_buffer.append(u_env.clone())
+        
+        # Handle Replay Injection (Override u_env if replay)
+        if sched_info.get("u_source") == "replay":
+            u_env = self._handle_replay(sched_info['step'])
             
         u_t = self.scheduler.process_input(u_env, u_self, sched_info)
         
@@ -119,7 +127,52 @@ class Entity:
             "x_blanket": self.x_blanket.detach().numpy(),
             "meta": sched_info
         }
+    
+    def _handle_replay(self, step_idx):
+        """
+        Retrieves replay input from buffer based on mode (Reverse/Shuffle/Sequential).
+        """
+        L = len(self.u_env_buffer)
+        if L == 0:
+            return torch.zeros(1, self.dim_q)
+            
+        t = step_idx
         
+        # Replay Logic
+        if self.config.get("replay_reverse", False):
+            # Time-Reverse
+            eff_t = t % L
+            replay_idx = L - eff_t - 1
+        elif self.config.get("replay_block_shuffle", False):
+            # Block Shuffle (Deterministic based on seed)
+            # Need to lazily init map?
+            if not hasattr(self, '_replay_map') or len(self._replay_map) != L:
+                self._init_block_shuffle_map(L)
+            eff_t = t % L
+            replay_idx = self._replay_map[eff_t]
+        else:
+            # Standard Loop
+            replay_idx = t % L
+            
+        return self.u_env_buffer[replay_idx]
+        
+    def _init_block_shuffle_map(self, L):
+        # Create a permutation map for blocks
+        # Use a separate RNG or standard np.random (seeded at init)
+        rng = np.random.RandomState(self.seed) 
+        block_size = max(1, int(L * 0.1))
+        num_blocks = L // block_size
+        perm = rng.permutation(num_blocks if num_blocks > 0 else 1)
+        
+        self._replay_map = np.arange(L)
+        for b_idx in range(num_blocks):
+            target_b = perm[b_idx]
+            start_src = target_b * block_size
+            start_dst = b_idx * block_size
+            size = block_size
+            if start_src + size <= L and start_dst + size <= L:
+                 self._replay_map[start_dst:start_dst+size] = np.arange(start_src, start_src+size)
+
     def _compute_u_self(self):
         # Default Mock Policy (Damping / Negative Feedback)
         # -0.05 * p
