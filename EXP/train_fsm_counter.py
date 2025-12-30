@@ -102,19 +102,21 @@ def create_model(dim_q, dim_u):
 
 # ========== TRAIN ==========
 def train_and_evaluate(entity, classifier, train_fn, val_fn, args):
-    classifier = classifier.to(DEVICE)
-    params = list(entity.parameters()) + list(classifier.parameters())
-    optimizer = optim.Adam(params, lr=1e-3)
+    # Multi-head Classifier: Logic Readout + Memory Probe
+    # Logic Readout: (B, dim_q) -> 3 (Final State)
+    # Memory Probe: (B, dim_q) -> 3 (Current Accumulator at each step)
+    classifier = nn.Linear(args.dim_q, 3).to(DEVICE)
+    linear_probe = nn.Linear(args.dim_q, 3).to(DEVICE) # Separate linear head
     
-    # Optimize Rollout
-    # torch.compile fails with double backward (due to ContactDynamics autograd.grad)
-    # So we use standard Python loop.
-    # Batch size 4096 ensures GPU saturation anyway.
+    params = list(entity.parameters()) + list(classifier.parameters()) + list(linear_probe.parameters())
+    optimizer = optim.Adam(params, lr=5e-3)
     
     best_val = 0.0
     
+    # We will track Probe Accuracy during rollout
+    
     for epoch in range(args.epochs):
-        # Generate new training data each epoch
+        # Pre-generate training data (Large Batch)
         train_u, train_y = train_fn()
         
         entity.train()
@@ -122,36 +124,58 @@ def train_and_evaluate(entity, classifier, train_fn, val_fn, args):
         
         curr = torch.zeros(train_u.shape[0], 2*args.dim_q + 1, device=DEVICE)
         
-        # Standard Loop
+        probe_loss = 0.0
+        
+        # Track expected counts mod 3 at each step for probe
+        # But data generator gives final labels.
+        # We need to re-derive intermediate counts from u.
+        # u is (B, T, dim_u), pulses are in u[:, t, 0] > 0
+        step_pulses = (train_u[:, :, 0] > 0).long() # (B, T)
+        cum_pulses = torch.cumsum(step_pulses, dim=1) % 3 # (B, T)
+        
+        # Rolling forward
         for t in range(train_u.shape[1]):
             out = entity.forward_tensor(curr, train_u[:, t, :], args.dt)
             curr = out['next_state_flat']
+            
+            # Memory Probe at each step
+            probe_logits = linear_probe(curr[:, :args.dim_q])
+            probe_loss += nn.functional.cross_entropy(probe_logits, cum_pulses[:, t])
         
+        # Final Task Loss
         logits = classifier(curr[:, :args.dim_q])
-        loss = nn.functional.cross_entropy(logits, train_y)
-        loss.backward()
+        task_loss = nn.functional.cross_entropy(logits, train_y)
+        
+        total_loss = task_loss + probe_loss / train_u.shape[1]
+        total_loss.backward()
         torch.nn.utils.clip_grad_norm_(params, 1.0)
         optimizer.step()
         
-        train_acc = (logits.argmax(dim=1) == train_y).float().mean().item()
-        
-        # Validation
-        entity.eval()
-        val_u, val_y = val_fn()
-        curr = torch.zeros(val_u.shape[0], 2*args.dim_q + 1, device=DEVICE)
-        for t in range(val_u.shape[1]):
-            out = entity.forward_tensor(curr, val_u[:, t, :], args.dt)
-            curr = out['next_state_flat'].detach()
-        
-        val_logits = classifier(curr[:, :args.dim_q])
-        val_acc = (val_logits.argmax(dim=1) == val_y).float().mean().item()
-        
-        if val_acc > best_val:
-            best_val = val_acc
-        
         if epoch % 50 == 0:
-            print(f"  Epoch {epoch}: Train={train_acc:.2f}, Val={val_acc:.2f}")
+            # Validation
+            entity.eval()
+            with torch.no_grad():
+                val_u, val_y = val_fn()
+                v_curr = torch.zeros(val_u.shape[0], 2*args.dim_q + 1, device=DEVICE)
+                for t in range(val_u.shape[1]):
+                    # Must enable grad locally for Dynamics
+                    with torch.enable_grad():
+                        out = entity.forward_tensor(v_curr, val_u[:, t, :], args.dt)
+                        v_curr = out['next_state_flat'].detach()
+                
+                v_logits = classifier(v_curr[:, :args.dim_q])
+                val_acc = (v_logits.argmax(1) == val_y).float().mean().item()
+                
+                print(f"  Epoch {epoch}: TaskAcc={val_acc:.4f}, ProbeLoss={probe_loss.item()/train_u.shape[1]:.4f}")
+                
+                if val_acc > best_val:
+                    best_val = val_acc
+                    # Ensure 'checkpoints' directory exists if saving
+                    # import os
+                    # os.makedirs('checkpoints', exist_ok=True)
+                    # torch.save(entity.state_dict(), f"checkpoints/fsm_best.pth")
         
+        # Early stopping check (outside the print block to ensure it's always checked)
         if val_acc > 0.95:
             print(f"  Early stop at epoch {epoch}: Val={val_acc:.2f}")
             break
