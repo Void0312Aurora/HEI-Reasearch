@@ -116,9 +116,10 @@ def train_mnist():
         transforms.Normalize((0.1307,), (0.3081,))
     ])
     
-    # Use FakeData for offline verification
-    train_dataset = datasets.FakeData(size=100, image_size=(1, 28, 28), num_classes=10, transform=transform)
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    # Use ./data for download
+    os.makedirs('./data', exist_ok=True)
+    train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     
     # Model
     model = CognitiveAgent(dim_q=64)
@@ -127,7 +128,7 @@ def train_mnist():
     # Supervisor
     supervisor = TrainingSupervisor(use_small_gain=False, use_trend=True) # Check Trend
     
-    epochs = 2 # Demo run
+    epochs = 5 # Real training run
     history = {'acc': [], 'loss': [], 'rollback': 0}
     
     for epoch in range(epochs):
