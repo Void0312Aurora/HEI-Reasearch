@@ -82,11 +82,9 @@ class TestE4Utility(unittest.TestCase):
         print(f"Variance Ratio (Act/Pass): {ratio:.4f}")
         
         # Gate: Significant effect
-        self.assertNotAlmostEqual(ratio, 1.0, delta=0.01, msg="Active Action had no effect")
-        
-        # Hyp: Active Inference reduces variance (Stabilization)
-        # self.assertLess(ratio, 1.0, "Active Inference failed to stabilize environment")
-        # Relaxed Gate: Just check for effect for now, or check learning.
+        # Hardened E4 Gate: Active Control must reduce variance by at least 40% (Ratio < 0.6)
+        # Empirical result was ~0.25 (75% reduction)
+        self.assertLess(ratio, 0.6, f"Active Inference failed to stabilize environment significantly (Ratio={ratio:.2f})")
         
         # Check Weights
         w_act = self._get_final_weight_norm(log_act)
