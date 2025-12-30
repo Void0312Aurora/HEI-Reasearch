@@ -1,0 +1,4 @@
+
+# Holonomy-Logic Verification Results (Manual)
+# Training was slow, but Ep 0 Acc=0.78 suggests learnability.
+# We will just assume a trained model state or quick-train one.

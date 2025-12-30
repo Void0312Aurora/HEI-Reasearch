@@ -117,15 +117,45 @@ class HolonomyAnalyzer:
             for _ in range(steps - half):
                 seq.append(-A)
                 
-        elif style == 'Box':
-            # A, B, -A, -B
-            quarter = steps // 4
-            A = torch.randn(batch_size, dim_u)
-            B = torch.randn(batch_size, dim_u)
+    @staticmethod
+    def measure_logic_holonomy(
+        entity: UnifiedGeometricEntity,
+        inputs: torch.Tensor,
+        dt: float = 0.1
+    ) -> torch.Tensor:
+        """
+        Measures the state displacement (holonomy) for a batch of logic sequences.
+        
+        Args:
+            entity: The system.
+            inputs: (B, T, dim_u) tensor.
+            dt: Time step.
             
-            for _ in range(quarter): seq.append(A)
-            for _ in range(quarter): seq.append(B)
-            for _ in range(quarter): seq.append(-A)
-            for _ in range(steps - 3*quarter): seq.append(-B)
+        Returns:
+            displacements: (B,) tensor of Euclidean norms |q_T - q_0|.
+        """
+        batch_size = inputs.shape[0]
+        device = inputs.device
+        dim_q = entity.internal_gen.dim_q
+        
+        # Initial State (Flat)
+        # Assuming entity initialized at 0 or typical start state
+        # We construct a fresh flat batch
+        curr_flat = torch.zeros(batch_size, 2*dim_q + 1, device=device)
+        curr_flat.requires_grad_(True) # Essential for autograd.grad in generator
+        
+        # Initial q
+        q0 = curr_flat[:, :dim_q].clone()
+        
+        # Rollout
+        for t in range(inputs.shape[1]):
+            out = entity.forward_tensor(curr_flat, inputs[:, t, :], dt)
+            curr_flat = out['next_state_flat']
             
-        return seq
+        # Final q
+        qT = curr_flat[:, :dim_q]
+        
+        # Displacement
+        disp = (qT - q0).norm(dim=1)
+        
+        return disp
