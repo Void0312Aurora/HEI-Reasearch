@@ -19,17 +19,32 @@ class TransitionMap(nn.Module):
         # Map flat state -> flat state
         return self.linear(state_i.flat)
 
+class AtlasRouter(nn.Module):
+    """
+    Gating Network: Selects active charts based on global 'Context' (or q).
+    """
+    def __init__(self, dim_q: int, num_charts: int):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim_q, 16),
+            nn.ReLU(),
+            nn.Linear(16, num_charts),
+            nn.Softmax(dim=-1)
+        )
+        
+    def forward(self, q: torch.Tensor) -> torch.Tensor:
+        """Returns weights (B, num_charts)"""
+        return self.net(q)
+
 class Atlas(nn.Module):
     """
-    Manages K Charts.
+    Manages K Charts with Router.
     """
     def __init__(self, num_charts: int, dim_q: int):
         super().__init__()
         self.num_charts = num_charts
         self.dim_q = dim_q
         self.states = []
-        # We need to persist states?
-        # Or does Atlas hold states? Yes.
         for _ in range(num_charts):
             self.states.append(ContactState(dim_q))
             
@@ -38,6 +53,13 @@ class Atlas(nn.Module):
         
         # Integrator
         self.integrator = ContactIntegrator()
+        
+        # Router
+        self.router = AtlasRouter(dim_q, num_charts)
+        
+    def get_active_weights(self, q_context: torch.Tensor) -> torch.Tensor:
+        """Wrapper for router"""
+        return self.router(q_context)
         
     def add_transition(self, i: int, j: int):
         key = f"{i}_{j}"
