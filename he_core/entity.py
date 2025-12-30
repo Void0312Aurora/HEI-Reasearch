@@ -125,6 +125,7 @@ class Entity:
             "action": action,
             "x_int": self.x_int.detach().numpy(),
             "x_blanket": self.x_blanket.detach().numpy(),
+            "u_t": u_t.detach().numpy(),
             "meta": sched_info
         }
     

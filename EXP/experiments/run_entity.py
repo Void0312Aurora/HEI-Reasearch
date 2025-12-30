@@ -49,16 +49,26 @@ def run_experiment_entity(config):
         log['x_int'].append(out['x_int']) # [1, Dim]
         log['x_ext_proxy'].append(x_ext_proxy) # [4]
         log['x_blanket'].append(out['x_blanket']) # [1, 2*Dim]
+        log['u_t'].append(out['u_t'])
         log['step_meta'].append(out['meta'])
         
         obs = obs_next
         
     # Analysis (Reused from metrics)
+    # Analysis (Reused from metrics)
     print("Computing metrics...")
-    traj_x_int = torch.tensor(np.array(log['x_int'])).squeeze(1)
+    traj_x_int = torch.tensor(np.array(log['x_int'])).squeeze(1) # [T, Dim]
     
-    # D1 (Approx)
-    d1 = compute_d1_offline_non_degenerate(traj_x_int, torch.zeros_like(traj_x_int)) # Velocity approx zero? or use difference.
+    # D1 (Approx Velocity via Difference)
+    if traj_x_int.shape[0] > 1:
+        traj_v = traj_x_int[1:] - traj_x_int[:-1]
+        # Pad last to match T
+        traj_v = torch.cat([traj_v, traj_v[-1:]], dim=0)
+    else:
+        traj_v = torch.zeros_like(traj_x_int)
+        
+    # Metrics expect [T, B, Dim]
+    d1 = compute_d1_offline_non_degenerate(traj_x_int.unsqueeze(1), traj_v.unsqueeze(1))
     
     # D3 (Approx)
     # Recover u_self? Entity state doesn't explicit log u_self in dict, but it's in x_blanket
