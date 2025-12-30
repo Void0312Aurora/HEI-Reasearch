@@ -130,6 +130,11 @@ class Entity:
             "x_blanket": self.x_blanket.detach().numpy(),
             "u_t": u_t.detach().numpy(),
             "pred_x": pred_x.detach().numpy().flatten() if isinstance(pred_x, torch.Tensor) else pred_x,
+            # SPEC v0.2 Fields
+            "sensory": u_env.detach().numpy().flatten(),
+            "active": u_self.detach().numpy().flatten(),
+            # pred_error is implicitly u_env - pred_x if pred_x exists
+            "pred_error": (u_env.detach().numpy().flatten() - pred_x.detach().numpy().flatten()) if isinstance(pred_x, torch.Tensor) else np.zeros_like(action),
             "meta": sched_info
         }
     
