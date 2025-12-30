@@ -60,6 +60,10 @@ class ContactState:
     def flat(self) -> torch.Tensor:
         """Full state vector [q, p, s]"""
         return self._data
+    
+    @flat.setter
+    def flat(self, value: torch.Tensor):
+        self._data = value
         
     def clone(self):
         return ContactState(self.dim_q, self.batch_size, self.device, self._data.clone())

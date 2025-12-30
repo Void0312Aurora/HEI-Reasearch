@@ -1,0 +1,92 @@
+{
+  "phase": "14.4",
+  "title": "FAIL/PASS Example Pairs",
+  "examples": [
+    {
+      "case": "FAIL",
+      "config": {
+        "dim_q": 2,
+        "learnable_coupling": true,
+        "num_charts": 2,
+        "damping": 0.1
+      },
+      "wiring_gain": 2.0,
+      "gain_results": {
+        "gain_A_to_B": 4654.541721449211,
+        "gain_B_to_A": 73622.46706999188,
+        "loop_gain": 342678844.6132978,
+        "stable": false
+      },
+      "stl_results": {
+        "A1_boundedness": {
+          "A": -20216.91015625,
+          "B": -20083.609375,
+          "overall": -20216.91015625,
+          "satisfied": false
+        },
+        "A_to_B_liveness": {
+          "source_active": true,
+          "source_active_t": 0,
+          "target_responded": true,
+          "max_target_response": 19.431425094604492,
+          "robustness": 19.42142509460449
+        },
+        "B_to_A_liveness": {
+          "source_active": true,
+          "source_active_t": 0,
+          "target_responded": true,
+          "max_target_response": 19.489900588989258,
+          "robustness": 19.479900588989256
+        },
+        "all_satisfied": false
+      },
+      "expected_outcome": "EXPLOSION or UNBOUNDED",
+      "actual_outcome": "FAIL"
+    },
+    {
+      "case": "PASS",
+      "config": {
+        "dim_q": 2,
+        "learnable_coupling": false,
+        "num_charts": 1,
+        "damping": 10.0
+      },
+      "wiring_gain": 0.01,
+      "gain_results": {
+        "gain_A_to_B": 12.091677708589009,
+        "gain_B_to_A": 43.7469960719433,
+        "loop_gain": 528.9745772208478,
+        "stable": false
+      },
+      "stl_results": {
+        "A1_boundedness": {
+          "A": 4.9674577713012695,
+          "B": 4.986382007598877,
+          "overall": 4.9674577713012695,
+          "satisfied": true
+        },
+        "A_to_B_liveness": {
+          "source_active": true,
+          "source_active_t": 0,
+          "target_responded": true,
+          "max_target_response": 0.013617761433124542,
+          "robustness": 0.003617761433124542
+        },
+        "B_to_A_liveness": {
+          "source_active": true,
+          "source_active_t": 0,
+          "target_responded": true,
+          "max_target_response": 0.032205842435359955,
+          "robustness": 0.022205842435359953
+        },
+        "all_satisfied": true
+      },
+      "expected_outcome": "STABLE and BOUNDED",
+      "actual_outcome": "FAIL_UNEXPECTED"
+    }
+  ],
+  "summary": {
+    "fail_case_confirmed": true,
+    "pass_case_confirmed": false
+  }
+}
