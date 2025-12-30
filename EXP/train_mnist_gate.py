@@ -90,7 +90,7 @@ class CognitiveAgent(nn.Module):
         
         # Evolve
         dt = 0.1
-        steps = 10 # Short inference time
+        steps = 2 # Short inference time (Debug: reduced from 10)
         energies = []
         
         for _ in range(steps):
@@ -113,21 +113,15 @@ import argparse
 
 def train_mnist():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, default='standard', choices=['standard', 'baseline_static', 'ablation_no_diss'])
+    parser.add_argument('--mode', type=str, default='gate_standard', choices=['baseline_static', 'ablation_free', 'gate_standard'])
     parser.add_argument('--epochs', type=int, default=5)
-    parser.add_argument('--lambda_diss', type=float, default=0.1)
+    parser.add_argument('--lambda_penalty', type=float, default=1.0) # Penalty strength when gate fails
     parser.add_argument('--drive_scale', type=float, default=1.0)
     parser.add_argument('--batch_size', type=int, default=64)
     args = parser.parse_args()
 
-    print(f"=== Phase 18.3/4: MNIST Dynamics Training ===")
-    print(f"Mode: {args.mode}, Lambda: {args.lambda_diss}, Drive: {args.drive_scale}")
-    
-    # Data
-    # transform = transforms.Compose([
-    #     transforms.ToTensor(),
-    #     transforms.Normalize((0.1307,), (0.3081,))
-    # ])
+    print(f"=== Phase 19: MNIST Gate-Stability Training ===")
+    print(f"Mode: {args.mode}, Penalty: {args.lambda_penalty}, Drive: {args.drive_scale}")
     
     # Custom Transform function (Tensor -> Tensor)
     def mnist_norm(img):
@@ -137,7 +131,7 @@ def train_mnist():
     from he_core.datasets import RawMNIST
     
     os.makedirs('./data', exist_ok=True)
-    # train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
+    # Force single process loading 
     train_dataset = RawMNIST('./data/MNIST', train=True, transform_func=mnist_norm)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
     
@@ -145,23 +139,18 @@ def train_mnist():
     model = CognitiveAgent(dim_q=64)
     # Inject Drive Scale
     model.drive_scale = args.drive_scale
-    model.mode = args.mode # Pass mode to model if needed (for static baseline)
+    model.mode = args.mode 
     
-    # For Baseline Static, we might need a direct head if structure is different
-    # Or we modify CognitiveAgent to handle it.
     if args.mode == 'baseline_static':
-        # Modify model to bypass dynamics: Adapter -> Head
-        # Adapter out: 32. Classifier in: 64.
-        # Need a bridge.
         model.static_bridge = nn.Linear(32, 64)
-        model.to(torch.device("cpu")) # CPU for safety or GPU if avail
+        model.to(torch.device("cpu"))
     
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
-    # Supervisor
-    supervisor = TrainingSupervisor(use_small_gain=False, use_trend=True) 
+    # Supervisor (For monitoring)
+    # We will implement custom gate logic in the loop
     
-    history = {'acc': [], 'loss': [], 'rollback': 0, 'metrics': []}
+    history = {'acc': [], 'loss': [], 'gating_events': 0, 'metrics': []}
     
     for epoch in range(args.epochs):
         model.train()
@@ -170,20 +159,22 @@ def train_mnist():
         
         epoch_metrics = {'u_norm': 0.0, 'q_norm': 0.0, 'p_norm': 0.0, 'k_trend': 0.0}
         steps = 0
+        gating_count = 0
         
         for batch_idx, (data, target) in enumerate(train_loader):
             optimizer.zero_grad()
             
             # Forward
             if args.mode == 'baseline_static':
-                # Direct Path
                 u = model.adapter.get_drive(data)
                 q_proxy = torch.tanh(model.static_bridge(u))
                 logits = model.classifier(q_proxy)
                 loss_diss = torch.tensor(0.0)
+                energies_t = None
             else:
                 # Dynamic Path
                 logits, energy_seq = model(data)
+                energies_t = energy_seq.T
                 
                 # Metrics
                 with torch.no_grad():
@@ -192,21 +183,34 @@ def train_mnist():
                     epoch_metrics['p_norm'] += model.entity.state.p.norm(dim=1).mean().item()
                     steps += 1
                 
-                # Dissipative Loss
-                if args.mode == 'ablation_no_diss':
-                    loss_diss = torch.tensor(0.0)
-                else:
-                    energies_t = energy_seq.T
-                    loss_diss = SelfSupervisedLosses.l1_dissipative_loss(energies_t)
+                # Dissipative Loss (Computed but conditionally applied)
+                loss_diss = SelfSupervisedLosses.l1_dissipative_loss(energies_t)
             
             # Classification Loss
             loss_cls = nn.functional.cross_entropy(logits, target)
             
-            # Total
-            lambda_d = args.lambda_diss if args.mode == 'standard' else 0.0
-            loss = loss_cls + lambda_d * loss_diss
+            # GATED LOGIC
+            final_loss = loss_cls
             
-            loss.backward()
+            if args.mode == 'gate_standard':
+                # Check Gate: Is Energy Exploding?
+                # Simple heuristic: If loss_diss (monotonicity violation) is high, clamp it down.
+                # Ideally we check Trend, but per-batch trend is noisy.
+                # Let's use the raw dissipative loss as the "Violation Metric".
+                # If loss_diss > 0 (meaning energy increased), we penalize.
+                # If loss_diss < 0 (energy decreased), we let it be (essentially ignored or 0'd by ReLU in loss def).
+                
+                # Note: l1_dissipative_loss returns: ReLU( (K_next - K_curr) + margin ).mean()
+                # So if it's > 0, strict monotonicity is violated.
+                
+                if loss_diss > 1e-3: # Tolerance threshold (Relaxed from 1e-4)
+                    final_loss = loss_cls + args.lambda_penalty * loss_diss
+                    gating_count += 1
+            
+            elif args.mode == 'ablation_free':
+                 pass # Never add dissipative loss
+            
+            final_loss.backward()
             optimizer.step()
             
             pred = logits.argmax(dim=1, keepdim=True)
@@ -214,11 +218,13 @@ def train_mnist():
             total += data.shape[0]
             
             if batch_idx % 100 == 0:
-                print(f"Epoch {epoch} [{batch_idx}/{len(train_loader)}]: Loss={loss.item():.4f} (Cls={loss_cls.item():.4f}, Diss={loss_diss.item():.4f})")
+                d_val = loss_diss.item()
+                print(f"Epoch {epoch} [{batch_idx}/{len(train_loader)}]: Loss={final_loss.item():.4f} (Cls={loss_cls.item():.4f}, Diss={d_val:.4f})")
                 
         acc = 100. * correct / total
-        print(f"Epoch {epoch}: Accuracy={acc:.2f}%")
+        print(f"Epoch {epoch}: Accuracy={acc:.2f}%, Gating Events={gating_count}")
         history['acc'].append(acc)
+        history['gating_events'] += gating_count
         
         # Avg Metrics
         if steps > 0:
@@ -228,7 +234,7 @@ def train_mnist():
         
     print("Training Complete.")
     
-    run_name = f"phase18_result_{args.mode}.json"
+    run_name = f"phase19_result_{args.mode}.json"
     with open(run_name, 'w') as f:
         json.dump(history, f, indent=2)
 

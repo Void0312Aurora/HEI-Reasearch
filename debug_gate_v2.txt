@@ -1,0 +1,24 @@
+DEBUG: Module Loading
+DEBUG: Script Entry
+=== Phase 19: MNIST Gate-Stability Training ===
+Mode: ablation_free, Penalty: 1.0, Drive: 1.0
+Loading RawMNIST from ./data/MNIST/raw/train-images-idx3-ubyte.gz...
+Loaded 60000 samples.
+Epoch 0 [0/938]: Loss=2.3288 (Cls=2.3288, Diss=0.0038)
+Epoch 0 [100/938]: Loss=2.3004 (Cls=2.3004, Diss=0.0038)
+Epoch 0 [200/938]: Loss=2.3034 (Cls=2.3034, Diss=0.0038)
+Epoch 0 [300/938]: Loss=2.3074 (Cls=2.3074, Diss=0.0038)
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_gate.py", line 244, in <module>
+    train_mnist()
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_gate.py", line 213, in train_mnist
+    final_loss.backward()
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/_tensor.py", line 647, in backward
+    torch.autograd.backward(
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/autograd/__init__.py", line 347, in backward
+    grad_tensors_ = _make_grads(tensors, grad_tensors_, is_grads_batched=False)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/autograd/__init__.py", line 197, in _make_grads
+    out_numel_is_1 = out.numel() == 1
+                     ^^^^^^^^^^^
+KeyboardInterrupt

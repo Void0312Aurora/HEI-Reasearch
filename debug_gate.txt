@@ -1,0 +1,58 @@
+DEBUG: Module Loading
+DEBUG: Script Entry
+=== Phase 19: MNIST Gate-Stability Training ===
+Mode: ablation_free, Penalty: 1.0, Drive: 1.0
+Loading RawMNIST from ./data/MNIST/raw/train-images-idx3-ubyte.gz...
+Loaded 60000 samples.
+Epoch 0 [0/1875]: Loss=2.2933 (Cls=2.2933, Diss=0.0045)
+Epoch 0 [100/1875]: Loss=2.3101 (Cls=2.3101, Diss=0.0045)
+Epoch 0 [200/1875]: Loss=2.2921 (Cls=2.2921, Diss=0.0045)
+Epoch 0 [300/1875]: Loss=2.2991 (Cls=2.2991, Diss=0.0045)
+Epoch 0 [400/1875]: Loss=2.2988 (Cls=2.2988, Diss=0.0045)
+Epoch 0 [500/1875]: Loss=2.2963 (Cls=2.2963, Diss=0.0045)
+Epoch 0 [600/1875]: Loss=2.2970 (Cls=2.2970, Diss=0.0045)
+Epoch 0 [700/1875]: Loss=2.3068 (Cls=2.3068, Diss=0.0045)
+Epoch 0 [800/1875]: Loss=2.3012 (Cls=2.3012, Diss=0.0045)
+Epoch 0 [900/1875]: Loss=2.2952 (Cls=2.2952, Diss=0.0045)
+Epoch 0 [1000/1875]: Loss=2.3131 (Cls=2.3131, Diss=0.0045)
+Epoch 0 [1100/1875]: Loss=2.3047 (Cls=2.3047, Diss=0.0045)
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_gate.py", line 244, in <module>
+    train_mnist()
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_gate.py", line 176, in train_mnist
+    logits, energy_seq = model(data)
+                         ^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_gate.py", line 73, in forward
+    u_ext = self.adapter.get_drive(img) * drive_scale # (B, dim_u)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/HEI-Research/HEI/he_core/adapters.py", line 52, in get_drive
+    return self.encoder(x)
+           ^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/modules/activation.py", line 135, in forward
+    return F.relu(input, inplace=self.inplace)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torch/nn/functional.py", line 1701, in relu
+    result = torch.relu(input)
+             ^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
