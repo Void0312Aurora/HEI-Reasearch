@@ -110,6 +110,61 @@ class NetworkSTLMonitor:
         return report
 
 
+import numpy as np
+
+class RobustnessTrendMonitor:
+    """
+    Long-term Robustness Trend Monitor (Phase 16.3).
+    Tracks simple STL robustness values over time to detect degradation trends.
+    Useful for Self-Supervision signals (e.g. Hinge Loss slope).
+    """
+    def __init__(self, window_size: int = 50):
+        self.window_size = window_size
+        self.history: List[float] = []
+        
+    def add_sample(self, robustness: float):
+        self.history.append(robustness)
+        
+    def get_trend(self) -> Dict[str, float]:
+        """
+        Compute linear trend of robustness over the last window.
+        Returns:
+        - slope: Positive = Improving margin, Negative = Degrading.
+        - current_value: Latest value.
+        - mean_value: Average over window.
+        """
+        if len(self.history) < 2:
+            return {'slope': 0.0, 'current': 0.0, 'mean': 0.0}
+            
+        data = self.history[-self.window_size:]
+        n = len(data)
+        
+        # Simple linear regression slope
+        # y = mx + c
+        xs = np.arange(n)
+        ys = np.array(data)
+        
+        if n > 2:
+            # slope = cov(x,y) / var(x)
+            # var(x) for 0..n-1 is (n^2 - 1)/12
+            x_mean = (n - 1) / 2
+            y_mean = np.mean(ys)
+            numerator = np.sum((xs - x_mean) * (ys - y_mean))
+            denominator = np.sum((xs - x_mean)**2)
+            slope = numerator / (denominator + 1e-9)
+        else:
+            slope = ys[-1] - ys[0]
+            
+        return {
+            'slope': float(slope),
+            'current': float(ys[-1]),
+            'mean': float(np.mean(ys))
+        }
+    
+    def reset(self):
+        self.history = []
+
+
 if __name__ == "__main__":
     # Example usage
     from he_core.wiring import Edge, WiringDiagram, TwoEntityNetwork

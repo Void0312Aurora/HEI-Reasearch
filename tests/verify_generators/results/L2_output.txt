@@ -1,0 +1,9 @@
+=== Phase 16.2: L2 Transfer Diagnostics (Holonomy) ===
+
+--- Test A: Random Transitions (Untrained) ---
+  Mean Error: 2.3771
+  Result: HIGH ERROR (Expected for untrained)
+
+--- Test B: Consistent Transitions (Injected) ---
+  Mean Error: 0.000000
+  Result: PASS (Consistent loop verified)
