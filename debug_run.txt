@@ -1,0 +1,9 @@
+=== Phase 17.1: Training Dynamics (Loop A) ===
+Training Dynamics (Gain + Dissipation)...
+Traceback (most recent call last):
+  File "/home/void0312/HEI-Research/HEI/EXP/train_dynamics_L1.py", line 240, in <module>
+    train_dynamics_loop()
+  File "/home/void0312/HEI-Research/HEI/EXP/train_dynamics_L1.py", line 186, in train_dynamics_loop
+    best_state_dict = copy.deepcopy(network.state_dict())
+                      ^^^^
+NameError: name 'copy' is not defined

@@ -20,7 +20,9 @@ import json
 
 from he_core.wiring import Edge, WiringDiagram, TwoEntityNetwork
 from he_core.losses import SelfSupervisedLosses
+from he_core.supervisor import TrainingSupervisor
 from EXP.diag.network_gain import estimate_network_gain
+import copy
 
 def get_proxy_loop_gain(network):
     """
@@ -99,12 +101,23 @@ def train_dynamics_loop():
     optimizer = optim.Adam(params, lr=0.05) # Increased LR
     
     # Training Loop
-    epochs = 300 # Increased Epochs
+    epochs = 20 # Enough for verification
     steps_per_epoch = 20
-    
+    dt = 0.1 # Time step for rollouts
+
     history = {'loss': [], 'loop_gain_proxy': [], 'real_loop_gain': []}
     
     # ... Simplified Training ...
+    
+    # Supervisor
+    supervisor = TrainingSupervisor(use_small_gain=True, use_trend=False) 
+    
+    # Checkpoint
+    best_loss = float('inf')
+    best_state_dict = None
+    
+    rollback_count = 0
+    stop_count = 0
     
     print("Training Dynamics (Gain + Dissipation)...")
     
@@ -123,15 +136,13 @@ def train_dynamics_loop():
     for epoch in range(epochs):
         optimizer.zero_grad()
         
-        # 1. Proxy Gain Loss (Structural stability)
+        # 1. Proxy Gain (Structural)
         proxy_gain = get_proxy_loop_gain(network)
         diff = torch.relu(proxy_gain - 0.9)
         loss_gain = diff + 10.0 * diff.pow(2)
         
-        # 2. Dissipative Loss (Physical stability)
-        # Rollout short trajectory for each entity
+        # 2. Dissipative (Physical - Kinetic)
         loss_dissipative = 0.0
-        
         for name, ent in network.entities.items():
             # Reset to random state
             ent.reset() # detach?
@@ -145,9 +156,13 @@ def train_dynamics_loop():
                 u_zero = torch.zeros(1, ent.dim_u, device=ent.state.device)
                 out = differentiable_step(ent, u_zero, dt) # Updates ent.state
                 
-                # H_val
-                H = out['H_val']
-                energies.append(H)
+                # H_val (Total Energy)
+                # But Phase 16 established Mechanical Energy (K) as the monotonic signal
+                # for the dissipative configuration (Null Potential equivalent).
+                # Even with Potential, preventing K explosion is a good proxy for "calmness".
+                # Let's use K = 0.5 * p^2
+                K = 0.5 * (out['next_state_flat'][0, ent.dim_q:2*ent.dim_q]**2).sum()
+                energies.append(K.unsqueeze(0))
                 
             energies = torch.cat(energies)
             # Minimize energy increase
@@ -160,11 +175,41 @@ def train_dynamics_loop():
         loss.backward()
         optimizer.step()
         
-        history['loss'].append(loss.item())
+        # Tracking
+        curr_loss = loss.item()
+        history['loss'].append(curr_loss)
         history['loop_gain_proxy'].append(proxy_gain.item())
         
-        if epoch % 20 == 0:
-            print(f"Epoch {epoch}: Loss={loss.item():.4f}, Gain={proxy_gain.item():.4f}, Diss={loss_dissipative.item():.4f}")
+        # Checkpoint (Save Best)
+        if curr_loss < best_loss:
+            best_loss = curr_loss
+            # Save deep copy of state dict
+            best_state_dict = copy.deepcopy(network.state_dict())
+            
+        # Gating Every 10 Epochs
+        if epoch % 10 == 0:
+            # Metrics for Supervisor
+            metrics = {
+                'loop_gain': proxy_gain.item(),
+                # 'robustness_slope': ... (Requires Monitor)
+            }
+            gate_res = supervisor.check_gates(metrics)
+            action = supervisor.decide_action(gate_res)
+            
+            print(f"Epoch {epoch}: Loss={curr_loss:.4f}, Gain={metrics['loop_gain']:.4f}, Action={action}")
+            
+            if action == 'ROLLBACK':
+                print("  !!! ROLLBACK TRIGGERED !!!")
+                rollback_count += 1
+                if best_state_dict is not None:
+                    network.load_state_dict(best_state_dict)
+                    print("  Restored best model.")
+                else:
+                    print("  No best model to restore. Continuing...")
+            elif action == 'STOP':
+                print("  !!! STOP TRIGGERED !!!")
+                stop_count += 1
+                break
             
     # Verification
     print("\nTraining Done. Verifying Real Gain...")
@@ -177,10 +222,12 @@ def train_dynamics_loop():
         'initial_proxy': history['loop_gain_proxy'][0],
         'final_proxy': history['loop_gain_proxy'][-1],
         'real_gain': real_gain,
-        'success': real_gain < 1.0
+        'success': real_gain < 1.0,
+        'rollback_count': rollback_count,
+        'stop_count': stop_count
     }
     
-    with open('phase17_loopA_result.json', 'w') as f:
+    with open('phase17_supervised_run.json', 'w') as f:
         json.dump(result, f, indent=2)
 
     # Plot

@@ -1,0 +1,11 @@
+=== Phase 17.1: Training Dynamics (Loop A) ===
+Training Dynamics (Gain + Dissipation)...
+Epoch 0: Loss=2295.1997, Gain=16.0000, Action=ROLLBACK
+  !!! ROLLBACK TRIGGERED !!!
+  Restored best model.
+Epoch 10: Loss=18.4732, Gain=2.2101, Action=ROLLBACK
+  !!! ROLLBACK TRIGGERED !!!
+  Restored best model.
+
+Training Done. Verifying Real Gain...
+Real Energy Loop Gain: 678.7716
