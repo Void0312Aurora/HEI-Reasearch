@@ -1,0 +1,9 @@
+DEBUG: Module Loading
+DEBUG: Script Entry
+usage: train_mnist_adaptive.py [-h]
+                               [--mode {baseline_static,ablation_free,gate_standard}]
+                               [--epochs EPOCHS]
+                               [--lambda_penalty LAMBDA_PENALTY]
+                               [--drive_scale DRIVE_SCALE]
+                               [--batch_size BATCH_SIZE]
+train_mnist_adaptive.py: error: argument --mode: invalid choice: 'adaptive' (choose from 'baseline_static', 'ablation_free', 'gate_standard')
