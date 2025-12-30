@@ -16,8 +16,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-# from torchvision import datasets, transforms
-# import matplotlib.pyplot as plt
+from torchvision import datasets, transforms
+import matplotlib.pyplot as plt
 import os
 import json
 
@@ -124,21 +124,13 @@ def train_mnist():
     print(f"Mode: {args.mode}, Lambda: {args.lambda_diss}, Drive: {args.drive_scale}")
     
     # Data
-    # transform = transforms.Compose([
-    #     transforms.ToTensor(),
-    #     transforms.Normalize((0.1307,), (0.3081,))
-    # ])
-    
-    # Custom Transform function (Tensor -> Tensor)
-    def mnist_norm(img):
-        # inputs are [0,1] float tensors from RawMNIST
-        return (img - 0.1307) / 0.3081
-
-    from he_core.datasets import RawMNIST
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))
+    ])
     
     os.makedirs('./data', exist_ok=True)
-    # train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
-    train_dataset = RawMNIST('./data/MNIST', train=True, transform_func=mnist_norm)
+    train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     
     # Model
