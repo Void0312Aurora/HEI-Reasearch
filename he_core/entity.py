@@ -99,7 +99,8 @@ class Entity:
             
             
         # 3. Policy / Readout (Internal -> u_self)
-        u_self = self._compute_u_self(u_env)
+        # We also want to capture the prediction 'hat_x' if available
+        u_self, pred_x = self._compute_u_self(u_env)
         
         # 4. Input Integration (Scheduler & Memory)
         if phase == 'online':
@@ -127,6 +128,7 @@ class Entity:
             "x_int": self.x_int.detach().numpy(),
             "x_blanket": self.x_blanket.detach().numpy(),
             "u_t": u_t.detach().numpy(),
+            "pred_x": pred_x.detach().numpy().flatten() if isinstance(pred_x, torch.Tensor) else pred_x,
             "meta": sched_info
         }
     
@@ -178,7 +180,7 @@ class Entity:
     def _compute_u_self(self, u_env=None):
         # 1. Config Check
         if self.config.get("force_u_self_zero", False):
-            return torch.zeros(1, self.dim_q)
+            return torch.zeros(1, self.dim_q), np.zeros(self.dim_q)
             
         dim = self.dim_q
         
@@ -210,7 +212,7 @@ class Entity:
             gain = self.config.get("active_gain", 1.0)
             u_active = -1.0 * gain * error
             
-            return u_active
+            return u_active, pred_x
             
         # Fallback: Passive Damping
-        return -0.05 * p_curr
+        return -0.05 * p_curr, np.zeros(dim)
