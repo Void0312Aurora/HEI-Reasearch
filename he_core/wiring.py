@@ -110,6 +110,11 @@ class TwoEntityNetwork(nn.Module):
                 'A': torch.zeros(1, self.entity_A.dim_u),
                 'B': torch.zeros(1, self.entity_B.dim_u)
             }
+            # For port-based entities, store port output (y) separately
+            self._prev_outputs = {
+                'A': torch.zeros(1, self.entity_A.dim_u),
+                'B': torch.zeros(1, self.entity_B.dim_u)
+            }
             
         # 2. Route signals based on wiring
         routed_inputs = {}
@@ -122,9 +127,11 @@ class TwoEntityNetwork(nn.Module):
                 u_total += external_obs[entity_id]
                 
             # Add routed signals from other entities
+            # Use port output (y) if available, otherwise use action
             for edge in incoming_edges:
-                source_action = self._prev_actions[edge.source_id]
-                u_total += edge.gain * source_action
+                source_entity = self.entities[edge.source_id]
+                source_output = self._prev_outputs.get(edge.source_id, self._prev_actions[edge.source_id])
+                u_total += edge.gain * source_output
                 
             routed_inputs[entity_id] = u_total
             
@@ -153,8 +160,19 @@ class TwoEntityNetwork(nn.Module):
                 'state_flat': out['next_state_flat']
             }
             
-        # Update previous actions
+        # Update previous actions and outputs
         self._prev_actions = new_actions
+        
+        # Store port outputs (y) for routing
+        new_outputs = {}
+        for entity_id in ['A', 'B']:
+            entity = self.entities[entity_id]
+            if hasattr(entity, 'use_port_interface') and entity.use_port_interface:
+                # Get port output y from current state
+                new_outputs[entity_id] = entity.interface.write_y(entity.state).detach()
+            else:
+                new_outputs[entity_id] = new_actions[entity_id]
+        self._prev_outputs = new_outputs
         
         return results
     

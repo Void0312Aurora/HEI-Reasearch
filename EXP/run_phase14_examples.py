@@ -93,7 +93,7 @@ def run_pass_case() -> dict:
     return {
         'case': 'PASS',
         'config': config,
-        'wiring_gain': 0.01,
+        'wiring_gain': edges[0].gain,  # Use actual edge gain
         'gain_results': gain_results,
         'stl_results': stl_results,
         'expected_outcome': 'STABLE and BOUNDED',

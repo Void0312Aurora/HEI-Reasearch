@@ -1,0 +1,8 @@
+--- Long Rollout (5000 steps) ---
+/home/void0312/HEI-Research/HEI/EXP/diag/network_monitors.py:28: UserWarning: Creating a tensor from a list of numpy.ndarrays is extremely slow. Please consider converting the list to a single numpy.ndarray with numpy.array() before converting to a tensor. (Triggered internally at /pytorch/torch/csrc/utils/tensor_new.cpp:253.)
+  action_norms = torch.tensor([step['action'].flatten() for step in traj])
+  A1 Boundedness: True
+  A1 Min Robustness: 4.9845
+  All Satisfied: True
+  Final Energy Loop Gain: 0.174274
+  Stable: True

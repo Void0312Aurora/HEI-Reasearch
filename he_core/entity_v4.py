@@ -50,8 +50,20 @@ class UnifiedGeometricEntity(nn.Module):
         self.integrator = ContactIntegrator()
         
         # 5. Interfaces
-        # Default ActionInterface
-        self.interface = ActionInterface(self.dim_q, self.dim_u)
+        # Support PortInterface (Phase 15) or legacy ActionInterface
+        use_port = config.get('use_port_interface', False)
+        if use_port:
+            from he_core.interfaces import PortInterface
+            contract_method = config.get('port_contract_method', 'tanh')
+            max_gain = config.get('port_max_gain', 1.0)
+            self.interface = PortInterface(self.dim_q, self.dim_u, 
+                                           use_contract=True, 
+                                           contract_method=contract_method,
+                                           max_gain=max_gain)
+            self.use_port_interface = True
+        else:
+            self.interface = ActionInterface(self.dim_q, self.dim_u)
+            self.use_port_interface = False
         
         # State Container
         self.state = ContactState(self.dim_q, 1)
