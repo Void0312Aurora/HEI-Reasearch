@@ -1,50 +1,62 @@
+import torch
+import torch.nn as nn
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple
-import numpy as np
+from he_core.state import ContactState
 
-class Env(ABC):
-    """
-    Abstract Base Class for Environments.
-    Follows a simplified Gym interface.
-    """
+class BaseInterface(nn.Module, ABC):
+    def __init__(self, dim_q: int, dim_ext: int):
+        super().__init__()
+        self.dim_q = dim_q
+        self.dim_ext = dim_ext
+        
     @abstractmethod
-    def reset(self, seed: int = None) -> Dict[str, Any]:
-        """
-        Resets the environment.
-        Returns:
-            obs: Observation dictionary.
-        """
+    def read(self, u_env: torch.Tensor) -> torch.Tensor:
+        """Map External Input -> Internal Force/Drive (B, dim_q)"""
         pass
         
     @abstractmethod
-    def step(self, action: np.ndarray) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:
-        """
-        Steps the environment.
-        Args:
-            action: Action array.
-        Returns:
-            obs: Observation dictionary.
-            reward: Scalar reward (optional).
-            done: Termination flag.
-            info: Auxiliary info.
-        """
+    def write(self, state: ContactState) -> torch.Tensor:
+        """Map Internal State -> External Output (B, dim_ext)"""
         pass
 
-class ObsAdapter(ABC):
+class ActionInterface(BaseInterface):
     """
-    Adapts Environment Observation to Entity Input format.
-    Target format: Dict with keys ['x_ext_proxy'] or 'u_env' ready for Entity.
+    Standard Motor Interface.
+    Write: p -> Action (Force)
+    Read: u_env -> Force (Direct Drive)
     """
-    @abstractmethod
-    def adapt(self, env_obs: Dict[str, Any]) -> Dict[str, Any]:
-        pass
+    def __init__(self, dim_q: int, dim_ext: int):
+        super().__init__(dim_q, dim_ext)
+        self.proj = nn.Linear(dim_q, dim_ext) # p -> action
+        self.embed = nn.Linear(dim_ext, dim_q) # env -> force
+        
+    def read(self, u_env: torch.Tensor) -> torch.Tensor:
+        # u_env (B, ext) -> (B, q)
+        return self.embed(u_env)
+        
+    def write(self, state: ContactState) -> torch.Tensor:
+        # p (B, q) -> (B, ext)
+        # Action reflects momentum/intent
+        return self.proj(state.p)
 
-class ActAdapter(ABC):
+class AuxInterface(BaseInterface):
     """
-    Adapts Entity Action to Environment Action.
-    Entity Action is usually unbounded internal force/readout.
-    Env Action might need clipping, scaling, or discretization.
+    Symbolic/Discrete Interface.
+    Write: q -> Discrete Symbols (via Softmax/Argmax proxy) -> vector
+    Read: Symbol -> Force (via Embedding)
     """
-    @abstractmethod
-    def adapt(self, entity_action: np.ndarray) -> np.ndarray:
-        pass
+    def __init__(self, dim_q: int, dim_ext: int):
+        super().__init__(dim_q, dim_ext)
+        self.proj = nn.Linear(dim_q, dim_ext) # q -> logits
+        self.embed = nn.Linear(dim_ext, dim_q)
+        
+    def read(self, u_env: torch.Tensor) -> torch.Tensor:
+        # u_env (B, ext) is one-hot or embedding?
+        # Assume vector.
+        return self.embed(u_env)
+        
+    def write(self, state: ContactState) -> torch.Tensor:
+        # q -> logits
+        # For simplicity, just return logits or softmax?
+        # Return projected vector.
+        return torch.tanh(self.proj(state.q))
