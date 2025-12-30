@@ -7,20 +7,33 @@ from he_core.generator import BaseGenerator, DissipativeGenerator
 class PortCoupling(nn.Module):
     """
     Defines the shape B(q) in the coupling term <u, B(q)>.
-    Default: B(q) = -q (Linear Force Coupling)
-    Force = -dH/dq = - d/dq <u, -q> = u.
+    Default: B(q) = -q (Linear Force Coupling).
+    Learnable: B(q) = W q (Linear Map).
     """
-    def __init__(self, dim_q: int, dim_u: int):
+    def __init__(self, dim_q: int, dim_u: int, learnable: bool = False):
         super().__init__()
         self.dim_q = dim_q
         self.dim_u = dim_u
-        # Optional learnable coupling map?
-        # For now, assume dim_u = dim_q and B(q) = -q
-        assert dim_u == dim_q, "Simple coupling requires dim_u == dim_q"
+        self.learnable = learnable
+        
+        if learnable:
+            # Linear map from q (D_q) to B (D_u)
+            # Actually B(q) must have shape (dim_u).
+            # Wait, <u, B(q)>. u is (dim_u). B(q) is (dim_u).
+            # So map q -> dim_u.
+            self.W = nn.Linear(dim_q, dim_u, bias=False)
+            
+            # Init to Identity/-Identity to start close to default?
+            if dim_q == dim_u:
+                 with torch.no_grad():
+                     self.W.weight.copy_(-torch.eye(dim_q))
         
     def forward(self, q: torch.Tensor) -> torch.Tensor:
         """Returns B(q)"""
-        return -q
+        if self.learnable:
+            return self.W(q)
+        else:
+            return -q # Assumes dim_q == dim_u
 
 class PortCoupledGenerator(nn.Module):
     """
@@ -28,12 +41,12 @@ class PortCoupledGenerator(nn.Module):
     H(x, u, t) = H_int(x) + H_port(x, u)
     H_port = <u, B(q)>
     """
-    def __init__(self, internal_generator: BaseGenerator, dim_u: int):
+    def __init__(self, internal_generator: BaseGenerator, dim_u: int, learnable_coupling: bool = False):
         super().__init__()
         self.internal = internal_generator
         self.dim_u = dim_u
         self.dim_q = internal_generator.dim_q
-        self.coupling = PortCoupling(self.dim_q, dim_u)
+        self.coupling = PortCoupling(self.dim_q, dim_u, learnable=learnable_coupling)
         
     def forward(self, state: ContactState, u_ext: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
