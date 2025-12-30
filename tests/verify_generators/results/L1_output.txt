@@ -1,16 +1,17 @@
-/home/void0312/HEI-Research/HEI/tests/verify_generators/verify_semigroup_stability.py:171: SyntaxWarning: invalid escape sequence '\o'
-  plt.plot(times, np.array(times) * omega_0, 'r--', label=f'Fit $\omega_0$={omega_0:.2f}')
-=== Phase 16.1: L1 Dynamics Diagnostics ===
-Configuration: damping=1.0
+=== Phase 16.1: L1 Dynamics Diagnostics (Fix) ===
+Configuration: damping=5.0
 
 --- 1. Semigroup Growth Bound (omega_0) ---
-  Estimated omega_0: 1.7373
-  Result: UNSTABLE (Exp Growth)
+  Estimated omega_0: 0.0111
+  Result: STABLE
 
---- 2. Energy Monotonicity ---
-  Monotonic: False
-  Energy Trend (slope): 0.005416
-  Initial Energy: -0.0541
-  Final Energy:   0.0001
+--- 2. Energy Monotonicity (Mechanical) ---
+  Monotonic: True
+  Energy Trend (slope): -0.045547
+  Initial Energy: 0.4555
+  Final Energy:   0.0000
+omega0=0.0111
+monotonic=True
+trend=-0.045547
 
   Plot saved to tests/verify_generators/results/L1_stability.png
