@@ -66,3 +66,27 @@ class DrivenGenerator(DissipativeGenerator):
         H_int = - (drive * state.q).sum(dim=1, keepdim=True)
         
         return H_0 + H_int
+        return H_0 + H_int
+
+class DeepDissipativeGenerator(DissipativeGenerator):
+    """
+    Dissipative Generator with customizable Deep Potential V(q).
+    Allows passing an arbitrary nn.Module for V(q).
+    """
+    def __init__(self, dim_q: int, alpha: float = 0.1, net_V: nn.Module = None):
+        super().__init__(dim_q, alpha)
+        
+        if net_V is not None:
+            self.net_V = net_V
+        else:
+            # Default Deep MLP
+            self.net_V = nn.Sequential(
+                nn.Linear(dim_q, 64),
+                nn.Tanh(),
+                nn.Linear(64, 64),
+                nn.Tanh(),
+                nn.Linear(64, 1)
+            )
+            
+    # forward logic is inherited from DissipativeGenerator
+    # as it uses self.net_V(q)

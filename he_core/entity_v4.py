@@ -79,7 +79,8 @@ class UnifiedGeometricEntity(nn.Module):
         Returns Tensors (maintaining gradients).
         """
         # Temporary State wrapper
-        curr_state = ContactState(self.dim_q, 1, device=state_flat.device, flat_tensor=state_flat)
+        batch_size = state_flat.shape[0]
+        curr_state = ContactState(self.dim_q, batch_size, device=state_flat.device, flat_tensor=state_flat)
         
         # 1. Router (Check gradient flow here)
         chart_weights = self.atlas.router(curr_state.q)
