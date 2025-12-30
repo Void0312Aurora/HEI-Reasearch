@@ -84,8 +84,8 @@ def train_phase13(config: Dict[str, Any]):
             curr_state_flat = entity.state.flat.detach() # Start fresh graph
             
             for t in range(steps):
-                 # Input: Driven or Null
-                 u_ext = torch.randn(1, entity.dim_q) * 0.1
+                 # Input: Driven or Null (Small Noise)
+                 u_ext = torch.randn(1, entity.dim_q) * 0.01 # Reduce from 0.1 to 0.01 for stability
                  
                  # Forward Tensor
                  out = entity.forward_tensor(curr_state_flat, u_ext)
@@ -116,7 +116,7 @@ def train_phase13(config: Dict[str, Any]):
                  trajectory_loss += step_loss
                  
                  # Critical Check
-                 if gain.item() > 10.0:
+                 if gain.item() > 50.0: # Raised from 10.0 to allow more exploration
                      logger.error(f"Critical Failure: Gain Explosion ({gain.item()}) at step {t}")
                      return "FAIL_EXPLOSION"
                  

@@ -22,6 +22,7 @@ def run_gate0_campaign():
         'dim_q': 2,
         'num_charts': 3,
         'learnable_coupling': True,
+        'damping': 2.0, # Increase damping for stability
         'lr': 0.005,
         'batch_size': 1,
         'steps': 50 # Per epoch

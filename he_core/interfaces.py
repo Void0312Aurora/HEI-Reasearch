@@ -27,8 +27,8 @@ class ActionInterface(BaseInterface):
     """
     def __init__(self, dim_q: int, dim_ext: int):
         super().__init__(dim_q, dim_ext)
-        self.proj = nn.Linear(dim_q, dim_ext) # p -> action
-        self.embed = nn.Linear(dim_ext, dim_q) # env -> force
+        self.proj = nn.Linear(dim_q, dim_ext, bias=False) # p -> action
+        self.embed = nn.Linear(dim_ext, dim_q, bias=False) # env -> force
         
         # Init near Identity
         with torch.no_grad():
