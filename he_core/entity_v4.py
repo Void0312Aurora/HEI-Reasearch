@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 
 from he_core.state import ContactState
 from he_core.contact_dynamics import ContactIntegrator
@@ -73,19 +73,19 @@ class UnifiedGeometricEntity(nn.Module):
         self.state.p = torch.randn(1, self.dim_q) * scale
         self.state.s = torch.zeros(1, 1)
         
-    def forward_tensor(self, state_flat: torch.Tensor, u_dict: Optional[Dict[str, torch.Tensor]], dt: float) -> dict:
+        
+    def forward_tensor(self, state_flat: torch.Tensor, u_dict: Optional[Union[Dict[str, torch.Tensor], torch.Tensor]], dt: float) -> dict:
         """
         Forward step on flattened tensor state with Multi-Modal support.
         u_dict: Dictionary of {port_name: tensor_input}
         """
         batch_size = state_flat.shape[0]
         
-        # 1. Reconstruct State
-        curr_state = ContactState(self.dim_q, batch_size, state_flat.device, state_flat)
-        
-        # Default u if None
+        # Compatibility Layer
         if u_dict is None:
             u_dict = {}
+        elif isinstance(u_dict, torch.Tensor):
+            u_dict = {'default': u_dict}
             
         # 2. Generator definition (closure for step/checkpoint)
         def run_step(flat_input, u_map):

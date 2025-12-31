@@ -27,6 +27,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dim_q', type=int, default=64)
     parser.add_argument('--dt', type=float, default=0.1)
+    parser.add_argument('--batch_size', type=int, default=128)
     args = parser.parse_args()
     
     # 1. Setup Entity
@@ -45,15 +46,16 @@ def main():
     v_drift = 0.5
     
     print(f"Task: Counteract Drift v={v_drift}. Target u=0.")
+    print(f"Objective: Minimize Surprise (u^2) + 0.1 * Internal Energy (H)")
     
     history_u_mean = []
     
     for ep in range(200):
         # Initial Env State
-        x_env = torch.zeros(args.batch_size if hasattr(args, 'batch_size') else 128, 1, device=DEVICE)
+        x_env = torch.zeros(args.batch_size, 1, device=DEVICE)
         
         # Initial Internal State
-        curr = torch.zeros(128, 2*args.dim_q + 1, device=DEVICE)
+        curr = torch.zeros(args.batch_size, 2*args.dim_q + 1, device=DEVICE)
         
         total_surprise = torch.tensor(0.0, device=DEVICE)
         
@@ -84,19 +86,46 @@ def main():
             x_env = x_env + v_drift + a_t
             
             # Accumulate Surprise (Free Energy proxy)
-            # F = 0.5 * u^2 (Precision=1)
+            # F = u^2 (Accuracy) + lambda * H (Complexity/Prior)
             sur = (x_env**2).sum()
-            total_surprise += sur
+            
+            # Retrieve H from 'out'? forward_tensor returns 'next_state_flat'.
+            # We need H. H is computed inside run_step.
+            # But UnifiedGeometricEntity.forward_tensor doesn't return H in the dict unless we modified it.
+            # Let's check entity_v4.py forward_tensor return.
+            # It returns {'next_state_flat': ..., 'H_val': ...} (Wait, check file).
+            # The file I viewed earlier (entity_v4.py) lines 108-110:
+            # return {'next_state_flat': next_flat}
+            # It does NOT return H.
+            # So I need to compute H here or modify entity.
+            # Computing H is cheap: entity.internal_gen(s) + interaction.
+            # Or just use q magnitude as proxy? No, explicit H is better.
+            
+            # Calculate H
+            from he_core.state import ContactState
+            s_next_obj = ContactState(args.dim_q, args.batch_size, DEVICE, curr)
+            H_val = entity.internal_gen(s_next_obj).mean()
+            
+            # Check for NaN locally
+            if torch.isnan(sur) or torch.isnan(H_val):
+                 print(f"NaN at t={t}: Sur={sur.item()}, H={H_val.item()}")
+                 break
+            
+            total_surprise = total_surprise + sur + 1e-4 * H_val
             
         # Backprop through time
-        loss = total_surprise / (20 * 128)
+        loss = total_surprise / (20 * args.batch_size)
+    
         if torch.isnan(loss):
-             print("Loss is NaN. Skipping step.")
+             print(f"Loss NaN. Sur_last={sur.item()}, H_last={H_val.item()}")
+             opt.zero_grad()
+        elif not loss.requires_grad:
+             print("Loss has no grad (probably early break).")
              opt.zero_grad()
         else:
              opt.zero_grad()
              loss.backward()
-             # Clip grad?
+             # Clip grad
              nn.utils.clip_grad_norm_(entity.parameters(), 0.5)
              opt.step()
         

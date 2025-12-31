@@ -39,10 +39,12 @@ class PortCoupling(nn.Module):
             # self.W_out = nn.Parameter(torch.Tensor(num_charts, dim_u, dim_q))
             # Actually, let's just reuse W_stack transpose if we want symmetry?
             # No, Active Inference usually implies a separate "Policy" or "Reflex".
-            # Let's add W_action.
-            self.W_action = nn.Parameter(torch.Tensor(num_charts, dim_u, dim_q))
+            # Action a = W_action_q q + W_action_p p
+            self.W_action_q = nn.Parameter(torch.Tensor(num_charts, dim_u, dim_q))
+            self.W_action_p = nn.Parameter(torch.Tensor(num_charts, dim_u, dim_q))
             with torch.no_grad():
-                nn.init.normal_(self.W_action, std=0.01)
+                nn.init.normal_(self.W_action_q, std=0.01)
+                nn.init.normal_(self.W_action_p, std=0.01)
 
     def forward(self, q: torch.Tensor, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -64,16 +66,22 @@ class PortCoupling(nn.Module):
         B_q = (Y_all * w_b).sum(dim=1)
         return B_q
 
-    def get_action(self, q: torch.Tensor, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def get_action(self, q: torch.Tensor, p: Optional[torch.Tensor] = None, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        Returns Action a(q).
-        a = sum w_k * W_action_k * q
+        Returns Action a(q, p).
         """
         if not self.learnable:
             return torch.zeros(q.shape[0], self.dim_u, device=q.device)
             
-        # Einsum: k u q, b q -> b k u
-        A_all = torch.einsum('kuq,bq->bku', self.W_action, q)
+        # q term
+        Aq_all = torch.einsum('kuq,bq->bku', self.W_action_q, q)
+        
+        # p term
+        if p is not None:
+            Ap_all = torch.einsum('kuq,bq->bku', self.W_action_p, p)
+            A_all = Aq_all + Ap_all
+        else:
+            A_all = Aq_all
         
         if weights is None:
              weights = torch.ones(q.shape[0], self.num_charts, device=q.device) / self.num_charts
@@ -81,7 +89,6 @@ class PortCoupling(nn.Module):
         w_b = weights.unsqueeze(2)
         Action_Raw = (A_all * w_b).sum(dim=1)
         # Apply Tanh to bound action
-        # Scale it up to allow range (e.g. +/- 10)
         return 5.0 * torch.tanh(Action_Raw)
 
 class PortCoupledGenerator(nn.Module):
@@ -115,15 +122,14 @@ class PortCoupledGenerator(nn.Module):
         B_q = self.ports[port_name](state.q, weights=weights)
         return (u_val * B_q).sum(dim=1, keepdim=True)
 
-    def get_action(self, state: ContactState, port_name: str = 'default', weights: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def get_action(self, s: 'ContactState', port_name: str = 'default', weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        Returns Action a(q) for a specific port.
+        Get action from specific port, using state s (q and p).
         """
-        if port_name not in self.ports:
-             # Or raise error?
-             return torch.zeros(state.batch_size, self.dim_u, device=state.device)
-             
-        return self.ports[port_name].get_action(state.q, weights=weights)
+        if port_name in self.ports:
+            return self.ports[port_name].get_action(s.q, s.p, weights=weights) # Pass s.p
+        else:
+            return torch.zeros(s.q.shape[0], self.ports[list(self.ports.keys())[0]].dim_u, device=s.q.device)
 
     def forward(self, state: ContactState, u_ext: Optional[torch.Tensor] = None, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
