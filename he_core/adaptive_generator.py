@@ -10,10 +10,14 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
     H(q,p,s) = K(p) + V(q) + Alpha(q) * s
     Alpha(q) >= 0 is learned.
     """
-    def __init__(self, dim_q: int, net_V: nn.Module = None):
+    def __init__(self, dim_q: int, net_V: nn.Module = None, dim_z: int = 0):
         super().__init__(dim_q, alpha=0.0, net_V=net_V) # Base alpha unused
+        self.dim_z = dim_z
         
         # Learnable Damping Field A(q)
+        # If z is used, Alpha might depend on z too?
+        # For strict A3, Alpha(q) is geometric. V(q, z) represents intent.
+        # Let's keep Alpha(q) pure for now, unless requested.
         self.net_Alpha = nn.Sequential(
             nn.Linear(dim_q, 64),
             nn.Tanh(),
@@ -41,14 +45,23 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
                 else:
                     nn.init.zeros_(param)
         
-    def forward(self, state: ContactState) -> torch.Tensor:
+    def forward(self, state: ContactState, z: torch.Tensor = None) -> torch.Tensor:
         q, p, s = state.q, state.p, state.s
         
         # Kinetic
         K = 0.5 * (p**2).sum(dim=1, keepdim=True)
         
-        # Potential
-        V = self.net_V(q)
+        # Potential V(q, z)
+        if self.dim_z > 0 and z is not None:
+            # Check if net_V expects concatenated input
+            # We assume net_V is designed to handle dim_q + dim_z if created externally
+            # OR we concatenate here if net_V handles it.
+            # Best practice: The entity or script creates net_V with correct input dim.
+            # We just concat.
+            inp = torch.cat([q, z], dim=1)
+            V = self.net_V(inp)
+        else:
+            V = self.net_V(q)
         
         # Adaptive Dissipation
         # alpha is now a field A(q) -> (B, 1)

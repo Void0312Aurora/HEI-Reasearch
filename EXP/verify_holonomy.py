@@ -24,7 +24,9 @@ def verify_holonomy():
         'num_charts': 1,
         'learnable_coupling': True,
         'use_port_interface': False,
-        'beta_kl': 0.01
+        'beta_kl': 0.01,
+        'use_adaptive_generator': True,
+        'dim_z': 8
     }
     entity = UnifiedGeometricEntity(config)
     

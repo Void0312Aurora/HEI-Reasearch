@@ -25,16 +25,20 @@ def train_fixed_xor(args):
     config = {
         'dim_q': args.dim_q, 
         'dim_u': args.dim_q, 
+        'dim_z': 8, # L3 Context
         'num_charts': 1, 
         'learnable_coupling': True,
         'beta_kl': 0.01,
-        'gamma_pred': 1.0
+        'gamma_pred': 1.0,
+        'use_adaptive_generator': True # Ensure we use the z-aware generator
     }
     entity = UnifiedGeometricEntity(config)
-    net_V = nn.Sequential(nn.Linear(args.dim_q, 128), nn.Tanh(), nn.Linear(128, 1))
-    adaptive = AdaptiveDissipativeGenerator(args.dim_q, net_V=net_V)
-    entity.generator = PortCoupledGenerator(adaptive, args.dim_q, True, 1)
-    entity.internal_gen = adaptive
+    
+    # We no longer manually replace internal_gen here if config flag works.
+    # But for safety and explicit audit, let's verify or reinject.
+    # Actually v5 init now handles it if 'use_adaptive_generator' is True.
+    # We just need to ensure the optimizer sees the right parameters.
+    
     entity.to(DEVICE)
     
     classifier = nn.Linear(args.dim_q, 2).to(DEVICE)
@@ -146,6 +150,26 @@ def main():
         print("\n>> OVERALL RESULT: Hardened v5 satisfies A2/A3.")
     else:
         print("\n>> OVERALL RESULT: Partial Failure or Insufficient Convergence.")
+        
+    # --- New Test: L3 Binding Check ---
+    print("\n--- Test: L3 Binding (Does z modulate V?) ---")
+    # Take a state
+    s0 = torch.zeros(1, args.dim_q, device=DEVICE)
+    z_base = entity.z.detach().clone().expand(1, -1)
+    z_pert = z_base + torch.randn_like(z_base)
+    
+    # Compute H (or V)
+    # Access internal generator
+    v_base = entity.net_V(torch.cat([s0, z_base], dim=1)).item()
+    v_pert = entity.net_V(torch.cat([s0, z_pert], dim=1)).item()
+    
+    print(f"V(q, z_base) = {v_base:.4f}")
+    print(f"V(q, z_pert) = {v_pert:.4f}")
+    
+    if abs(v_base - v_pert) > 1e-4:
+        print(">> SUCCESS: V is modulated by z.")
+    else:
+        print(">> FAILURE: V ignores z (L3 disconnected).")
 
 if __name__ == "__main__":
     main()
