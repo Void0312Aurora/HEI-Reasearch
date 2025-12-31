@@ -128,6 +128,15 @@ def get_babi_loaders(task_id=1, batch_size=32, data_root='./data/babi', max_samp
                test_ds.stories + test_ds.questions + test_ds.answers
     tokenizer.fit(all_text)
     
+    # Answer Vocab Construction
+    # We only want to classify into valid answers, not all words in stories
+    # We assume 'y' is already mapped to the full vocab idx.
+    # To fix this, we need a separate tokenizer or mapping for answers.
+    # Approach: 
+    # 1. Collect all answers
+    all_answers = sorted(list(set(train_ds.answers + test_ds.answers)))
+    ans2idx = {a: i for i, a in enumerate(all_answers)}
+    
     # Collate function
     def collate_fn(batch):
         stories, questions, answers = zip(*batch)
@@ -144,13 +153,17 @@ def get_babi_loaders(task_id=1, batch_size=32, data_root='./data/babi', max_samp
         # Encode inputs
         x = torch.stack([tokenizer.encode(t, max_len) for t in inputs])
         
-        # Encode answers (treat as classification labels)
-        # Babi tasks usually have single word answers
-        y = torch.tensor([tokenizer.word2idx.get(a.lower(), 1) for a in answers], dtype=torch.long)
+        # Lengths (non-pad count)
+        # Note: pad index is 0
+        lengths = torch.tensor([sum(1 for i in tokenizer.encode(t, max_len) if i != 0) for t in inputs], dtype=torch.long)
         
-        return x, y
+        # Encode answers (using NEW restricted/clean answer vocab)
+        y = torch.tensor([ans2idx[a] for a in answers], dtype=torch.long)
+        
+        return x, y, lengths
         
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
     
-    return train_loader, test_loader, tokenizer
+    # Return answer vocab size as 4th element
+    return train_loader, test_loader, tokenizer, len(all_answers)

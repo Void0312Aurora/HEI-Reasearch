@@ -34,9 +34,10 @@ def train_babi():
     
     
     # 1. Data
-    train_loader, test_loader, tokenizer = get_babi_loaders(task_id=args.task_id, batch_size=args.batch_size, max_samples=args.max_samples)
+    # 1. Data
+    train_loader, test_loader, tokenizer, num_answers = get_babi_loaders(task_id=args.task_id, batch_size=args.batch_size, max_samples=args.max_samples)
     vocab_size = len(tokenizer.word2idx)
-    print(f"Vocab Size: {vocab_size}")
+    print(f"Vocab Size: {vocab_size} | Num Answers: {num_answers}")
     
     # 2. Models
     # Text Encoder: Token Seq -> u (drive)
@@ -57,9 +58,8 @@ def train_babi():
     else:
         entity = None
         
-    # Readout: State -> Vocab (Answer)
-    # Answers are single words from vocab
-    readout = nn.Linear(args.dim_q, vocab_size).to(DEVICE)
+    # Readout: State -> Answer Space (Restricted)
+    readout = nn.Linear(args.dim_q, num_answers).to(DEVICE)
     
     # Optimizer
     params = list(text_enc.parameters()) + list(readout.parameters())
@@ -78,7 +78,7 @@ def train_babi():
         correct = 0
         total = 0
         
-        for batch_idx, (x, y) in enumerate(train_loader):
+        for batch_idx, (x, y, lengths) in enumerate(train_loader):
             x, y = x.to(DEVICE), y.to(DEVICE)
             b_size = x.shape[0]
             
@@ -86,12 +86,21 @@ def train_babi():
             if entity: entity.reset(batch_size=b_size)
             
             # A. Perception (Text Interface)
-            u_text = text_enc(x) # (B, dim_q)
+            u_text = text_enc(x, lengths=lengths) # (B, dim_q)
             
             # B. Dynamics (L1) or Bypass
             if entity:
-                # Init state (q, p, s) - Random Init to break symmetry
-                s_flat = (torch.randn(b_size, args.dim_q * 2 + 1, device=DEVICE) * 0.05).requires_grad_(True)
+                # Init state (q, p, s)
+                # Fix 1: Gradient Cold Start - Init q0 from u_text
+                # q0 = u_text (Assumes Dim match or Proj)
+                # Ensure u_text is treated as "Start State"
+                q0 = u_text.clone() 
+                p0 = torch.zeros_like(q0)
+                # s0 = 0 (Entro-time)
+                s0 = torch.zeros(b_size, 1, device=DEVICE)
+                
+                # Stack
+                s_flat = torch.cat([q0, p0, s0], dim=1).requires_grad_(True)
                 
                 # Run dynamics for T steps
                 # Reasoning "Thought Process"
@@ -169,16 +178,21 @@ def evaluate(loader, text_enc, entity, readout, args, device):
     total = 0
     
     with torch.no_grad():
-        for x, y in loader:
+        for x, y, lengths in loader:
             x, y = x.to(device), y.to(device)
             b_size = x.shape[0]
             
             if entity: entity.reset(batch_size=b_size)
             
-            u_text = text_enc(x)
+            u_text = text_enc(x, lengths=lengths)
             
             if entity:
-                s_flat = torch.zeros(b_size, args.dim_q * 2 + 1, device=device)
+                # Fix: Evaluation mode also needs correct q0 init
+                q0 = u_text.clone() 
+                p0 = torch.zeros_like(q0)
+                s0 = torch.zeros(b_size, 1, device=device)
+                s_flat = torch.cat([q0, p0, s0], dim=1) # No grad needed for eval
+                
                 for _ in range(args.steps):
                     out = entity.forward_tensor(s_flat, {'default': u_text}, args.dt)
                     s_flat = out['next_state_flat']

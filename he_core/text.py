@@ -29,14 +29,24 @@ class SimpleTextEncoder(nn.Module):
         h = self.embedding(x)
         
         # RNN Processing
+        # RNN Processing
         # We use the final hidden state as the "summary" drive
         if lengths is not None:
-             # Pack padded sequence if lengths provided (omitted for simplicity in v1)
-             pass
+             # Sort by length (required for pack_padded_sequence)
+             # But here assuming x is already sorted? No, DataLoaders shuffle.
+             # We must sort, pack, run, unsort. 
+             # Simpler: just enforce enforce_sorted=False (inefficient but easy) in newer pytorch.
+             # Or sort here.
+             lengths_cpu = lengths.cpu()
+             total_length = x.size(1)
              
-        out, h_n = self.gru(h)
+             packed = nn.utils.rnn.pack_padded_sequence(h, lengths_cpu, batch_first=True, enforce_sorted=False)
+             out, h_n = self.gru(packed)
+             # Unpack if needed, but we only need h_n
+        else:
+             out, h_n = self.gru(h)
+             
         # h_n shape: (num_layers, B, H) -> (1, B, H)
-        
         u = h_n.squeeze(0) # (B, H)
         u = self.out_proj(u)
         
