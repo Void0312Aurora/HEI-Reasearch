@@ -73,54 +73,71 @@ class UnifiedGeometricEntity(nn.Module):
         self.state.p = torch.randn(1, self.dim_q) * scale
         self.state.s = torch.zeros(1, 1)
         
-    def forward_tensor(self, state_flat: torch.Tensor, u_ext: torch.Tensor, dt: float) -> dict:
+    def forward_tensor(self, state_flat: torch.Tensor, u_dict: Optional[Dict[str, torch.Tensor]], dt: float) -> dict:
         """
-        Forward step on flattened tensor state.
-        Supports Gradient Checkpointing for stability.
+        Forward step on flattened tensor state with Multi-Modal support.
+        u_dict: Dictionary of {port_name: tensor_input}
         """
         batch_size = state_flat.shape[0]
         
         # 1. Reconstruct State
-        # We must support 'x' being attached to graph
         curr_state = ContactState(self.dim_q, batch_size, state_flat.device, state_flat)
         
+        # Default u if None
+        if u_dict is None:
+            u_dict = {}
+            
         # 2. Generator definition (closure for step/checkpoint)
-        def run_step(flat_input, u_input):
-            # Re-wrap inside checkpoint context
+        def run_step(flat_input, u_map):
             s_in = ContactState(self.dim_q, batch_size, flat_input.device, flat_input)
             
-            # Generator with external drive
-            # Note: We must bind u_input to the generator call
             def gen_func(s: ContactState):
-                # 1. Router (Check gradient flow here)
                 chart_weights = self.atlas.router(s.q)
                 
-                # 2. Dynamics
-                # Pass weights here!
-                return self.generator(s, u_input, weights=chart_weights)
+                # Sum over all ports
+                H_sum = self.internal_gen(s)
+                for port_name, u_val in u_map.items():
+                    # We assume PortCoupledGenerator logic here, but modularly.
+                    # For now, we support the 'default' port as the main interaction.
+                    # We can extend generator to be a MultiPortGenerator.
+                    if hasattr(self.generator, 'get_h_port'):
+                         H_sum += self.generator.get_h_port(s, port_name, u_val, weights=chart_weights)
+                    else:
+                         # Fallback for single-port backward compatibility
+                         H_sum += (self.generator(s, u_val, weights=chart_weights) - self.internal_gen(s))
+                         
+                return H_sum
                     
             # Step
             s_next = self.integrator.step(s_in, gen_func, dt)
             return s_next.flat
             
-        # 3. Execution
-        # Use simple checkpointing if available and training
-        # But for now, let's just use it conditionally to avoid overhead in simple cases?
-        # Actually, let's FORCE it for now to fix the crash.
-        
-        from torch.utils.checkpoint import checkpoint
-        
-        if state_flat.requires_grad and False: # DISABLED CHECKPOINT FOR DEBUG mixed-grad
-             next_flat = checkpoint(run_step, state_flat, u_ext, use_reentrant=False)
-        else:
-             next_flat = run_step(state_flat, u_ext)
+        next_flat = run_step(state_flat, u_dict)
         
         return {
             'next_state_flat': next_flat,
-            # We skip detailed breakout here to save aux outputs from graph
         }
 
     def forward(self, obs: Dict[str, Any], dt: float = 0.1) -> Dict[str, Any]:
+        """
+        High-level interface (not used in core training usually).
+        """
+        pass
+
+    def get_action(self, state_flat: torch.Tensor, port_name: str = 'default') -> torch.Tensor:
+        """
+        Helper to get action from flat state.
+        """
+        batch_size = state_flat.shape[0]
+        s = ContactState(self.dim_q, batch_size, state_flat.device, state_flat)
+        chart_weights = self.atlas.router(s.q)
+        
+        # We assume generator is PortCoupledGenerator or compatible
+        if hasattr(self.generator, 'get_action'):
+            return self.generator.get_action(s, port_name, weights=chart_weights)
+        return torch.zeros(batch_size, 1, device=state_flat.device)
+
+    def forward_runtime(self, obs: Dict[str, Any], dt: float = 0.1) -> Dict[str, Any]:
         """
         Step the Entity (Numpy Interface for Experiment Loop).
         Wraps forward_tensor.
