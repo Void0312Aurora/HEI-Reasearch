@@ -10,8 +10,8 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
     H(q,p,s) = K(p) + V(q) + Alpha(q) * s
     Alpha(q) >= 0 is learned.
     """
-    def __init__(self, dim_q: int, net_V: nn.Module = None, dim_z: int = 0):
-        super().__init__(dim_q, alpha=0.0, net_V=net_V) # Base alpha unused
+    def __init__(self, dim_q: int, net_V: nn.Module = None, dim_z: int = 0, stiffness: float = 0.0):
+        super().__init__(dim_q, alpha=0.0, net_V=net_V, stiffness=stiffness) # Base alpha unused
         self.dim_z = dim_z
         
         # Learnable Damping Field A(q)
@@ -62,6 +62,11 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
             V = self.net_V(inp)
         else:
             V = self.net_V(q)
+            
+        # Harmonic Confinement (First Principles Stability)
+        if self.stiffness > 0:
+            V_conf = 0.5 * self.stiffness * (q**2).sum(dim=1, keepdim=True)
+            V = V + V_conf
         
         # Adaptive Dissipation
         # alpha is now a field A(q) -> (B, 1)

@@ -21,9 +21,10 @@ class DissipativeGenerator(BaseGenerator):
     V(q) = Neural Potential or Quadratic
     alpha * s term generates friction 'alpha'.
     """
-    def __init__(self, dim_q: int, alpha: float = 0.1):
+    def __init__(self, dim_q: int, alpha: float = 0.1, stiffness: float = 0.0):
         super().__init__(dim_q)
         self.alpha = alpha # Damping coeff
+        self.stiffness = stiffness # Harmonic Confinement (k)
         
         # Potential V(q)
         self.net_V = nn.Sequential(
@@ -40,6 +41,12 @@ class DissipativeGenerator(BaseGenerator):
         
         # Potential
         V = self.net_V(q)
+        
+        # Harmonic Confinement (First Principles Stability)
+        # V_conf = 0.5 * k * q^2
+        if self.stiffness > 0:
+            V_conf = 0.5 * self.stiffness * (q**2).sum(dim=1, keepdim=True)
+            V = V + V_conf
         
         # Contact Potential (Dissipation Source)
         # Linear in s
@@ -73,8 +80,8 @@ class DeepDissipativeGenerator(DissipativeGenerator):
     Dissipative Generator with customizable Deep Potential V(q).
     Allows passing an arbitrary nn.Module for V(q).
     """
-    def __init__(self, dim_q: int, alpha: float = 0.1, net_V: nn.Module = None):
-        super().__init__(dim_q, alpha)
+    def __init__(self, dim_q: int, alpha: float = 0.1, stiffness: float = 0.0, net_V: nn.Module = None):
+        super().__init__(dim_q, alpha, stiffness)
         
         if net_V is not None:
             self.net_V = net_V

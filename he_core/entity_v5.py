@@ -87,16 +87,19 @@ class UnifiedGeometricEntityV5(nn.Module):
         )
         
         # 1. Generator (Internal Soul) with Shared V
+        # 1. Generator (Internal Soul) with Shared V
         # If using Adaptive, we need to replace internal_gen or ensure it uses net_V
+        stiffness = config.get('stiffness', 0.0)
+        
         if config.get('use_adaptive_generator', False):
             from he_core.adaptive_generator import AdaptiveDissipativeGenerator
-            self.internal_gen = AdaptiveDissipativeGenerator(self.dim_q, net_V=self.net_V, dim_z=self.dim_z)
+            self.internal_gen = AdaptiveDissipativeGenerator(self.dim_q, net_V=self.net_V, dim_z=self.dim_z, stiffness=stiffness)
         else:
             # Robust Fallback: Use DeepDissipativeGenerator to share net_V
             # This ensures A3 (Unified V) even if active z-modulation is disabled
             from he_core.generator import DeepDissipativeGenerator
             alpha = config.get('damping', 0.1)
-            self.internal_gen = DeepDissipativeGenerator(self.dim_q, alpha=alpha, net_V=self.net_V)
+            self.internal_gen = DeepDissipativeGenerator(self.dim_q, alpha=alpha, stiffness=stiffness, net_V=self.net_V)
 
         # State Container
         self.state = ContactState(self.dim_q, 1)

@@ -27,6 +27,7 @@ def train_babi():
     parser.add_argument('--baseline', action='store_true', help='Run pure encoder baseline')
     parser.add_argument('--max_samples', type=int, default=None, help='Limit dataset size for overfitting')
     parser.add_argument('--q0_scale', type=float, default=1.0, help='Scaling factor for q0 init from u')
+    parser.add_argument('--stiffness', type=float, default=0.0, help='Harmonic Confinement (k) for Stability')
     args = parser.parse_args()
     
     print(f"=== Training bAbI Entity (Phase 5: Reasoning) ===")
@@ -53,7 +54,8 @@ def train_babi():
             'dim_z': 16,
             'num_charts': 1,
             'learnable_coupling': True, # Enable W_stack (Semantic -> Dynamics Alignment)
-            'use_adaptive_generator': True
+            'use_adaptive_generator': True,
+            'stiffness': args.stiffness
         }
         entity = UnifiedGeometricEntity(config).to(DEVICE)
     else:
