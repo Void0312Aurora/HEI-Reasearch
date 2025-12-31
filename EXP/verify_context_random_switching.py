@@ -71,34 +71,34 @@ def run_test(entity, args, coherent=True):
     
     total_err = 0.0
     
-    # Generate Schedule
-    # Random switch times
-    # Just generic Poisson-like switching
-    current_ctx = 1.0
-    switch_prob = 0.05
+    # Target Schedule: Switch every 20 steps (Standard Audit Profile)
+    # T=0-20: +1. T=20-40: -1. T=40-60: +1. T=60-80: -1. T=80-100: +1.
     
     xs = []
     tgs = []
-    actions = []
+    
+    # Scrambled Context Sequence:
+    # Just invert the context? Or Random Phase Shift?
+    # Let's Invert Context (Simple Anti-Correlation).
+    # If Context = -Target, error should be huge.
+    # If Context = Random, error should be medium.
+    # Critique asked for "Permuted". Let's use Random Phase.
+    # But simple Inversion is the strongest Anti-Proof.
     
     for t in range(100):
-        # Update Target/Context
-        if coherent:
-            if torch.rand(1).item() < switch_prob:
-                current_ctx *= -1.0 # Flip
-            target = current_ctx
-            ctx_val = current_ctx
+        # Master Target
+        if (t // 20) % 2 == 0:
+            target = 1.0
         else:
-            # Scrambled: Target is constant +1, but Context is random noise?
-            # Or Context is White Noise?
-            # Let's say we WANT to maintain target, but Context is Random.
-            # If Context drives potential, then Random Context -> Random Attractor -> High Error.
-            # We compare against a Target derived from "What the context WAS in Test A".
-            # Actually, simplest Anti-Proof:
-            # Target = +1. Context = Random [-1, 1].
-            # Agent should flail.
-            target = 1.0 
-            ctx_val = (torch.rand(1).item() * 2.0) - 1.0
+            target = -1.0
+            
+        if coherent:
+            ctx_val = target
+        else:
+            # Scrambled: Inverted Context (Strongest proof of dependency)
+            # If it was Timer, it would track Target regardless of Context.
+            # If it tracks Context, it will go to -Target.
+            ctx_val = -target
             
         ctx_tensor = torch.tensor([[ctx_val]], device=DEVICE)
         
@@ -117,21 +117,19 @@ def run_test(entity, args, coherent=True):
         
         xs.append(x_env.item())
         tgs.append(target)
-        actions.append(a_t.item())
         
     # Plot last
     if coherent:
         plt.figure()
         plt.plot(xs, label='x')
-        plt.plot(tgs, '--', label='Target/Ctx')
-        plt.title('Test A: Coherent Switching')
+        plt.plot(tgs, '--', label='Target')
+        plt.title('Test A: Coherent (Ctx=Tgt)')
         plt.savefig('EXP/verify_A_coherent.png')
     else:
         plt.figure()
         plt.plot(xs, label='x')
         plt.plot(tgs, '--', label='Target')
-        # plt.plot(ctx, ...) - Context is noise
-        plt.title('Test B: Scrambled Context')
+        plt.title('Test B: Scrambled (Ctx=-Tgt)')
         plt.savefig('EXP/verify_B_scrambled.png')
         
     return total_err / 100.0

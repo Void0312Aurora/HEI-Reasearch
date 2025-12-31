@@ -108,36 +108,43 @@ def main():
             
         # STL Check: G_[50, 60] (|y - tgt| < eps)
         # Robustness rho = min(eps - |y - tgt|) for t in [50, 60]
-        # Let eps = 0.4 (threshold at 0.5 +/- 0.1 margin)
-        # Actually standard rho = (tgt==1 ? y - 0.5 : 0.5 - y) * scale?
-        # Let's use simple accuracy proxy
-        final_y = np.mean(ys[50:])
-        pred_bin = 1 if final_y > 0.5 else 0
+        epsilon = 0.4
+        window_ys = ys[50:]
         
+        # Calculate Robustness over window
+        rhos = [epsilon - abs(y_t - tgt) for y_t in window_ys]
+        rho = min(rhos) # The critical robustness valid for the WHOLE window
+        
+        robustness_scores.append(rho)
+        
+        # Binary prediction based on mean of window (for confusion matrix)
+        final_y = np.mean(window_ys)
+        pred_bin = 1 if final_y > 0.5 else 0
         predictions.append(pred_bin)
         ground_truth.append(tgt)
         
-        # Robustness: Distance to wrong decision boundary?
-        # dist = |y - 0.5|
-        # If correct, +dist. If wrong, -dist.
-        is_correct = (pred_bin == tgt)
-        margin = abs(final_y - 0.5)
-        rho = margin if is_correct else -margin
-        robustness_scores.append(rho)
-        
-        print(f"Case {logic_name}({A},{B}) -> Tgt {tgt}, Pred {final_y:.2f} (Bin {pred_bin}). Rho={rho:.2f}")
+        print(f"Case {logic_name}({A},{B}) -> Tgt {tgt}, Pred {final_y:.2f} (Bin {pred_bin}). STL Rho={rho:.2f}")
 
-    # Confusion Matrix
-    from sklearn.metrics import confusion_matrix
-    cm = confusion_matrix(ground_truth, predictions, labels=[0, 1])
-    acc = np.mean(np.array(predictions) == np.array(ground_truth))
+    # Manual Confusion Matrix
+    tp = 0; fp = 0; tn = 0; fn = 0
+    correct = 0
+    total = len(predictions)
+    
+    for p, g in zip(predictions, ground_truth):
+        if p == g: correct += 1
+        if p == 1 and g == 1: tp += 1
+        if p == 1 and g == 0: fp += 1
+        if p == 0 and g == 0: tn += 1
+        if p == 0 and g == 1: fn += 1
+        
+    acc = correct / total
     
     print(f"\nOverall Accuracy: {acc*100:.1f}%")
     print("Confusion Matrix (0 vs 1):")
-    print(cm)
+    print(f"[[{tn} {fp}]\n [{fn} {tp}]]")
     
     # Logic Separation Score
-    # Check if Context changed behavior
+    # ... (rest same) ...
     # For (A=0, B=1): XOR->1, AND->0. Did it flip?
     # Case index 1 (XOR 0,1) and 5 (AND 0,1).
     xor_01 = predictions[1]
