@@ -27,9 +27,8 @@ class SimpleVisionEncoder(nn.Module):
         )
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Scale if range is [0, 255]
-        if x.max() > 1.0:
-            x = x / 255.0
+        # Input is already normalized by DataLoader
+        # x shape: (B, 1, 28, 28)
             
         h = F.relu(self.conv1(x)) # 28 -> 28
         h = self.mp1(h)           # 28 -> 14

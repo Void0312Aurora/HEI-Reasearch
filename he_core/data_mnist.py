@@ -30,6 +30,7 @@ def get_mnist_loaders(batch_size: int = 64, data_root: str = './data', max_sampl
         train_ds = FakeDataset(1000)
         test_ds = FakeDataset(200)
 
+    print(f"Loaded Train Dataset: {type(train_ds)}")
     if max_samples:
         indices = np.random.choice(len(train_ds), max_samples, replace=False)
         train_ds = Subset(train_ds, indices)

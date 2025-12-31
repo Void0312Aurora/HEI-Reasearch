@@ -52,7 +52,7 @@ def train_mnist_entity():
     
     # Optimizer
     params = list(vision_enc.parameters()) + list(entity.parameters()) + list(readout.parameters())
-    opt = optim.Adam(params, lr=5e-3)
+    opt = optim.Adam(params, lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
     
     # 3. Loop
