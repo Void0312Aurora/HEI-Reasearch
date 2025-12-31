@@ -113,9 +113,14 @@ class BabiTokenizer:
     def decode(self, indices):
         return [self.idx2word.get(idx.item(), "<unk>") for idx in indices]
 
-def get_babi_loaders(task_id=1, batch_size=32, data_root='./data/babi'):
+def get_babi_loaders(task_id=1, batch_size=32, data_root='./data/babi', max_samples=None):
     train_ds = BabiDataset(data_root, task_id, train=True)
     test_ds = BabiDataset(data_root, task_id, train=False)
+    
+    if max_samples:
+        train_ds.stories = train_ds.stories[:max_samples]
+        train_ds.questions = train_ds.questions[:max_samples]
+        train_ds.answers = train_ds.answers[:max_samples]
     
     # Build Vocab on Train + Test (to cover all answers)
     tokenizer = BabiTokenizer()

@@ -34,6 +34,12 @@ class ContactIntegrator:
              H = generator(temp_state) # (B, 1)
              H_sum = H.sum()
              grads = torch.autograd.grad(H_sum, x, create_graph=True, allow_unused=True)[0]
+             
+             # DEBUG
+             # print(f"[DEBUG] Integrator: H_rg={H_sum.requires_grad} x_rg={x.requires_grad}")
+             if grads is not None:
+                 pass # print(f"[DEBUG] Integrator Grads rg={grads.requires_grad_}") # requires_grad property
+             
              if grads is None:
                  grads = torch.zeros_like(x)
         

@@ -178,7 +178,8 @@ class UnifiedGeometricEntityV5(nn.Module):
     def forward_tensor(self, state_flat: torch.Tensor, 
                        u_dict: Optional[Union[Dict[str, torch.Tensor], torch.Tensor]], 
                        dt: float,
-                       prediction_error: Optional[torch.Tensor] = None) -> dict:
+                       prediction_error: Optional[torch.Tensor] = None,
+                       epoch_idx: int = -1, batch_idx: int = -1) -> dict:
         """
         Forward step with L2 PT_A and A3 F-tracking.
         """
@@ -222,6 +223,8 @@ class UnifiedGeometricEntityV5(nn.Module):
                 H_sum = self.internal_gen(s) # Fallback for base Dissipative
             
             for port_name, u_val in u_dict.items():
+                if epoch_idx == 0 and batch_idx == 0: # Print only once
+                     print(f"[DEBUG] Port {port_name}: u_val rg={u_val.requires_grad}")
                 if hasattr(self.generator, 'get_h_port'):
                     H_sum += self.generator.get_h_port(s, port_name, u_val, weights=chart_weights)
                 else:

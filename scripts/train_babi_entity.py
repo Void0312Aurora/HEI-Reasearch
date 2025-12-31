@@ -25,14 +25,16 @@ def train_babi():
     parser.add_argument('--dt', type=float, default=0.1)
     parser.add_argument('--steps', type=int, default=5, help='Dynamics steps per semantic frame')
     parser.add_argument('--baseline', action='store_true', help='Run pure encoder baseline')
+    parser.add_argument('--max_samples', type=int, default=None, help='Limit dataset size for overfitting')
     args = parser.parse_args()
     
     print(f"=== Training bAbI Entity (Phase 5: Reasoning) ===")
     print(f"Task: {args.task_id} | Mode: {'Baseline' if args.baseline else 'Entity (Steps=' + str(args.steps) + ')'}")
     print(f"Device: {DEVICE}")
     
+    
     # 1. Data
-    train_loader, test_loader, tokenizer = get_babi_loaders(task_id=args.task_id, batch_size=args.batch_size)
+    train_loader, test_loader, tokenizer = get_babi_loaders(task_id=args.task_id, batch_size=args.batch_size, max_samples=args.max_samples)
     vocab_size = len(tokenizer.word2idx)
     print(f"Vocab Size: {vocab_size}")
     
@@ -48,7 +50,7 @@ def train_babi():
             'dim_u': args.dim_q, 
             'dim_z': 16,
             'num_charts': 1,
-            'learnable_coupling': False, # Simplification: Direct Coupling <u, q>
+            'learnable_coupling': True, # Enable W_stack (Semantic -> Dynamics Alignment)
             'use_adaptive_generator': True
         }
         entity = UnifiedGeometricEntity(config).to(DEVICE)
@@ -88,13 +90,13 @@ def train_babi():
             
             # B. Dynamics (L1) or Bypass
             if entity:
-                # Init state (q, p, s)
-                s_flat = torch.zeros(b_size, args.dim_q * 2 + 1, device=DEVICE)
+                # Init state (q, p, s) - Random Init to break symmetry
+                s_flat = (torch.randn(b_size, args.dim_q * 2 + 1, device=DEVICE) * 0.05).requires_grad_(True)
                 
                 # Run dynamics for T steps
                 # Reasoning "Thought Process"
                 for _ in range(args.steps):
-                    out = entity.forward_tensor(s_flat, {'default': u_text}, args.dt)
+                    out = entity.forward_tensor(s_flat, {'default': u_text}, args.dt, epoch_idx=epoch, batch_idx=batch_idx)
                     s_flat = out['next_state_flat']
                     
                 q_final = s_flat[:, :args.dim_q]
@@ -110,16 +112,48 @@ def train_babi():
             
             opt.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(params, 1.0)
-            opt.step()
             
             total_loss += loss.item()
             pred = logits.argmax(dim=1)
             correct += (pred == y).sum().item()
             total += b_size
+
+            if batch_idx % 50 == 0:
+                # Grad Norms (Computed before clip/step)
+                grad_text = 0.0
+                for p in text_enc.parameters():
+                    if p.grad is not None:
+                        grad_text += p.grad.norm().item()
+                        
+                grad_entity = 0.0
+                if entity:
+                    for p in entity.parameters():
+                        if p.grad is not None:
+                            grad_entity += p.grad.norm().item()
+                
+                print(f"Ep {epoch} [{batch_idx}/{len(train_loader)}] Loss: {loss.item():.4f} Acc: {correct/total:.4f} "
+                      f"|u|={u_text.norm().item():.2f} |q|={q_final.norm().item():.2f} "
+                      f"|g_text|={grad_text:.6f} |g_ent|={grad_entity:.6f}")
+
+            torch.nn.utils.clip_grad_norm_(params, 1.0)
+            opt.step()
             
             if batch_idx % 50 == 0:
-                print(f"Ep {epoch} [{batch_idx}/{len(train_loader)}] Loss: {loss.item():.4f} Acc: {correct/total:.4f} |u|={u_text.norm().item():.2f} |q|={q_final.norm().item():.2f}")
+                # Grad Norms
+                grad_text = 0.0
+                for p in text_enc.parameters():
+                    if p.grad is not None:
+                        grad_text += p.grad.norm().item()
+                        
+                grad_entity = 0.0
+                if entity:
+                    for p in entity.parameters():
+                        if p.grad is not None:
+                            grad_entity += p.grad.norm().item()
+                            
+                print(f"Ep {epoch} [{batch_idx}/{len(train_loader)}] Loss: {loss.item():.4f} Acc: {correct/total:.4f} "
+                      f"|u|={u_text.norm().item():.2f} |q|={q_final.norm().item():.2f} "
+                      f"|g_text|={grad_text:.2f} |g_ent|={grad_entity:.2f}")
                 
         # Test Validation
         # (Simple calc on test set)
