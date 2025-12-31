@@ -30,6 +30,9 @@ class PortCoupling(nn.Module):
                  for k in range(num_charts):
                      if dim_q == dim_u:
                          self.W_stack[k].copy_(-torch.eye(dim_q) + torch.randn(dim_q, dim_q)*0.01)
+                     else:
+                         # Random initialization for non-square
+                         nn.init.xavier_normal_(self.W_stack[k])
         
         if self.learnable:
             # We add an Action Readout Matrix W_out: (Dim_Q -> Dim_U)
