@@ -3,21 +3,28 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
 import numpy as np
 
-def get_mnist_loaders(batch_size: int = 64, data_root: str = './data', max_samples: int = None):
+def get_mnist_loaders(batch_size: int = 64, data_root: str = './data', max_samples: int = None, use_fashion: bool = False):
     """
-    Returns (train_loader, test_loader) for MNIST.
+    Returns (train_loader, test_loader) for MNIST or Fashion-MNIST.
     """
     transform = transforms.Compose([
         transforms.ToTensor(),
-        # Normalize to typical mean/std of MNIST
+        # Normalize to typical mean/std of MNIST/Fashion-MNIST
+        # Fashion-MNIST mean=0.2860, std=0.3530 approx, but MNIST stats are often reused or close enough for this test
         transforms.Normalize((0.1307,), (0.3081,))
     ])
     
     try:
-        train_ds = datasets.MNIST(data_root, train=True, download=True, transform=transform)
-        test_ds = datasets.MNIST(data_root, train=False, download=True, transform=transform)
+        if use_fashion:
+            train_ds = datasets.FashionMNIST(data_root, train=True, download=True, transform=transform)
+            test_ds = datasets.FashionMNIST(data_root, train=False, download=True, transform=transform)
+            print("Loaded Fashion-MNIST Dataset.")
+        else:
+            train_ds = datasets.MNIST(data_root, train=True, download=True, transform=transform)
+            test_ds = datasets.MNIST(data_root, train=False, download=True, transform=transform)
+            print("Loaded MNIST Dataset.")
     except Exception as e:
-        print(f"Error loading MNIST (network issue?): {e}")
+        print(f"Error loading Dataset (network issue?): {e}")
         print("Creating Fake Random Dataset for debugging...")
         # Fallback for offline environments if download fails
         class FakeDataset(torch.utils.data.Dataset):
@@ -30,7 +37,6 @@ def get_mnist_loaders(batch_size: int = 64, data_root: str = './data', max_sampl
         train_ds = FakeDataset(1000)
         test_ds = FakeDataset(200)
 
-    print(f"Loaded Train Dataset: {type(train_ds)}")
     if max_samples:
         indices = np.random.choice(len(train_ds), max_samples, replace=False)
         train_ds = Subset(train_ds, indices)

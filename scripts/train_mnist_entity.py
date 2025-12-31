@@ -23,6 +23,7 @@ def train_mnist_entity():
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--dt', type=float, default=0.1)
     parser.add_argument('--steps', type=int, default=3, help='Dynamics steps per visual frame')
+    parser.add_argument('--use_fashion', action='store_true', help='Use Fashion-MNIST')
     args = parser.parse_args()
     
     print(f"=== Training MNIST Entity (A5 Multi-modal Test) ===")
@@ -30,7 +31,7 @@ def train_mnist_entity():
     print(f"Config: {vars(args)}")
     
     # 1. Data
-    train_loader, test_loader = get_mnist_loaders(batch_size=args.batch_size)
+    train_loader, test_loader = get_mnist_loaders(batch_size=args.batch_size, use_fashion=args.use_fashion)
     
     # 2. Models
     # Vision Encoder: Image -> u (drive)
