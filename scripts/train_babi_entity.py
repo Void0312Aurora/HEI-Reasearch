@@ -26,6 +26,7 @@ def train_babi():
     parser.add_argument('--steps', type=int, default=5, help='Dynamics steps per semantic frame')
     parser.add_argument('--baseline', action='store_true', help='Run pure encoder baseline')
     parser.add_argument('--max_samples', type=int, default=None, help='Limit dataset size for overfitting')
+    parser.add_argument('--q0_scale', type=float, default=1.0, help='Scaling factor for q0 init from u')
     args = parser.parse_args()
     
     print(f"=== Training bAbI Entity (Phase 5: Reasoning) ===")
@@ -94,7 +95,8 @@ def train_babi():
                 # Fix 1: Gradient Cold Start - Init q0 from u_text
                 # q0 = u_text (Assumes Dim match or Proj)
                 # Ensure u_text is treated as "Start State"
-                q0 = u_text.clone() 
+                # Phase 5c: Weak Injection (q0 = scale * u)
+                q0 = u_text.clone() * args.q0_scale
                 p0 = torch.zeros_like(q0)
                 # s0 = 0 (Entro-time)
                 s0 = torch.zeros(b_size, 1, device=DEVICE)
@@ -188,7 +190,7 @@ def evaluate(loader, text_enc, entity, readout, args, device):
             
             if entity:
                 # Fix: Evaluation mode also needs correct q0 init
-                q0 = u_text.clone() 
+                q0 = u_text.clone() * args.q0_scale
                 p0 = torch.zeros_like(q0)
                 s0 = torch.zeros(b_size, 1, device=device)
                 s_flat = torch.cat([q0, p0, s0], dim=1) # No grad needed for eval
