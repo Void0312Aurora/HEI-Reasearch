@@ -104,6 +104,8 @@ def train_closed_loop():
         epoch_loss = 0
         total_acc = 0
         total_samples = 0
+        total_gain = 0.0
+        rollback_count = 0
         
         for batch_idx, (x, y, lengths) in enumerate(train_loader):
             x, y = x.to(DEVICE), y.to(DEVICE)
@@ -158,16 +160,13 @@ def train_closed_loop():
             
             if action == 'ROLLBACK':
                 # Skip Update
-                # print(f"Supervisor: Skip Batch {batch_idx} (Gain {gain_val:.2f} > 1.0)")
-                # For now, allow it but log? Or STRICT enforcement?
-                # Strict enforcement might kill training early if stiffness is too low.
-                # Theory-7 says Stiffness limits gain. So with K=1.0, it SHOULD pass.
-                # If K=0, it might fail.
-                # Let's enforce Hard Gate: No Step.
                 opt.zero_grad() 
+                rollback_count += 1
             else:
                 opt.step()
                 
+            total_gain += gain_val
+            
             epoch_loss += loss.item() * b_size
             acc = (logits.argmax(1) == y).float().sum().item()
             total_acc += acc
@@ -175,12 +174,18 @@ def train_closed_loop():
             
         avg_loss = epoch_loss / total_samples
         avg_acc = total_acc / total_samples
+        avg_gain = total_gain / (len(train_loader) * b_size)  # Approximate per sample
+        # Correction: total_gain is summed per batch? No, gain_val is scalar per batch.
+        # gain_val was calculated once per batch.
+        # So we should divide by number of batches.
+        avg_gain = total_gain / len(train_loader)
+        rollback_rate = rollback_count / len(train_loader)
         
         # Validation
         val_acc = evaluate(entity, text_enc, readout, val_loader, args)
         
         if epoch % 5 == 0:
-            print(f"Ep {epoch}: Loss {avg_loss:.4f} | Train Acc {avg_acc:.4f} | Val Acc {val_acc:.4f}")
+            print(f"Ep {epoch}: Loss {avg_loss:.4f} | Train Acc {avg_acc:.4f} | Val Acc {val_acc:.4f} | Gain {avg_gain:.2f} | Rollback {rollback_rate:.2%}")
 
     print(f"=== Complete (Mode: {'Baseline' if args.baseline else 'Entity'}) ===")
 
