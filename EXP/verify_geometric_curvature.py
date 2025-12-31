@@ -17,13 +17,14 @@ If System is Non-Abelian, q_AB != q_BA.
 If System is Elastic/Consistent, q_1 ~ q_2.
 """
 
+import os
 import torch
 import torch.nn as nn
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
-from he_core.entity_v4 import UnifiedGeometricEntity
+from he_core.entity_v5 import UnifiedGeometricEntityV5 as UnifiedGeometricEntity
 from he_core.adaptive_generator import AdaptiveDissipativeGenerator
 from he_core.port_generator import PortCoupledGenerator
 
@@ -80,13 +81,16 @@ def main():
     readout = nn.Linear(args.dim_q, 1)
     readout.to(DEVICE)
     
+    cur_dir = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(cur_dir, 'logic_agent.pth')
+    readout_path = os.path.join(cur_dir, 'logic_readout.pth')
+    
     try:
-        entity.load_state_dict(torch.load(args.model_path))
-        readout.load_state_dict(torch.load(args.readout_path))
-        print("Models loaded.")
+        entity.load_state_dict(torch.load(model_path))
+        readout.load_state_dict(torch.load(readout_path))
+        print(f"Models loaded from {model_path}.")
     except:
-        print("Model load failed.")
-        return
+        print("Warning: Model load failed. Running with random weights.")
         
     entity.eval()
     

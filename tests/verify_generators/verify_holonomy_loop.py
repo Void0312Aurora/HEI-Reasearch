@@ -19,7 +19,7 @@ import os
 import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple
 
-from he_core.entity_v4 import UnifiedGeometricEntity
+from he_core.entity_v5 import UnifiedGeometricEntityV5 as UnifiedGeometricEntity
 from he_core.state import ContactState
 
 def measure_holonomy_error(entity, chart_cycle: List[int], num_samples: int = 20) -> Tuple[float, float, List[float]]:

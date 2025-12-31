@@ -28,19 +28,14 @@ class ContactIntegrator:
         
         temp_state = ContactState(state.dim_q, state.batch_size, state.device, x)
         
-        # Compute H
-        H = generator(temp_state) # (B, 1)
-        H_sum = H.sum()
-        
-        # Restore Fundamental Solution: create_graph=True
-        # This allows learning d(VectorField)/d(Theta).
-        # We rely on PyTorch's ability to handle this without explicit retain_graph for the H calculation itself,
-        # assuming H's graph is used for grad and then effectively reconstructed/kept via the create_graph connection?
-        # Actually, if we use H in dot_s, we MUST retain_graph if grad() destroys it.
-        # But debug_functorch passed WITHOUT retain_graph even with H in update.
-        # This implies grad() didn't destroy the path needed for H->Update.
-        
-        grads = torch.autograd.grad(H_sum, x, create_graph=True)[0]
+        # Compute H and Grads with local grad enabled
+        with torch.enable_grad():
+             # H depends on x
+             H = generator(temp_state) # (B, 1)
+             H_sum = H.sum()
+             grads = torch.autograd.grad(H_sum, x, create_graph=True, allow_unused=True)[0]
+             if grads is None:
+                 grads = torch.zeros_like(x)
         
         # Extract derivatives
         d = state.dim_q

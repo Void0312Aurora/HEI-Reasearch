@@ -116,6 +116,8 @@ class HolonomyAnalyzer:
             
             for _ in range(steps - half):
                 seq.append(-A)
+        
+        return seq
                 
     @staticmethod
     def measure_logic_holonomy(

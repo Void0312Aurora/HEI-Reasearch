@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import os
 from typing import Dict, List, Tuple
 
-from he_core.entity_v4 import UnifiedGeometricEntity
+from he_core.entity_v5 import UnifiedGeometricEntityV5 as UnifiedGeometricEntity
 
 def estimate_growth_bound(entity, dt: float = 0.01, steps: int = 50, num_samples: int = 10) -> float:
     """

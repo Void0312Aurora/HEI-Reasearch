@@ -4,25 +4,27 @@ Phase 21.2: Verify Holonomy (Logic Interface).
 Measures the cyclic displacement (A -> -A) of the Fundamental Adaptive Entity.
 """
 
+import os
 import torch
 import torch.nn as nn
-from he_core.entity_v4 import UnifiedGeometricEntity
+from he_core.entity_v5 import UnifiedGeometricEntityV5 as UnifiedGeometricEntity
 from he_core.adaptive_generator import AdaptiveDissipativeGenerator
 from he_core.port_generator import PortCoupledGenerator
 from he_core.holonomy import HolonomyAnalyzer
 from he_core.state import ContactState
 
 def verify_holonomy():
-    print("=== Phase 21.2: Holonomy Verification ===")
+    print("=== Phase 21.2 (v5): Holonomy Audit ===")
     
-    # 1. Setup Entity (Same fundamental config)
+    # 1. Setup Entity (v5)
     dim_q = 64
     config = {
         'dim_q': dim_q,
         'dim_u': 32,
         'num_charts': 1,
         'learnable_coupling': True,
-        'use_port_interface': False
+        'use_port_interface': False,
+        'beta_kl': 0.01
     }
     entity = UnifiedGeometricEntity(config)
     
@@ -35,16 +37,14 @@ def verify_holonomy():
     entity.generator = PortCoupledGenerator(adaptive, 32, True, 1)
     entity.internal_gen = adaptive # This ensures the shared reference matches loading
     
-    # Load Weights if available (from fundamental training)
+    # Try loading weights
     try:
-        entity.load_state_dict(torch.load('phase21_entity.pth'))
-        print("Loaded trained weights from Phase 21.1.")
-    except Exception as e:
-        print(f"Warning: Using random weights (Training not found). Error: {e}")
-        # Print keys to debug
-        print(f"Model Keys: {list(entity.state_dict().keys())[:3]}")
-        loaded = torch.load('phase21_entity.pth')
-        print(f"File Keys: {list(loaded.keys())[:3]}")
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(cur_dir, 'phase21_entity.pth')
+        entity.load_state_dict(torch.load(model_path))
+        print(f"Loaded trained weights from {model_path}.")
+    except:
+        print("Warning: Training weights not found. Running with baseline structure (Random).")
         
     entity.eval()
     
