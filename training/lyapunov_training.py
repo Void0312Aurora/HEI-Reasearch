@@ -220,6 +220,14 @@ class OfflineDynamicsTrainer(nn.Module):
         kl = 0.5 * (z ** 2).sum(dim=1, keepdim=True)  # 简化的KL
         
         F = H_c + 0.01 * kl
+        
+        # 数值稳定性：clamp避免极端值
+        F = F.clamp(-1e6, 1e6)
+        
+        # 检查NaN并替换
+        if torch.isnan(F).any():
+            F = torch.where(torch.isnan(F), torch.zeros_like(F), F)
+        
         return F.squeeze(-1)  # (batch,)
     
     def evolve_offline(self, init_state: ContactState) -> Tuple[List[torch.Tensor], torch.Tensor]:
