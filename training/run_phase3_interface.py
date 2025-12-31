@@ -313,8 +313,25 @@ def train_phase3(args):
     if args.data and os.path.exists(args.data):
         # 构建词汇表
         print(f"\n加载数据: {args.data}")
-        with open(args.data, 'r', encoding='utf-8') as f:
-            text = f.read()
+        
+        # 根据文件格式加载
+        if args.data.endswith('.json'):
+            import json
+            texts = []
+            with open(args.data, 'r', encoding='utf-8') as f:
+                for line in f:
+                    try:
+                        obj = json.loads(line.strip())
+                        if 'text' in obj:
+                            texts.append(obj['text'])
+                    except json.JSONDecodeError:
+                        continue
+            text = '\n'.join(texts)
+            print(f"  加载了 {len(texts)} 篇文档")
+        else:
+            with open(args.data, 'r', encoding='utf-8') as f:
+                text = f.read()
+        
         tokenizer.build_vocab([text])
         
         # 更新vocab_size
