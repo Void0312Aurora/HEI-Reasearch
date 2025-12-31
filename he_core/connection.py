@@ -12,16 +12,22 @@ class Connection(nn.Module):
     - Connection A_mu(q) maps tangent vectors to Lie algebra elements.
     - Transport T(q, q') approximates exp(-∫ A dq).
     
+    理论基础-7/几何基础.md 第五节:
+    - "平行移动/联络的角色...把特征从一个局部框架搬运到另一个框架"
+    - "Gauge Equivariant...把'沿边平行移动特征'作为消息传递步骤的一部分"
+    
     Implementation:
     - T = I + epsilon * A(q_from, q_to)  (first-order approximation)
     - A is constrained to be near-orthogonal for volume preservation.
+    - epsilon 需要足够大以产生有意义的平行移动效果
     """
-    def __init__(self, dim_q: int, hidden_dim: int = 32):
+    def __init__(self, dim_q: int, hidden_dim: int = 64, init_epsilon: float = 0.3):
         super().__init__()
         self.dim_q = dim_q
         self.hidden_dim = hidden_dim
         
         # Network predicting skew-symmetric deviation (for SO(n) structure)
+        # 增加网络容量以学习更复杂的联络结构
         self.net = nn.Sequential(
             nn.Linear(dim_q * 2, hidden_dim),
             nn.Tanh(),
@@ -31,16 +37,30 @@ class Connection(nn.Module):
         )
         
         # Scale factor for perturbation strength
-        self.epsilon = nn.Parameter(torch.tensor(0.1))
+        # 理论要求：epsilon 足够大以产生可测量的平行移动效果
+        # 但不能太大导致 T 偏离正交太远
+        self.epsilon = nn.Parameter(torch.tensor(init_epsilon))
         
-        # Initialize for near-identity transport
-        self._init_near_identity()
+        # Initialize with meaningful transport (not near-identity)
+        self._init_meaningful_transport()
         
-    def _init_near_identity(self):
-        """Initialize network for near-identity transport (flat connection)."""
+    def _init_meaningful_transport(self):
+        """
+        Initialize network for meaningful parallel transport.
+        
+        理论背景（生成元.md L2层）：
+        - 联络应能产生可测量的跨图迁移效果
+        - 初始化太小会导致 L_conn ≈ 0，联络形同虚设
+        - 初始化太大会导致训练不稳定
+        
+        策略：
+        - 使用适中的初始化（std=0.01）
+        - 让网络能够学习非平凡的联络结构
+        """
         for name, param in self.net.named_parameters():
             if 'weight' in name:
-                nn.init.normal_(param, std=1e-4)
+                # 适中的初始化，允许非平凡的联络
+                nn.init.normal_(param, std=0.01)
             elif 'bias' in name:
                 nn.init.zeros_(param)
                 
