@@ -132,15 +132,31 @@ def main():
     print(f"  > State Divergence (Norm): {dist_norm:.4f}")
     print(f"  > Semantic Diff: {sem_diff:.4f}")
     
-    if dist_norm > 0.1:
-        print("  >> RESULT: Non-Abelian (History Dependent).")
+    # Dual Criteria
+    if sem_diff > 0.1:
+        print("  >> RESULT: Semantically Non-Abelian (Logic Output differs).")
+    elif dist_norm > 0.01:
+        print("  >> RESULT: Weakly Non-Abelian (State differs, Logic same).")
     else:
-        print("  >> RESULT: Abelian (Order Irrelevant).")
+        print("  >> RESULT: Abelian (Order and Logic Irrelevant).")
         
-    # Baseline Check: Self-Commutator
-    q_XX, _ = run_stage(entity, q_A1, ctx_xor, steps=T, u_pulse=1.0, pulse_window=(0, T))
-    dist_base = torch.norm(q_XX - q_XX).item()
-    print(f"  > Baseline Error ({dist_base:.4e})")
+    # Baseline Check: Self-Drift (vs Numerical Noise)
+    # Compare "Running XOR for T" vs "Running XOR for 2T" normalized by scale?
+    # Actually, critique asked for "Repeat Same Path".
+    # Since deterministic, repeat is 0.
+    # Let's measure "Drift from Attractor" by comparing Step T vs Step 2T in same context.
+    # If system is settled, Drift should be small.
+    # If Commutator Diff > Drift, then Switching matters more than Time.
+    q_drift, _ = run_stage(entity, q_A1, ctx_xor, steps=T, u_pulse=1.0, pulse_window=(0, T))
+    # q_A1 is T steps. q_drift is 2T steps.
+    drift_val = torch.norm(q_A1 - q_drift).item()
+    norm_drift = drift_val / (torch.norm(q_A1).item() + torch.norm(q_drift).item() + 1e-8)
+    print(f"  > Baseline Drift (XOR T->2T): {norm_drift:.4f}")
+    
+    if dist_norm > norm_drift:
+         print("  >> VALIDITY: Commutator Effect > Time Drift.")
+    else:
+         print("  >> WARNING: Commutator Effect <= Time Drift (Could be just settling time).")
 
     # 3. Loop Test
     print("\nTest 2: Holonomy Loop (XOR -> AND -> XOR | u=1)")
