@@ -92,13 +92,11 @@ class UnifiedGeometricEntityV5(nn.Module):
             from he_core.adaptive_generator import AdaptiveDissipativeGenerator
             self.internal_gen = AdaptiveDissipativeGenerator(self.dim_q, net_V=self.net_V, dim_z=self.dim_z)
         else:
-            # Fallback or standard Dissipative. Dissipative doesn't support z natively yet in base class.
-            # We patch it? Or better, we assume DissipativeGenerator is only for baseline.
-            # For v5 strictness, we should use AdaptiveDissipativeGenerator by default or inject V.
-            # Let's default to Adaptive for v5 if not specified? 
-            # Or manually set it.
-            # For now, we update internal_gen to be compatible if it's Adaptive.
-             pass
+            # Robust Fallback: Use DeepDissipativeGenerator to share net_V
+            # This ensures A3 (Unified V) even if active z-modulation is disabled
+            from he_core.generator import DeepDissipativeGenerator
+            alpha = config.get('damping', 0.1)
+            self.internal_gen = DeepDissipativeGenerator(self.dim_q, alpha=alpha, net_V=self.net_V)
 
         # State Container
         self.state = ContactState(self.dim_q, 1)
@@ -224,32 +222,14 @@ class UnifiedGeometricEntityV5(nn.Module):
                 H_sum = self.internal_gen(s) # Fallback for base Dissipative
             
             for port_name, u_val in u_dict.items():
-                # For ports, we might also want to inject z?
-                # For now, ports are u-based.
-                # But if port generator subtracts internal_gen, it needs z too!
-                # This is tricky: H_port_total = H_port_specific + H_internal.
-                # If using get_h_port:
                 if hasattr(self.generator, 'get_h_port'):
                     H_sum += self.generator.get_h_port(s, port_name, u_val, weights=chart_weights)
                 else:
-                    # Fallback Logic: H_coupled = Gen(s, u)
-                    # Ideally Gen(s, u) = H_internal(s) + Coupling(s, u)
-                    # So we don't explicitly subtract unless Gen includes internal.
-                    # PortCoupledGenerator DOES encapsulate internal.
-                    # So self.generator(s) returns Full H.
-                    # We should just call self.generator(s, u, z=z_batch)?
-                    # But PortCoupledGenerator signature might not accept z.
-                    # Let's rely on internal_gen being sufficient for H_base.
-                    # If PortCoupledGenerator delegates to internal, we need to pass z there.
-                    # But PortCoupledGenerator.forward calls internal(state).
-                    # We need to update PortCoupledGenerator to pass kwargs?
-                    
-                    # SIMPLIFICATION:
-                    # We assume PortCoupledGenerator adds interaction term to internal.
-                    # But PortCoupledGenerator usually wraps internal.
-                    # Let's assume we fixed PortCoupledGenerator or using get_h_port (preferred).
-                    # get_h_port returns ONLY interaction term.
-                    pass
+                    # STRICT MODE: Fail if port interface is missing
+                    # This prevents silent failures where drive u is ignored
+                    raise NotImplementedError(
+                        f"Generator {type(self.generator).__name__} must implement 'get_h_port' for EntityV5 compatibility."
+                    )
             return H_sum
         
         # Step dynamics
