@@ -144,6 +144,10 @@ def generate_plots(results: Dict, output_dir: Path):
             B_vals = sorted(set(r['config']['batch_size'] for r in bl_data))
             L_vals = sorted(set(r['config']['max_seq_len'] for r in bl_data))
             
+            # 动态调整字体大小
+            font_size = 8 if len(L_vals) < 10 else 6
+
+            
             # tokens/s
             ax = axes[0]
             toks_matrix = []
@@ -170,7 +174,7 @@ def generate_plots(results: Dict, output_dir: Path):
             for i in range(len(B_vals)):
                 for j in range(len(L_vals)):
                     ax.text(j, i, f'{toks_matrix[i][j]:.0f}', 
-                            ha='center', va='center', fontsize=8)
+                            ha='center', va='center', fontsize=font_size)
             
             # VRAM
             ax = axes[1]
@@ -195,9 +199,10 @@ def generate_plots(results: Dict, output_dir: Path):
             plt.colorbar(im, ax=ax)
             
             for i in range(len(B_vals)):
+
                 for j in range(len(L_vals)):
                     ax.text(j, i, f'{vram_matrix[i][j]:.1f}', 
-                            ha='center', va='center', fontsize=8)
+                            ha='center', va='center', fontsize=font_size)
         
         plt.tight_layout()
         plt.savefig(output_dir / 'phase1_compute.png', dpi=150)
@@ -206,7 +211,7 @@ def generate_plots(results: Dict, output_dir: Path):
     
     # 图2: Phase 2 - dim_q曲线
     if 'phase2_dim_q' in results:
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         
         hyp_data = [r for r in results['phase2_dim_q'] if 'hyp' in r['config_name']]
         euc_data = [r for r in results['phase2_dim_q'] if 'euc' in r['config_name']]
@@ -245,7 +250,7 @@ def generate_plots(results: Dict, output_dir: Path):
     
     # 图3: Phase 3 - 消融分析
     if 'phase3_ablation' in results:
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        fig, axes = plt.subplots(1, 2, figsize=(20, 8))
         
         data = results['phase3_ablation']
         names = [r['config_name'] for r in data]
@@ -256,7 +261,8 @@ def generate_plots(results: Dict, output_dir: Path):
         bars = ax.bar(names, ppls, color=['gray', 'green', 'blue', 'red', 'purple'])
         ax.set_ylabel('PPL')
         ax.set_title('Ablation: PPL Comparison')
-        ax.set_xticklabels(names, rotation=45)
+        ax.set_xticks(range(len(names)))
+        ax.set_xticklabels(names, rotation=45, ha='right', fontsize=8)
         
         # 梯度分布堆叠图
         ax = axes[1]
@@ -270,7 +276,7 @@ def generate_plots(results: Dict, output_dir: Path):
         ax.bar(x, ent_grads, bottom=[e+d for e,d in zip(enc_grads, dec_grads)], 
                label='Entity', color='coral')
         ax.set_xticks(x)
-        ax.set_xticklabels(names, rotation=45)
+        ax.set_xticklabels(names, rotation=45, ha='right', fontsize=8)
         ax.set_ylabel('Gradient Norm')
         ax.set_title('Gradient Distribution by Module')
         ax.legend()
@@ -303,7 +309,7 @@ def generate_plots(results: Dict, output_dir: Path):
                 colors = ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99', '#ff99cc']
                 
                 ax.pie(sizes, labels=labels, autopct='%1.1f%%', 
-                       colors=colors[:len(sizes)], startangle=90)
+                       colors=colors[:len(sizes)], startangle=90, pctdistance=0.85, labeldistance=1.1)
                 ax.set_title('Parameter Distribution')
             
             plt.tight_layout()
