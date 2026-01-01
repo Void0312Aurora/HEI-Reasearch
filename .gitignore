@@ -15,3 +15,6 @@ docs/plan/*
 configs/*
 *.pkl
 closed_loop_workspace/*
+
+# Archives
+archive/

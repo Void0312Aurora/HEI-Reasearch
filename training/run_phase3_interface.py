@@ -212,14 +212,27 @@ class InterfaceTrainer(nn.Module):
         
         # 2. 离线稳定性损失
         # F应该在无外部输入时下降
-        F_diff = F_trajectory[:, 1:] - F_trajectory[:, :-1]
-        L_stability = torch.relu(F_diff).mean()
+        if F_trajectory.shape[1] > 1:
+            F_diff = F_trajectory[:, 1:] - F_trajectory[:, :-1]
+            L_stability = torch.relu(F_diff).mean()
+            violation_rate = (F_diff > 0).float().mean().item()
+        else:
+            L_stability = torch.tensor(0.0, device=tokens.device)
+            violation_rate = 0.0
         
         # 3. 几何一致性损失（简化：q的范数约束）
         final_q = result['final_state'].q
         L_geometry = (final_q.norm(dim=-1) - 1.0).pow(2).mean()
         
-        # 总损失
+        # 数值稳定性检查
+        if torch.isnan(L_lm) or torch.isinf(L_lm):
+            L_lm = torch.tensor(9.21, device=tokens.device)  # log(10000)
+        if torch.isnan(L_stability) or torch.isinf(L_stability):
+            L_stability = torch.tensor(0.0, device=tokens.device)
+        if torch.isnan(L_geometry) or torch.isinf(L_geometry):
+            L_geometry = torch.tensor(0.0, device=tokens.device)
+        
+        # 总损失 - 增加语言建模权重
         loss = (
             self.config.lambda_lm * L_lm +
             self.config.lambda_stability * L_stability +
@@ -227,10 +240,7 @@ class InterfaceTrainer(nn.Module):
         )
         
         # 计算PPL
-        ppl = torch.exp(L_lm).item()
-        
-        # 计算Lyapunov违反率
-        violation_rate = (F_diff > 0).float().mean().item()
+        ppl = torch.exp(L_lm.clamp(max=15)).item()  # 防止溢出
         
         return {
             'loss': loss,

@@ -1,33 +1,0 @@
-=== Phase 18.3/4: MNIST Dynamics Training ===
-Mode: baseline_static, Lambda: 0.1, Drive: 1.0
-  0%|          | 0.00/9.91M [00:00<?, ?B/s]  0%|          | 32.8k/9.91M [00:00<02:36, 63.0kB/s]  1%|          | 65.5k/9.91M [00:00<01:49, 89.6kB/s]  1%|          | 98.3k/9.91M [00:00<01:29, 109kB/s]   1%|▏         | 131k/9.91M [00:01<01:59, 81.6kB/s]  2%|▏         | 164k/9.91M [00:01<01:56, 83.4kB/s]  2%|▏         | 197k/9.91M [00:02<01:54, 85.0kB/s]  2%|▏         | 229k/9.91M [00:02<01:42, 94.8kB/s]  3%|▎         | 262k/9.91M [00:03<02:05, 77.1kB/s]  3%|▎         | 295k/9.91M [00:03<01:44, 92.2kB/s]  3%|▎         | 328k/9.91M [00:03<01:36, 98.8kB/s]  4%|▎         | 360k/9.91M [00:03<01:28, 107kB/s]   4%|▍         | 393k/9.91M [00:04<01:26, 110kB/s]  4%|▍         | 426k/9.91M [00:04<01:16, 124kB/s]  5%|▍         | 459k/9.91M [00:04<01:11, 131kB/s]  5%|▍         | 492k/9.91M [00:04<01:05, 143kB/s]  5%|▌         | 524k/9.91M [00:04<01:00, 154kB/s]  6%|▌         | 557k/9.91M [00:05<01:16, 123kB/s]  6%|▋         | 623k/9.91M [00:05<00:54, 172kB/s]  7%|▋         | 655k/9.91M [00:05<00:51, 179kB/s]  7%|▋         | 688k/9.91M [00:05<00:51, 179kB/s]  7%|▋         | 721k/9.91M [00:06<00:47, 192kB/s]  8%|▊         | 754k/9.91M [00:06<00:44, 204kB/s]  8%|▊         | 786k/9.91M [00:06<00:42, 216kB/s]  8%|▊         | 819k/9.91M [00:06<00:44, 206kB/s]  9%|▉         | 885k/9.91M [00:06<00:36, 245kB/s]  9%|▉         | 918k/9.91M [00:06<00:37, 243kB/s] 10%|▉         | 950k/9.91M [00:06<00:38, 233kB/s] 10%|▉         | 983k/9.91M [00:07<00:38, 232kB/s] 10%|█         | 1.02M/9.91M [00:07<00:39, 228kB/s] 11%|█         | 1.05M/9.91M [00:07<00:35, 246kB/s] 11%|█         | 1.08M/9.91M [00:07<00:37, 236kB/s] 11%|█         | 1.11M/9.91M [00:07<00:35, 247kB/s] 12%|█▏        | 1.18M/9.91M [00:07<00:30, 283kB/s] 12%|█▏        | 1.21M/9.91M [00:07<00:31, 276kB/s] 13%|█▎        | 1.25M/9.91M [00:08<00:31, 276kB/s] 13%|█▎        | 1.28M/9.91M [00:08<00:30, 285kB/s] 13%|█▎        | 1.31M/9.91M [00:08<00:29, 290kB/s] 14%|█▎        | 1.34M/9.91M [00:08<00:32, 265kB/s] 14%|█▍        | 1.38M/9.91M [00:08<00:30, 279kB/s] 15%|█▍        | 1.44M/9.91M [00:08<00:24, 339kB/s] 15%|█▌        | 1.51M/9.91M [00:08<00:25, 325kB/s] 16%|█▌        | 1.57M/9.91M [00:09<00:27, 303kB/s] 16%|█▌        | 1.61M/9.91M [00:09<00:32, 252kB/s] 17%|█▋        | 1.67M/9.91M [00:09<00:28, 291kB/s] 18%|█▊        | 1.74M/9.91M [00:09<00:23, 352kB/s] 18%|█▊        | 1.80M/9.91M [00:09<00:22, 361kB/s] 19%|█▉        | 1.87M/9.91M [00:09<00:21, 369kB/s] 20%|█▉        | 1.93M/9.91M [00:10<00:21, 366kB/s] 20%|██        | 2.00M/9.91M [00:10<00:19, 397kB/s] 21%|██        | 2.06M/9.91M [00:10<00:20, 380kB/s] 21%|██▏       | 2.13M/9.91M [00:10<00:19, 398kB/s] 22%|██▏       | 2.20M/9.91M [00:10<00:19, 395kB/s] 23%|██▎       | 2.26M/9.91M [00:10<00:18, 405kB/s] 23%|██▎       | 2.33M/9.91M [00:11<00:18, 416kB/s] 24%|██▍       | 2.39M/9.91M [00:11<00:18, 408kB/s] 25%|██▍       | 2.46M/9.91M [00:11<00:18, 407kB/s] 25%|██▌       | 2.52M/9.91M [00:11<00:18, 407kB/s] 26%|██▌       | 2.59M/9.91M [00:11<00:16, 435kB/s] 27%|██▋       | 2.65M/9.91M [00:11<00:17, 423kB/s] 27%|██▋       | 2.72M/9.91M [00:11<00:16, 436kB/s] 28%|██▊       | 2.79M/9.91M [00:12<00:16, 440kB/s] 29%|██▉       | 2.85M/9.91M [00:12<00:16, 440kB/s] 29%|██▉       | 2.92M/9.91M [00:12<00:15, 443kB/s] 30%|███       | 2.98M/9.91M [00:12<00:15, 450kB/s] 31%|███       | 3.05M/9.91M [00:12<00:15, 445kB/s] 31%|███▏      | 3.11M/9.91M [00:12<00:17, 382kB/s] 32%|███▏      | 3.18M/9.91M [00:13<00:21, 314kB/s] 33%|███▎      | 3.24M/9.91M [00:13<00:19, 340kB/s] 33%|███▎      | 3.31M/9.91M [00:13<00:18, 356kB/s] 34%|███▍      | 3.38M/9.91M [00:13<00:17, 382kB/s] 35%|███▍      | 3.44M/9.91M [00:13<00:16, 395kB/s] 35%|███▌      | 3.51M/9.91M [00:14<00:15, 417kB/s] 36%|███▌      | 3.57M/9.91M [00:14<00:14, 428kB/s] 37%|███▋      | 3.64M/9.91M [00:14<00:14, 422kB/s] 37%|███▋      | 3.70M/9.91M [00:14<00:14, 420kB/s] 38%|███▊      | 3.77M/9.91M [00:14<00:14, 429kB/s] 39%|███▊      | 3.83M/9.91M [00:14<00:14, 416kB/s] 39%|███▉      | 3.90M/9.91M [00:14<00:16, 375kB/s] 40%|███▉      | 3.96M/9.91M [00:15<00:17, 334kB/s] 41%|████      | 4.03M/9.91M [00:15<00:20, 293kB/s] 41%|████      | 4.03M/9.91M [00:15<00:22, 257kB/s]
-Traceback (most recent call last):
-  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_dynamics.py", line 227, in <module>
-    train_mnist()
-  File "/home/void0312/HEI-Research/HEI/EXP/train_mnist_dynamics.py", line 132, in train_mnist
-    train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torchvision/datasets/mnist.py", line 100, in __init__
-    self.download()
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torchvision/datasets/mnist.py", line 188, in download
-    download_and_extract_archive(url, download_root=self.raw_folder, filename=filename, md5=md5)
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torchvision/datasets/utils.py", line 388, in download_and_extract_archive
-    download_url(url, download_root, filename, md5)
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torchvision/datasets/utils.py", line 127, in download_url
-    _urlretrieve(url, fpath)
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/site-packages/torchvision/datasets/utils.py", line 30, in _urlretrieve
-    while chunk := response.read(chunk_size):
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/http/client.py", line 473, in read
-    s = self.fp.read(amt)
-        ^^^^^^^^^^^^^^^^^
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/socket.py", line 718, in readinto
-    return self._sock.recv_into(b)
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/ssl.py", line 1314, in recv_into
-    return self.read(nbytes, buffer)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/void0312/miniconda3/envs/PINNs/lib/python3.11/ssl.py", line 1166, in read
-    return self._sslobj.read(len, buffer)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-KeyboardInterrupt
