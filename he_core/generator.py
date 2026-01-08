@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
+from typing import Optional
 from he_core.state import ContactState
 
 class BaseGenerator(nn.Module, ABC):
@@ -9,7 +10,7 @@ class BaseGenerator(nn.Module, ABC):
         self.dim_q = dim_q
         
     @abstractmethod
-    def forward(self, state: ContactState) -> torch.Tensor:
+    def forward(self, state: ContactState, z: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Returns H(q, p, s) of shape (B, 1)"""
         pass
 
@@ -33,14 +34,46 @@ class DissipativeGenerator(BaseGenerator):
             nn.Linear(16, 1)
         )
         
-    def forward(self, state: ContactState) -> torch.Tensor:
+    def _infer_net_v_in_dim(self) -> Optional[int]:
+        if isinstance(self.net_V, nn.Linear):
+            return self.net_V.in_features
+        if isinstance(self.net_V, nn.Sequential):
+            for layer in self.net_V:
+                if isinstance(layer, nn.Linear):
+                    return layer.in_features
+        return getattr(self.net_V, "in_features", None)
+
+    def _prepare_potential_input(self, q: torch.Tensor, z: Optional[torch.Tensor]) -> torch.Tensor:
+        in_dim = self._infer_net_v_in_dim()
+        q_dim = q.shape[1]
+
+        if in_dim is None:
+            return torch.cat([q, z], dim=1) if z is not None else q
+
+        if in_dim == q_dim:
+            return q
+
+        if z is None:
+            pad = torch.zeros(q.shape[0], max(in_dim - q_dim, 0), device=q.device, dtype=q.dtype)
+            return torch.cat([q, pad], dim=1)[:, :in_dim]
+
+        input_qz = torch.cat([q, z], dim=1)
+        if input_qz.shape[1] == in_dim:
+            return input_qz
+        if input_qz.shape[1] > in_dim:
+            return input_qz[:, :in_dim]
+        pad = torch.zeros(q.shape[0], in_dim - input_qz.shape[1], device=q.device, dtype=q.dtype)
+        return torch.cat([input_qz, pad], dim=1)
+
+    def forward(self, state: ContactState, z: Optional[torch.Tensor] = None) -> torch.Tensor:
         q, p, s = state.q, state.p, state.s
         
         # Kinetic
         K = 0.5 * (p**2).sum(dim=1, keepdim=True)
         
         # Potential
-        V = self.net_V(q)
+        V_inp = self._prepare_potential_input(q, z)
+        V = self.net_V(V_inp)
         
         # Harmonic Confinement (First Principles Stability)
         # V_conf = 0.5 * k * q^2

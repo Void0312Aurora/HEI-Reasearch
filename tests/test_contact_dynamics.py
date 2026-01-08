@@ -54,5 +54,51 @@ class TestContactDynamics(unittest.TestCase):
         self.assertEqual(new_state.p.shape, (bs, dim_q))
         self.assertEqual(new_state.s.shape, (bs, 1))
 
+    def test_semi_implicit_matches_linear_contact(self):
+        """
+        Semi-implicit integrator should match the analytic solution for the
+        linear contact system:
+          H = 0.5||p||^2 + alpha*s
+        which implies:
+          p(t+dt) = exp(-alpha dt) p(t)
+          q(t+dt) = q(t) + (1-exp(-alpha dt))/alpha * p(t)
+        """
+        class LinearContact(torch.nn.Module):
+            def __init__(self, dim_q: int, alpha: float):
+                super().__init__()
+                self.dim_q = dim_q
+                self.alpha = float(alpha)
+
+            def forward(self, state: ContactState) -> torch.Tensor:
+                p = state.p
+                s = state.s
+                K = 0.5 * (p ** 2).sum(dim=1, keepdim=True)
+                return K + self.alpha * s
+
+        dim_q = 4
+        bs = 8
+        alpha = 50.0  # stiff damping (Euler would be unstable for dt=0.1)
+        dt = 0.1
+
+        gen = LinearContact(dim_q, alpha)
+        integrator = ContactIntegrator(method="semi")
+
+        state = ContactState(dim_q, bs)
+        state.q = torch.randn(bs, dim_q) * 0.3
+        state.p = torch.randn(bs, dim_q)
+        state.s = torch.zeros(bs, 1)
+
+        q0 = state.q.clone()
+        p0 = state.p.clone()
+
+        new_state = integrator.step(state, gen, dt=dt)
+
+        decay = float(torch.exp(torch.tensor(-alpha * dt)))
+        p_expected = p0 * decay
+        q_expected = q0 + ((1.0 - decay) / alpha) * p0
+
+        self.assertTrue(torch.allclose(new_state.p, p_expected, atol=1e-4, rtol=1e-4))
+        self.assertTrue(torch.allclose(new_state.q, q_expected, atol=1e-4, rtol=1e-4))
+
 if __name__ == '__main__':
     unittest.main()

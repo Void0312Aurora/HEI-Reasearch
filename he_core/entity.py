@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from typing import Dict, Optional, Any
-from .kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel, ResonantKernel, PlasticKernel
+from .kernel.kernels import SymplecticKernel, ContactKernel, FastSlowKernel, ResonantKernel, PlasticKernel, GroupContactKernel
 from .scheduler.scheduler import Scheduler
 
 class Entity:
@@ -37,6 +37,8 @@ class Entity:
             return SymplecticKernel(dim)
         elif k_type == 'contact':
             return ContactKernel(dim, damping=config.get('damping', 0.1))
+        elif k_type == 'group_contact':
+            return GroupContactKernel(dim, damping=config.get('damping', 0.1))
         elif k_type == 'fast_slow':
             return FastSlowKernel(dim, epsilon=config.get('epsilon', 0.1))
         elif k_type == 'resonant':

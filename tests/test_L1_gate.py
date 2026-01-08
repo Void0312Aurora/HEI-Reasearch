@@ -4,8 +4,15 @@ Enforces strict energy decay under null potential conditions.
 Configuration: Damping=5.0, V(q)=0.
 """
 import unittest
+import os
+import sys
+
 import torch
 import numpy as np
+
+# Ensure HEI is on path for `he_core` imports when running `pytest` from repo root.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from he_core.entity_v4 import UnifiedGeometricEntity
 
 class ZeroModule(torch.nn.Module):

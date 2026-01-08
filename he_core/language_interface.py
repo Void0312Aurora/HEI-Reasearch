@@ -125,8 +125,10 @@ class SimpleTokenizer:
         """保存词表"""
         with open(path, 'w', encoding='utf-8') as f:
             json.dump({
+                'type': 'simple',
                 'vocab_size': self.vocab_size,
                 'mode': self.mode,
+                'special_tokens': self.special_tokens,
                 'token_to_id': self.token_to_id,
             }, f, ensure_ascii=False, indent=2)
             
@@ -136,11 +138,92 @@ class SimpleTokenizer:
             data = json.load(f)
             self.vocab_size = data['vocab_size']
             self.mode = data.get('mode', 'char')
+            self.special_tokens = data.get('special_tokens', self.special_tokens)
             self.token_to_id = data['token_to_id']
             self.id_to_token = {int(v): k for k, v in self.token_to_id.items()}
+
+        # Refresh special token ids after loading.
+        self.pad_id = self.token_to_id.get('<PAD>', 0)
+        self.unk_id = self.token_to_id.get('<UNK>', 1)
+        self.bos_id = self.token_to_id.get('<BOS>', 2)
+        self.eos_id = self.token_to_id.get('<EOS>', 3)
             
     def __len__(self):
         return len(self.token_to_id)
+
+
+class ByteTokenizer:
+    """
+    Byte-level tokenizer using UTF-8 encoding.
+
+    This is a fixed vocabulary tokenizer (no vocab building):
+    - Special tokens occupy the first slots
+    - Raw bytes 0..255 are mapped to ids with an offset
+    """
+
+    def __init__(self, special_tokens: Optional[List[str]] = None):
+        self.mode = "byte"
+        self.type = "byte"
+
+        self.special_tokens = special_tokens or ['<PAD>', '<BOS>', '<EOS>', '<UNK>']
+        self.token_to_id: Dict[str, int] = {}
+        self.id_to_token: Dict[int, str] = {}
+
+        for i, token in enumerate(self.special_tokens):
+            self.token_to_id[token] = i
+            self.id_to_token[i] = token
+
+        self.byte_offset = len(self.special_tokens)
+        for b in range(256):
+            tok = f"<0x{b:02X}>"
+            idx = self.byte_offset + b
+            self.token_to_id[tok] = idx
+            self.id_to_token[idx] = tok
+
+        self.vocab_size = len(self.token_to_id)
+        self.pad_id = self.token_to_id['<PAD>']
+        self.bos_id = self.token_to_id['<BOS>']
+        self.eos_id = self.token_to_id['<EOS>']
+        self.unk_id = self.token_to_id['<UNK>']
+
+    def build_vocab(self, texts: List[str], min_freq: int = 1):
+        raise RuntimeError("ByteTokenizer has a fixed vocabulary; build_vocab() is not supported.")
+
+    def encode(self, text: str, add_special: bool = True) -> List[int]:
+        raw = text.encode("utf-8", errors="strict")
+        ids = [self.byte_offset + int(b) for b in raw]
+        if add_special:
+            ids = [self.bos_id] + ids + [self.eos_id]
+        return ids
+
+    def decode(self, ids: List[int], skip_special: bool = True) -> str:
+        out_bytes = bytearray()
+        for idx in ids:
+            if skip_special and idx in [self.pad_id, self.bos_id, self.eos_id]:
+                continue
+            b = idx - self.byte_offset
+            if 0 <= b < 256:
+                out_bytes.append(b)
+        return bytes(out_bytes).decode("utf-8", errors="ignore")
+
+    def save(self, path: str):
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'type': 'byte',
+                'mode': self.mode,
+                'special_tokens': self.special_tokens,
+                'byte_offset': self.byte_offset,
+                'vocab_size': self.vocab_size,
+            }, f, ensure_ascii=False, indent=2)
+
+    def load(self, path: str):
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        special_tokens = data.get('special_tokens', self.special_tokens)
+        self.__init__(special_tokens=list(special_tokens))
+
+    def __len__(self):
+        return self.vocab_size
 
 
 class TokenEncoder(nn.Module):
@@ -333,7 +416,7 @@ class StateDecoder(nn.Module):
         if prev_tokens is None:
             # 只有状态，输出单个 token 分布
             # 用 BOS token 作为查询
-            bos = torch.ones(batch_size, 1, dtype=torch.long, device=device)
+            bos = torch.full((batch_size, 1), 2, dtype=torch.long, device=device)
             tgt = self.token_embedding(bos)
             tgt = self.pos_encoder(tgt)
             
@@ -355,6 +438,7 @@ class StateDecoder(nn.Module):
     @torch.no_grad()
     def generate(self,
                  state: torch.Tensor,
+                 start_tokens: Optional[torch.Tensor] = None,
                  max_len: int = 50,
                  temperature: float = 1.0,
                  top_k: int = 50,
@@ -365,7 +449,8 @@ class StateDecoder(nn.Module):
         
         Args:
             state: 几何状态 [batch, dim_q]
-            max_len: 最大生成长度
+            start_tokens: Optional prefix tokens [batch, prefix_len]. If None, starts from BOS.
+            max_len: 最大新增生成长度（在 start_tokens 之后追加的 token 数）
             temperature: 采样温度
             top_k: top-k 采样
             
@@ -376,7 +461,12 @@ class StateDecoder(nn.Module):
         device = state.device
         
         # 初始化
-        generated = torch.full((batch_size, 1), bos_id, dtype=torch.long, device=device)
+        if start_tokens is None:
+            generated = torch.full((batch_size, 1), bos_id, dtype=torch.long, device=device)
+        else:
+            if start_tokens.dim() != 2 or start_tokens.shape[0] != batch_size:
+                raise ValueError(f"start_tokens must be [batch, seq], got {tuple(start_tokens.shape)}")
+            generated = start_tokens.to(device=device, dtype=torch.long)
         finished = torch.zeros(batch_size, dtype=torch.bool, device=device)
         
         for _ in range(max_len):
@@ -685,4 +775,3 @@ if __name__ == "__main__":
     print(f"  解码文本: {texts[0][:30]}...")
     
     print("\n✓ Language Interface 测试完成")
-

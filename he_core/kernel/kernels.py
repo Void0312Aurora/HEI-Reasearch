@@ -3,6 +3,8 @@ import torch.nn as nn
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
+from he_core.integrators.group_integrator import GroupContactIntegrator, GroupContactState
+
 class BaseKernel(nn.Module, ABC):
     def __init__(self, dim_q: int):
         super().__init__()
@@ -20,6 +22,46 @@ class BaseKernel(nn.Module, ABC):
     @abstractmethod
     def init_state(self, batch_size: int = 1) -> torch.Tensor:
         pass
+
+class GroupContactKernel(BaseKernel):
+    """
+    Reinforced Physics Engine: Group Contact Integrator.
+    Uses SO(1, n) geometry for stability.
+    State: (q, p, s) [Flat representation of Group State]
+    """
+    def __init__(self, dim_q: int = 2, damping: float = 0.1):
+        super().__init__(dim_q)
+        self.integrator = GroupContactIntegrator(dim_q, damping)
+        
+    def forward(self, x_int: torch.Tensor, u_t: torch.Tensor) -> torch.Tensor:
+        # x_int: [B, 2*dim + 1] -> (q, p, s)
+        q, p, s = torch.split(x_int, [self.dim_q, self.dim_q, 1], dim=1)
+        dt = 0.1
+        
+        # 1. Lift to Group
+        state_group = self.integrator.flat_to_group(q, p)
+        # Restore z/s (flat_to_group initializes z=0)
+        state_group.z = s
+        
+        # 2. Map input u_t to algebra force
+        # u_t is in R^D. Map to boost component of algebra.
+        B = q.shape[0]
+        D = self.dim_q
+        force_algebra = torch.zeros(B, D+1, D+1, device=q.device)
+        force_algebra[:, 0, 1:] = u_t
+        force_algebra[:, 1:, 0] = u_t
+        
+        # 3. Step
+        new_state_group = self.integrator.step(state_group, force_algebra, dt)
+        
+        # 4. Project back to Flat
+        q_new, p_new = self.integrator.group_to_flat(new_state_group)
+        s_new = new_state_group.z
+        
+        return torch.cat([q_new, p_new, s_new], dim=1)
+
+    def init_state(self, batch_size: int = 1) -> torch.Tensor:
+        return torch.zeros(batch_size, 2 * self.dim_q + 1)
 
 class SymplecticKernel(BaseKernel):
     """

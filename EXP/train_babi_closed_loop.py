@@ -46,6 +46,7 @@ def train_closed_loop():
     parser.add_argument('--steps', type=int, default=3)
     parser.add_argument('--max_samples', type=int, default=256)
     parser.add_argument('--lr', type=float, default=0.005)
+    parser.add_argument('--integrator_method', type=str, default='euler', help="euler or group")
     
     # New Args for Phase 7
     parser.add_argument('--baseline', action='store_true', help="Run pure encoder baseline")
@@ -81,7 +82,8 @@ def train_closed_loop():
             'learnable_coupling': True,
             'use_adaptive_generator': True,
             'stiffness': args.stiffness, # KEY FIX
-            'damping': 0.1
+            'damping': 0.1,
+            'integrator_method': args.integrator_method
         }
         entity = UnifiedGeometricEntity(config).to(DEVICE)
         

@@ -18,9 +18,11 @@ SoulEntity v0.1: 类人实体原型
 
 import torch
 import torch.nn as nn
+import os
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 from he_core.state import ContactState
 from he_core.contact_dynamics import ContactIntegrator
@@ -40,55 +42,101 @@ class Phase(Enum):
 
 @dataclass
 class ExperienceBuffer:
-    """经验缓冲区 - 用于A2离线认知态"""
-    sensory: List[torch.Tensor]
-    active: List[torch.Tensor]
-    states: List[torch.Tensor]
-    rewards: List[float]
+    """经验缓冲区 - 优化版 (Tensor-based)"""
     max_size: int = 10000
+    dim_s: int = 0
+    dim_a: int = 0
+    dim_state: int = 0
+    device: str = 'cpu' # 默认 CPU 以节省显存，但支持 GPU
     
     def __post_init__(self):
-        self.sensory = []
-        self.active = []
-        self.states = []
-        self.rewards = []
+        self.ptr = 0
+        self.size = 0
+        self.sensory = None
+        self.active = None
+        self.states = None
+        self.rewards = None
+
+    def _init_buffers(self, s: torch.Tensor, a: torch.Tensor, state: torch.Tensor):
+        self.dim_s = s.shape[1]
+        self.dim_a = a.shape[1] if a is not None else 0
+        self.dim_state = state.shape[1]
+        device = s.device # Use the device of incoming data to avoid transfers if possible
         
+        self.sensory = torch.zeros((self.max_size, self.dim_s), device=device)
+        self.active = torch.zeros((self.max_size, self.dim_a), device=device) if self.dim_a > 0 else None
+        self.states = torch.zeros((self.max_size, self.dim_state), device=device)
+        self.rewards = torch.zeros((self.max_size,), device=device)
+        self.device = device
+
     def push(self, s: torch.Tensor, a: torch.Tensor, state: torch.Tensor, r: float):
-        if len(self.sensory) >= self.max_size:
-            self.sensory.pop(0)
-            self.active.pop(0)
-            self.states.pop(0)
-            self.rewards.pop(0)
-        # 存储时移除batch维度（假设batch_size=1）
-        self.sensory.append(s.detach().cpu().squeeze(0))
-        self.active.append(a.detach().cpu().squeeze(0))
-        self.states.append(state.detach().cpu().squeeze(0))
-        self.rewards.append(r)
+        if self.sensory is None:
+            self._init_buffers(s, a, state)
+            
+        batch_size = s.shape[0]
         
+        # 1. 准备数据
+        r_tensor = torch.full((batch_size,), r, device=self.device)
+        
+        # 2. 写入 (环形缓冲区)
+        indices = torch.arange(self.ptr, self.ptr + batch_size, device=self.device) % self.max_size
+        
+        self.sensory[indices] = s.detach().to(self.device)
+        if self.active is not None and a is not None:
+            self.active[indices] = a.detach().to(self.device)
+        self.states[indices] = state.detach().to(self.device)
+        self.rewards[indices] = r_tensor
+        
+        self.ptr = (self.ptr + batch_size) % self.max_size
+        self.size = min(self.size + batch_size, self.max_size)
+
     def sample_replay(self, n: int, mode: str = 'random') -> Dict[str, torch.Tensor]:
-        """采样回放数据"""
-        L = len(self.states)
-        if L == 0:
+        if self.size == 0:
             return None
-        n = min(n, L)
+        n = min(n, self.size)
         
         if mode == 'random':
-            idx = torch.randperm(L)[:n]
+            idx = torch.randint(0, self.size, (n,), device=self.device)
         elif mode == 'recent':
-            idx = torch.arange(max(0, L-n), L)
+            # 简化：随机采样
+            idx = torch.randint(0, self.size, (n,), device=self.device)
         elif mode == 'prioritized':
-            # 优先采样低奖励/高惊讶的经验
-            rewards = torch.tensor(self.rewards)
-            probs = torch.softmax(-rewards, dim=0)
-            idx = torch.multinomial(probs, n, replacement=False)
+            # 简化的 prioritized
+            current_rewards = self.rewards[:self.size]
+            probs = torch.softmax(-current_rewards, dim=0)
+            idx = torch.multinomial(probs, n, replacement=True)
         else:
-            idx = torch.arange(n)
+            idx = torch.arange(n, device=self.device)
             
         return {
-            'states': torch.stack([self.states[i] for i in idx]),
-            'sensory': torch.stack([self.sensory[i] for i in idx]),
-            'active': torch.stack([self.active[i] for i in idx]),
+            'states': self.states[idx],
+            'sensory': self.sensory[idx],
+            'active': self.active[idx] if self.active is not None else None,
         }
+
+
+class LowerBoundedPotential(nn.Module):
+    """
+    Lower-bounded scalar potential V(x) >= 0.
+
+    Theory alignment:
+    - 理论基础-7/快慢变量/最小族.md 要求势能有下界，否则 A3 的 Lyapunov 语义会失效。
+    - 仅靠 q 的 stiffness 项只能约束远场，无法阻止可学习势能出现“常数偏置漂移”并把 F 推向 -∞。
+    """
+
+    def __init__(self, in_dim: int, hidden_dim: int = 128):
+        super().__init__()
+        self.backbone = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        raw = self.backbone(x)
+        return raw.square()
 
 
 class SoulEntity(nn.Module):
@@ -110,17 +158,13 @@ class SoulEntity(nn.Module):
         self.dim_u = config.get('dim_u', self.dim_q)  # 输入/输出维度
         self.dim_z = config.get('dim_z', 16)          # 自主上下文维度
         self.num_charts = config.get('num_charts', 4) # 图册数量
+        self.router_context_dim = int(config.get("router_context_dim", 0) or 0)
         
         # === A3: 统一势函数 V(q, z) ===
-        # 根据理论基础-7：V通过stiffness项(0.5·k·||q||²)保证有下界
-        # 不需要Softplus这种工程化约束
-        self.net_V = nn.Sequential(
-            nn.Linear(self.dim_q + self.dim_z, 128),
-            nn.Tanh(),
-            nn.Linear(128, 128),
-            nn.Tanh(),
-            nn.Linear(128, 1)
-        )
+        # 理论基础-7/快慢变量/最小族.md 明确要求：V(q) 必须有下界（否则 A3 的 Lyapunov 语义失效）。
+        # 仅靠 stiffness 项只能保证 ||q||→∞ 时趋于 +∞，但无法阻止网络把 V 整体平移到 -∞（常数偏置漂移）。
+        # 这里用“下界化的可学习残差”实现 V >= 0（再叠加 stiffness 提供远场约束），避免训练中出现 F 向负无界发散。
+        self.net_V = LowerBoundedPotential(self.dim_q + self.dim_z)
         
         # === L1: 动力学生成元 ===
         # 根据动力学基础模板1：H^c = K + V + Φ(s)
@@ -132,6 +176,8 @@ class SoulEntity(nn.Module):
             dim_z=self.dim_z,
             stiffness=config.get('stiffness', 0.1),          # q的约束刚度
             contact_stiffness=config.get('contact_stiffness', 0.1),  # s的约束刚度
+            alpha_min=float(config.get("alpha_min", 0.2)),
+            alpha_max=float(config.get("alpha_max", 1.0)),
             hyperbolic_c=config.get('hyperbolic_c', 0.1)     # 双曲曲率参数
         )
         
@@ -140,16 +186,51 @@ class SoulEntity(nn.Module):
             self.internal_gen,
             dim_u=self.dim_u,
             learnable_coupling=True,
-            num_charts=self.num_charts
+            num_charts=self.num_charts,
+            top_k=int(config.get('port_top_k', 0) or 0),
+            topk_impl=str(config.get("port_topk_impl", "grouped") or "grouped"),
         )
+        # A2: 离线回放注入端口（经验调制）
+        self.add_interface('replay', self.dim_q)
         
         # === L2: 图册与联络 ===
-        self.atlas = Atlas(self.num_charts, self.dim_q)
+        self.atlas = Atlas(self.num_charts, self.dim_q, router_context_dim=self.router_context_dim)
         # 联络初始化参数：init_epsilon=0.3 确保平行移动有意义
-        self.connection = Connection(self.dim_q, hidden_dim=64, init_epsilon=0.3)
+        self.connection = Connection(
+            self.dim_q,
+            hidden_dim=int(config.get('connection_hidden_dim', 64) or 64),
+            init_epsilon=float(config.get('connection_init_epsilon', 0.3) or 0.3),
+            rank=int(config.get('connection_rank', 0) or 0),
+        )
+        
+        # Cache config values for speed
+        self._sanitize_nonfinite = bool(self.config.get("sanitize_nonfinite", True))
+        self._strict_nonfinite = bool(self.config.get("strict_nonfinite", False))
+        self._q_clip_norm = float(self.config.get("q_clip_norm", 0.0) or 0.0)
+        self._p_clip_norm = float(self.config.get("p_clip_norm", 0.0) or 0.0)
+        self._s_clip_abs = float(self.config.get("s_clip_abs", 0.0) or 0.0)
+        transport_threshold = self.config.get("transport_threshold", 0.1)
+        if transport_threshold is None:
+            transport_threshold = 0.1
+        # Important: allow explicit 0.0 to DISABLE transport (do not use `or` fallback here).
+        self._transport_threshold = float(transport_threshold)
+        # Router inertia timescale (seconds). If >0, chart weights evolve as a slow
+        # relaxation toward the instantaneous router output:
+        #   w̄_{t+1} = w̄_t + α (w_raw(q_t) - w̄_t),   α = dt/(τ+dt)
+        self._router_tau = float(self.config.get("router_tau", 0.0) or 0.0)
         
         # === 积分器 ===
-        self.integrator = ContactIntegrator()
+        integrator_method = config.get('integrator_method', 'euler')
+        integrator_damping = float(config.get('damping', 0.1))
+        integrator_substeps = int(config.get("integrator_substeps", 1) or 1)
+        integrator_gamma_clip = float(config.get("integrator_gamma_clip", 0.0) or 0.0)
+        self.integrator = ContactIntegrator(
+            method=integrator_method,
+            dim_q=self.dim_q,
+            damping=integrator_damping,
+            substeps=integrator_substeps,
+            gamma_clip=integrator_gamma_clip,
+        )
         
         # === 自主上下文 z (L3) ===
         # z是实体的"意图/偏好/当前关注"的内部表示
@@ -164,7 +245,6 @@ class SoulEntity(nn.Module):
         
         # === A2: 经验缓冲区 ===
         self.experience = ExperienceBuffer(
-            sensory=[], active=[], states=[], rewards=[],
             max_size=config.get('experience_buffer_size', 10000)
         )
         
@@ -195,13 +275,13 @@ class SoulEntity(nn.Module):
         
         根据理论基础-7的A3公理和Active Inference框架：
         
-        F = β·KL(q(z)||p(z)) + γ·E_pred
-          = 复杂度项 + 准确度项
+        F = V(q,z) + β·KL(q(z)||p(z)) + γ·E_pred
+          = 势能项 + 复杂度项 + 准确度项
         
         关键理论点：
         1. H^c（接触哈密顿量）是动力学生成函数，用于生成演化
         2. F（自由能）是训练目标/Lyapunov函数
-        3. 两者不是同一概念！H^c不直接进入F
+        3. 两者不是同一概念！F使用势能项作为内在一致性代理，而非完整H^c
         
         根据动力学基础.md：
         > "若动力学可表为对F的梯度下降，则F是Lyapunov函数"
@@ -218,12 +298,27 @@ class SoulEntity(nn.Module):
         beta_kl = self.config.get('beta_kl', 0.01)
         gamma_pred = self.config.get('gamma_pred', 1.0)
         
-        # === 变分自由能 F = 复杂度 + 准确度 ===
+        # === 变分自由能 F = 势能 + 复杂度 + 准确度 ===
         # 
-        # 注意：H^c不直接出现在F中！
+        # 注意：F使用V(q,z)作为内在标量代理，而不是完整H^c！
         # H^c用于生成动力学，F是训练目标
         # 通过反向传播，H^c的参数被训练成能够产生低F轨迹
         
+        # 势能项：V(q,z)（含刚度项，确保下界）
+        z_batch = self.z.expand(state.batch_size, -1)
+        V_inp = torch.cat([state.q, z_batch], dim=1)
+        V = self.net_V(V_inp)
+        if os.getenv("HEI_DEBUG_NAN", "0") == "1":
+            if not torch.isfinite(V).all():
+                v = V.detach()
+                raise RuntimeError(
+                    f"NaN/Inf in net_V output: shape={tuple(v.shape)} max_abs={float(v.abs().max().item())}"
+                )
+        stiffness = getattr(self.internal_gen, 'stiffness', 0.0)
+        if stiffness > 0:
+            V = V + 0.5 * stiffness * (state.q ** 2).sum(dim=1, keepdim=True)
+        V_term = V.mean()
+
         # 复杂度项：KL(z||prior)
         # 假设prior是标准正态分布N(0,I)
         # KL = 0.5 * (||z||² + ||σ||² - log|σ|² - d)
@@ -235,19 +330,210 @@ class SoulEntity(nn.Module):
         if prediction_error is not None:
             E_pred = gamma_pred * prediction_error.mean()
         else:
-            E_pred = torch.tensor(0.0, device=state.device)
-            
-        # === 变分自由能 F = 复杂度 + 准确度 ===
+            # NOTE: `torch.tensor(0.0, device="cuda")` performs a host->device copy and
+            # is not capturable under CUDA graph capture. Use a device-native zero.
+            E_pred = V_term.new_zeros(())
+
+        # === 变分自由能 F = 势能 + 复杂度 + 准确度 ===
         # 
         # 根据A3公理：F是单一标量泛函
-        # 根据Active Inference：F = KL + E_pred
+        # 根据A3公理：F是单一标量泛函（这里选V+KL+E_pred作为可检验代理）
         # 
         # 注意：H^c不在这里！
         # H^c通过生成动力学影响F，但不是F的直接分量
         # 通过反向传播，优化F会训练H^c的参数
-        F = KL + E_pred
+        F = V_term + KL + E_pred
+
+        if os.getenv("HEI_DEBUG_NAN", "0") == "1":
+            if not torch.isfinite(F).all():
+                raise RuntimeError(
+                    f"NaN/Inf in free_energy: V_term={float(V_term.detach().item())} KL={float(KL.detach().item())} "
+                    f"E_pred={(float(E_pred.detach().item()) if torch.is_tensor(E_pred) else E_pred)}"
+                )
         
         return F
+
+    # ========================
+    #    Functional step (no in-place)
+    # ========================
+
+    def forward_tensor(self,
+                       state_flat: torch.Tensor,
+                       u_dict: Optional[torch.Tensor | Dict[str, torch.Tensor]],
+                       dt: float,
+                       prev_chart_weights: Optional[torch.Tensor] = None,
+                       prediction_error: Optional[torch.Tensor] = None,
+                       detach_next_prev_weights: bool = True,
+                       compute_action: bool = True,
+                       strict_nonfinite_override: Optional[bool] = None,
+                       sanitize_nonfinite_override: Optional[bool] = None,
+                       return_finite_mask: bool = False,
+                       skip_free_energy: bool = False,
+                       router_context: Optional[torch.Tensor] = None) -> Dict[str, Any]:
+        """
+        Functional (side-effect free) step for differentiable rollouts.
+
+        Unlike `step()`, this method does not mutate `self.state` and avoids any
+        in-place writes on `state_flat` views (critical for backprop through
+        online→offline boundaries).
+        """
+        batch_size = state_flat.shape[0]
+        device = state_flat.device
+        strict_nonfinite = self._strict_nonfinite if strict_nonfinite_override is None else bool(strict_nonfinite_override)
+        sanitize_nonfinite = self._sanitize_nonfinite if sanitize_nonfinite_override is None else bool(sanitize_nonfinite_override)
+        finite_mask = torch.ones(batch_size, device=device, dtype=torch.bool)
+
+        # Compatibility layer
+        if u_dict is None:
+            u_dict = {}
+        elif isinstance(u_dict, torch.Tensor):
+            u_dict = {'default': u_dict}
+
+        s_in = ContactState(self.dim_q, batch_size, device, state_flat)
+
+        if os.getenv("HEI_DEBUG_NAN", "0") == "1":
+            if not torch.isfinite(state_flat).all():
+                x = state_flat.detach()
+                raise RuntimeError(
+                    f"NaN/Inf entering forward_tensor: shape={tuple(x.shape)} max_abs={float(x.abs().max().item())}"
+                )
+
+        # Router input uses clone to prevent view-version conflicts.
+        chart_weights_raw = self.atlas.router(s_in.q.clone(), context=router_context)
+
+        finite_mask = finite_mask & torch.isfinite(chart_weights_raw).all(dim=1)
+        if strict_nonfinite and (not sanitize_nonfinite):
+            # Avoid per-step GPU→CPU sync: assert asynchronously on device.
+            torch._assert_async(torch.isfinite(chart_weights_raw).all(), "NaN/Inf in chart_weights_raw")
+        if sanitize_nonfinite:
+            chart_weights_raw = torch.nan_to_num(chart_weights_raw, nan=0.0, posinf=0.0, neginf=0.0)
+            row_sum = chart_weights_raw.sum(dim=1, keepdim=True)
+            # If the router collapsed to all-zeros due to NaN cleanup, fall back to uniform.
+            bad = row_sum <= 1e-8
+            uniform = torch.full_like(chart_weights_raw, 1.0 / float(self.num_charts))
+            chart_weights_raw = torch.where(bad.expand_as(chart_weights_raw), uniform, chart_weights_raw)
+            chart_weights_raw = chart_weights_raw / chart_weights_raw.sum(dim=1, keepdim=True).clamp(min=1e-8)
+
+        if os.getenv("HEI_DEBUG_NAN", "0") == "1":
+            if not torch.isfinite(chart_weights_raw).all():
+                w = chart_weights_raw.detach()
+                raise RuntimeError(
+                    f"NaN/Inf in chart_weights: shape={tuple(w.shape)} min={float(w.min().item())} max={float(w.max().item())}"
+                )
+
+        # Slow router state (w̄) as an endogenous carrier (fast–slow alignment).
+        chart_weights = chart_weights_raw
+        tau = self._router_tau
+        if prev_chart_weights is not None and tau > 0.0:
+            alpha = float(dt) / (tau + float(dt))
+            # Blend in log-space (geometric mean) to avoid excessive overlap/mixing which
+            # can destabilize port coupling while still providing inertia:
+            #   w̄ ∝ (w_prev)^(1-α) · (w_raw)^α
+            eps = 1e-8
+            log_prev = torch.log(prev_chart_weights.clamp(min=eps))
+            log_raw = torch.log(chart_weights_raw.clamp(min=eps))
+            log_mix = (1.0 - alpha) * log_prev + alpha * log_raw
+            w = torch.exp(log_mix)
+            chart_weights = w / w.sum(dim=1, keepdim=True).clamp(min=eps)
+
+        finite_mask = finite_mask & torch.isfinite(chart_weights).all(dim=1)
+        if strict_nonfinite and (not sanitize_nonfinite):
+            torch._assert_async(torch.isfinite(chart_weights).all(), "NaN/Inf in chart_weights")
+        if sanitize_nonfinite:
+            chart_weights = torch.nan_to_num(chart_weights, nan=0.0, posinf=0.0, neginf=0.0)
+            row_sum = chart_weights.sum(dim=1, keepdim=True)
+            bad = row_sum <= 1e-8
+            uniform = torch.full_like(chart_weights, 1.0 / float(self.num_charts))
+            chart_weights = torch.where(bad.expand_as(chart_weights), uniform, chart_weights)
+            chart_weights = chart_weights / chart_weights.sum(dim=1, keepdim=True).clamp(min=1e-8)
+
+        # L2: parallel transport (functional, no in-place on s_in)
+        if prev_chart_weights is not None and self._transport_threshold > 0.0:
+            p_transported = self._apply_parallel_transport(
+                s_in.p, s_in.q,
+                prev_chart_weights, chart_weights
+            )
+            state_flat = torch.cat([s_in.q, p_transported, s_in.s], dim=1)
+            s_in = ContactState(self.dim_q, batch_size, device, state_flat)
+
+        # Prepare z
+        z_batch = self.z.expand(batch_size, -1)
+
+        def gen_func(s: ContactState):
+            try:
+                H_sum = self.internal_gen(s, z_batch)
+            except TypeError:
+                H_sum = self.internal_gen(s)
+
+            for port_name, u_val in u_dict.items():
+                if hasattr(self.generator, 'get_h_port'):
+                    H_sum = H_sum + self.generator.get_h_port(s, port_name, u_val, weights=chart_weights)
+            return H_sum
+
+        s_next = self.integrator.step(s_in, gen_func, dt)
+
+        # === Numerical stability / viability projection ===
+        # Prevent rare but catastrophic state explosions from poisoning training.
+        # This acts as a soft "viability zone" projection: it should be inactive
+        # under normal operation and only engage when values become extreme.
+        s_next_flat = s_next.flat
+        finite_mask = finite_mask & torch.isfinite(s_next_flat).all(dim=1)
+        if strict_nonfinite and (not sanitize_nonfinite):
+            torch._assert_async(torch.isfinite(s_next_flat).all(), "NaN/Inf in state after integrator")
+        if sanitize_nonfinite:
+            # Avoid `if not tensor.all():` which triggers a GPU→CPU sync every step.
+            s_next_flat = torch.nan_to_num(s_next_flat, nan=0.0, posinf=0.0, neginf=0.0)
+
+        d = self.dim_q
+        q_next = s_next_flat[:, :d]
+        p_next = s_next_flat[:, d : 2 * d]
+        s_next_s = s_next_flat[:, 2 * d :]
+
+        q_clip = self._q_clip_norm
+        if q_clip > 0:
+            q_norm = q_next.norm(dim=1, keepdim=True)
+            scale = torch.clamp(q_clip / (q_norm + 1e-6), max=1.0)
+            q_next = q_next * scale
+
+        p_clip = self._p_clip_norm
+        if p_clip > 0:
+            p_norm = p_next.norm(dim=1, keepdim=True)
+            scale = torch.clamp(p_clip / (p_norm + 1e-6), max=1.0)
+            p_next = p_next * scale
+
+        s_clip = self._s_clip_abs
+        if s_clip > 0:
+            s_next_s = torch.clamp(s_next_s, -s_clip, s_clip)
+
+        s_next = ContactState(self.dim_q, batch_size, device, torch.cat([q_next, p_next, s_next_s], dim=1))
+
+        if os.getenv("HEI_DEBUG_NAN", "0") == "1":
+            if not torch.isfinite(s_next.flat).all():
+                x = s_next.flat.detach()
+                raise RuntimeError(
+                    f"NaN/Inf after integrator: shape={tuple(x.shape)} max_abs={float(x.abs().max().item())}"
+                )
+
+        if skip_free_energy:
+            F = torch.zeros(batch_size, device=device, dtype=s_next.flat.dtype)
+        else:
+            F = self.compute_free_energy(s_next, prediction_error=prediction_error)
+        action = None
+        if compute_action:
+            action = self.generator.get_action(s_next, 'default', weights=chart_weights)
+
+        next_prev = chart_weights.detach() if detach_next_prev_weights else chart_weights
+
+        out_dict = {
+            'next_state_flat': s_next.flat,
+            'chart_weights': chart_weights,
+            'next_prev_chart_weights': next_prev,
+            'free_energy': F,
+            'action': action,
+        }
+        if return_finite_mask:
+            out_dict["finite_mask"] = finite_mask
+        return out_dict
     
     # ========================
     #    L2: 平行移动
@@ -266,25 +552,25 @@ class SoulEntity(nn.Module):
             return p
             
         delta_w = new_weights - old_weights  # [batch, num_charts]
-        change_magnitude = delta_w.abs().sum(dim=1, keepdim=True)  # [batch, 1]
-        threshold = self.config.get('transport_threshold', 0.1)
-        
-        # 只在权重变化显著时应用
-        if change_magnitude.max() < threshold:
+        change_magnitude = delta_w.abs().sum(dim=1)  # [batch]
+        change_magnitude = torch.nan_to_num(change_magnitude, nan=0.0, posinf=0.0, neginf=0.0)
+        threshold = self._transport_threshold
+        if threshold <= 0:
             return p
         
-        # 使用delta_w作为方向提示，但需要扩展到dim_q维度
-        # delta_w是图册权重变化，用它来调制q的扰动
-        # 创建一个随机但确定性的扰动方向
-        direction = torch.randn(1, self.dim_q, device=q.device)
-        direction = direction / (direction.norm() + 1e-6)
-        perturbation = change_magnitude * direction  # [batch, dim_q]
+        # NOTE: avoid boolean indexing (variable-sized tensors), which is slow and not capturable
+        # under CUDA graphs. Keep everything dense and mask the update.
+        cm = change_magnitude.unsqueeze(1)  # [B,1]
+        apply = (cm >= threshold).to(dtype=p.dtype)  # [B,1] in {0,1}
+
+        # 使用 q 自身作为确定性扰动方向，避免随机噪声破坏可复现实验/训练稳定性
+        direction = q / (q.norm(dim=1, keepdim=True) + 1e-6)
+        perturbation = cm * direction  # [B, dim_q]
         q_target = q + 0.1 * perturbation
-        
+
         p_transported = self.connection(q, q_target, p)
-        
-        blend_factor = torch.clamp(change_magnitude / (threshold + 1e-6), 0.0, 1.0)
-        return (1 - blend_factor) * p + blend_factor * p_transported
+        blend_factor = apply * torch.clamp(cm / (threshold + 1e-6), 0.0, 1.0)
+        return (1.0 - blend_factor) * p + blend_factor * p_transported
     
     # ========================
     #    核心演化步骤
@@ -309,55 +595,33 @@ class SoulEntity(nn.Module):
         self.step_count += 1
         device = self.state.device
         batch_size = self.state.batch_size
-        
-        # 默认输入处理
+
+        # Normalize inputs for experience tracking
         if u_dict is None:
-            u_dict = {}
+            u_dict_norm: Dict[str, torch.Tensor] = {}
         elif isinstance(u_dict, torch.Tensor):
-            u_dict = {'default': u_dict}
-            
-        # 获取图册权重
-        chart_weights = self.atlas.router(self.state.q)
-        
-        # L2: 平行移动
-        if self._prev_chart_weights is not None:
-            self.state.p = self._apply_parallel_transport(
-                self.state.p, self.state.q,
-                self._prev_chart_weights, chart_weights
-            )
-            
-        # 准备z
-        z_batch = self.z.expand(batch_size, -1)
-        
-        # 构建生成元函数
-        def gen_func(s: ContactState):
-            try:
-                H_sum = self.internal_gen(s, z_batch)
-            except TypeError:
-                H_sum = self.internal_gen(s)
-                
-            # 添加端口耦合
-            for port_name, u_val in u_dict.items():
-                if hasattr(self.generator, 'get_h_port'):
-                    H_sum = H_sum + self.generator.get_h_port(s, port_name, u_val, weights=chart_weights)
-            return H_sum
-        
-        # 积分演化
-        next_state = self.integrator.step(self.state, gen_func, dt)
-        
-        # 更新状态
-        self._prev_chart_weights = chart_weights.detach()
-        
-        # 计算自由能
-        F = self.compute_free_energy(next_state)
-        
-        # 获取行动输出
-        action = self.generator.get_action(next_state, 'default', weights=chart_weights)
+            u_dict_norm = {'default': u_dict}
+        else:
+            u_dict_norm = u_dict
+
+        out = self.forward_tensor(
+            state_flat=self.state.flat,
+            u_dict=u_dict_norm,
+            dt=dt,
+            prev_chart_weights=self._prev_chart_weights,
+            prediction_error=None,
+            detach_next_prev_weights=True,
+        )
+        next_state = ContactState(self.dim_q, self.state.batch_size, self.state.device, out['next_state_flat'])
+        chart_weights = out['chart_weights']
+        self._prev_chart_weights = out['next_prev_chart_weights']
+        F = out['free_energy']
+        action = out['action']
         
         # 记录经验 (A2)
         if self.phase == Phase.ONLINE:
             self.online_steps += 1
-            sensory = u_dict.get('default', torch.zeros(batch_size, self.dim_u, device=device))
+            sensory = u_dict_norm.get('language', u_dict_norm.get('default', torch.zeros(batch_size, self.dim_u, device=device)))
             self.experience.push(sensory, action, next_state.flat, F.item())
             
         # 更新状态
@@ -391,6 +655,8 @@ class SoulEntity(nn.Module):
         A2要求: 离线态应受前序经验调制，且不退化为固定点/短周期/噪声
         """
         self.offline_steps += 1
+        prev_phase = self.phase
+        self.phase = Phase.OFFLINE
         
         # 离线时无外部输入
         u_dict = {}
@@ -407,7 +673,9 @@ class SoulEntity(nn.Module):
                 replay_perturbation = 0.1 * (replay_q - current_q)  # [dim_q]
                 u_dict['replay'] = replay_perturbation.unsqueeze(0)  # [1, dim_q]
                 
-        return self.step(u_dict, dt)
+        result = self.step(u_dict, dt)
+        self.phase = prev_phase
+        return result
     
     def dream(self, steps: int = 100, dt: float = 0.1) -> List[Dict[str, Any]]:
         """
@@ -540,6 +808,10 @@ def create_soul_entity(config: Optional[Dict[str, Any]] = None) -> SoulEntity:
         'beta_kl': 0.01,
         'gamma_pred': 1.0,
         'transport_threshold': 0.1,
+        'router_context_dim': 0,
+        'connection_rank': 0,
+        'connection_hidden_dim': 64,
+        'connection_init_epsilon': 0.3,
         'experience_buffer_size': 10000,
     }
     
@@ -621,4 +893,3 @@ if __name__ == "__main__":
         print(f"  {k}: {v}")
         
     print("\n✓ SoulEntity 测试完成")
-

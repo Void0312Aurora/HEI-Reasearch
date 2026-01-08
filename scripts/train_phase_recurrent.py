@@ -107,183 +107,185 @@ class RecurrentTrainer:
         
     def train_step(self, batch_tokens):
         """
-        Recurrent Training Step (BPTT)
+        Recurrent Training Step (TBPTT)
         input: batch_tokens [B, L]
         """
         B, L = batch_tokens.shape
+        chunk_size = 64 # TBPTT chunk size
         
         # Reset Gradients
         self.opt_port.zero_grad()
         if self.opt_core: self.opt_core.zero_grad()
         
-        # Init State
+        # Init State (Detached at start of batch)
         q, p, s = self._init_state(B)
         
         # Metrics
         total_nll = 0
+        total_reg = 0
         total_lyap = 0
         
         # Lists for logging
         q_traj = []
         
-        # === Time Loop (Recurrent) ===
-        # We process t=0...L-2 to predict t=1...L-1
-        # Input: x_t -> Sensation u_t -> Dynamics -> z_{t+1} -> Predict x_{t+1}
+        # === Momentary Encoding (Causality Fix) ===
+        # u_t = Proj(Embed(x_t)) - NO Context, NO Transformer Leakage
+        # We can implement this by manually using port's embedding + projection
+        # or adding a helper in Port.
+        # Here we manually do it:
+        # 1. Embed
+        embeds = self.port.encoder.embedding(batch_tokens) # [B, L, D_emb]
+        # 2. Pos encode? Maybe not for momentary sensation, but helpful for time-awareness?
+        # Theory says "u_t depends on x_t". Pos encoding makes it u_t(x_t, t). acceptable.
+        embeds = self.port.encoder.pos_encoder(embeds)
+        # 3. Project (Skip Transformer)
+        u_seq = self.port.encoder.projection(embeds) # [B, L, D_u]
         
-        # Create attention mask (assuming all valid for synthetic)
-        mask = torch.ones_like(batch_tokens)
+        # === TBPTT Loop ===
+        # Split sequence into chunks
+        # We predict x_{t+1}. So we iterate t from 0 to L-2.
+        # Targets are x_{1...L-1}. (Last token x_L is target of x_{L-1})
+        # Actually standard: Input x_{0...L-2}, Target x_{1...L-1}
         
-        # Encode all tokens first (or step-by-step? Step-by-step is more "Contact")
-        # But Transformer encoder needs context.
-        # "Phase 1: Teacher-forced LM" -> We can use causal masked encoder or full encoder?
-        # A5 Axiom: Language is Observation.
-        # Standard LM: x_{0:t} -> predict x_{t+1}
-        # HEI Recurrent:
-        #   u_t = Encoder(x_t) (Immediate Sensation) OR Encoder(x_{0:t}) (Contextual Sensation)
-        #   Let's use "Encoder(x_{0:t})" via causal masking if we want full context,
-        #   OR just Encoder(x_t) if we want "Momentary Readout".
-        #   Temp-01 suggests: "u_t = encoder(x_t)" (Momentary) or blanket state.
-        #   Let's stick to TokenEncoder doing a full pass with mask, then picking u_t.
+        L_eff = L - 1
         
-        # 1. Batch Encode (Parallel for efficiency, but conceptually sequential)
-        # Use causal mask to ensure u_t only depends on x_{0:t}??
-        # Usually Encoder is Bidirectional (BERT style) or Causal (GPT style).
-        # Our TokenEncoder is TransformerEncoder (Bidirectional by default).
-        # To be strict causal, we need causal mask.
+        loss_accum = 0.0
         
-        causal_mask = torch.triu(torch.ones(L, L, device=self.device), diagonal=1).bool()
-        # Transformer expects True for masked positions (future)
-        # Note: TokenEncoder takes [B, L] mask where 0 is padding. 
-        # But nn.TransformerEncoderLayer src_mask is different.
-        # Our TokenEncoder wrapper doesn't expose src_mask for causality easily.
-        # FIX: For V1, let's assume "u_t" is derived from x_t independent of context 
-        # (purely momentary input driving the recurrent core), OR accept bidirectional context.
-        # Use Encoder.forward directly to get sequence [B, L, dim_u]
-        # LanguagePort.forward returns pooled u by default.
-        u_seq = self.port.encoder.forward(batch_tokens, attention_mask=mask) # [B, L, dim_u]
-        
-        state_trajectory = []
-        
-        # 2. Dynamics Integration Loop
-        dt = self.args.dt
-        
-        for t in range(L - 1):
-            # Input force (Contextualized Sensation)
+        for t in range(L_eff):
+            # 1. TBPTT Detach Check
+            if t > 0 and t % chunk_size == 0:
+                # Detach State to cut gradient graph
+                q = q.detach()
+                p = p.detach()
+                s = s.detach()
+            
+            # Input force (Momentary Sensation)
             u_t = u_seq[:, t, :] # [B, dim_u]
-            
-            # Map u_t to Force dimension? 
-            # If dim_u == dim_q, add directly to p? Or use as guidance?
-            # HEI Core usually treats u as "External input".
-            # For AdaptiveGenerator, we need to inject it.
-            # Minimal coupling: Force +/- k * (u_t - q) ? (Attractor)
-            # Or just Additive Force: F_ext = u_t
-            
             F_ext = u_t
             
-            # Dynamics Step (RK4 or Euler)
-            # Using symplectic Euler for simplicity in V1 script, or call generator logic
-            # Generator.forward gives H. We need gradients of H.
-            
             # --- Hamiltonian Dynamics Step ---
-            # H(q, p, s)
+            # H = K(p,q) + V(q) + Phi(s)
+            # Contact Update:
             # dot_q = dH/dp
-            # dot_p = -dH/dq + F_ext
-            # dot_s = ...
+            # dot_p = -dH/dq - p * dH/ds
+            # dot_s = p * dH/dp - H (Standard Contact Form)
+            
+            # We need H and its grads.
+            # Generator forward gives H.
             
             # Enable grad for physical step
-            # We manualy implement symplectic step here to ensure graph connectivity
-            
-            # 1. q_half = q + 0.5 * dt * dH/dp
-            # H depends on p via K(p) = 0.5 * lam^-2 * p^2
-            # dH/dp = lam^-2 * p
-            lam_q = (1.0 + self.args.hyperbolic_c * (q**2).sum(-1, keepdim=True))
-            # approximate lam_q for metric
-            metric_inv = 1.0 # Simplify for V1 start if c=0, else use lambda
-            
-            # Simple Euler-like step for BPTT stability first
-            # dot_q = p
-            # dot_p = -grad_V - damping - ... + F_ext
-            
-            # Let's rely on autograd for H gradients
-            # But that is slow inside loop.
-            # Explicit forces:
-            
-            # Potential Force: -grad_V(q)
-            # We can use torch.autograd.grad but create_graph=True
             q.requires_grad_(True)
-            V_val = self.net_V(q).sum()
-            grad_V = torch.autograd.grad(V_val, q, create_graph=True)[0]
+            p.requires_grad_(True)
+            s.requires_grad_(True)
             
-            # Dissipative Force: -alpha(q) * p (simplified contact)
-            alpha = self.generator.net_Alpha(q).sigmoid() # [B, 1]
-            F_diss = -alpha * p
+            # Compute H
+            # We construct a wrapper state
+            # Note: Generator typically computes H based on q, p, s
+            # But our generator forward() computes H.
             
-            # Update p
-            # p_new = p + dt * (F_ext + F_diss - grad_V)
-            # Note: F_ext (u_t) drives the system
-            delta_p = (F_ext + F_diss - grad_V) * dt
-            p_next = p + delta_p
+            # Manual H components for transparency & grad
+            # K(p,q)
+            lambda_q = (1.0 + self.args.hyperbolic_c * (q**2).sum(-1, keepdim=True))
+            metric_inv = lambda_q ** (-2)
+            K = 0.5 * metric_inv * (p**2).sum(dim=1, keepdim=True)
             
-            # Update q
-            # q_new = q + dt * p_next (Symplectic-ish)
-            q_next = q + p_next * dt
+            # V(q)
+            V_val = self.net_V(q)
+            # Confining V
+            V_conf = 0.5 * self.args.stiffness * (q**2).sum(dim=1, keepdim=True)
+            V_tot = V_val + V_conf
             
-            # Update s (Action functional)
-            # dot_s = p * dot_q - H + ... (Skip for NLL, keep for Lyap)
-            s_next = s # Placeholder
+            # Phi(s)
+            alpha_raw = self.generator.net_Alpha(q)
+            alpha = self.args.alpha_max * torch.sigmoid(alpha_raw) + 1e-3
+            # Contact Potential
+            Phi = 0.5 * 1.0 * (s**2) + alpha * s
             
-            # Update State
+            H = K + V_tot + Phi # [B, 1]
+            H_sum = H.sum()
+            
+            # Gradients
+            # create_graph=True needed for BPTT through dynamics
+            grads = torch.autograd.grad(H_sum, [q, p, s], create_graph=True)
+            dH_dq, dH_dp, dH_ds = grads
+            
+            # Equations of Motion (Contact)
+            # dot_q = dH/dp
+            # dot_p = -dH/dq - p * dH/ds
+            # dot_s = p * dH/dp - H
+            
+            dot_q = dH_dp
+            dot_p = -dH_dq - p * dH_ds + F_ext # Add external forcing
+            dot_s = (p * dH_dp).sum(dim=1, keepdim=True) - H
+            
+            # Euler Integration
+            dt = self.args.dt
+            q_next = q + dot_q * dt
+            p_next = p + dot_p * dt
+            s_next = s + dot_s * dt
+            
+            # Update
             q, p, s = q_next, p_next, s_next
             
-            # Collect for Decoding
-            state_trajectory.append(q)
             q_traj.append(q)
             
-        # Stack trajectory: [B, L-1, dim_q]
-        states_stack = torch.stack(state_trajectory, dim=1)
-        
-        # 3. Decode & Loss
-        # We predict x_{t+1} from state at t+1. 
-        # Flatten time into batch to use StateDecoder per-step (z_t -> x_{t+1})
-        # This prevents cross-attention to future states and forces dependence on z.
-        flat_states = states_stack.reshape(-1, self.dim_q) # [B*(L-1), dim_q]
-        
-        # Decoder
-        # Passing prev_tokens=None forces Decoder to use BOS query + State Memory
-        # This ensures the prediction relies on 'z', not just copying 'x_t'.
-        logits = self.port.decoder(flat_states, prev_tokens=None) # [B*(L-1), 1, V]
-        logits = logits.squeeze(1) # [B*(L-1), V]
-        
-        # Targets
-        targets = batch_tokens[:, 1:] # [B, L-1]
-        flat_targets = targets.reshape(-1) # [B*(L-1)]
-        
-        # NLL Loss
-        loss_nll = nn.CrossEntropyLoss()(logits, flat_targets)
-        
-        # Lyapunov / Energy Loss (Regularization)
-        # H should decrease (or satisfy contact cond). 
-        # Here we just penalize divergence: ||q||^2
-        loss_reg = 1e-3 * (states_stack**2).mean()
-        
-        loss_total = loss_nll + loss_reg
-        
-        # Backward
-        loss_total.backward()
-        
-        # Clip Grad
-        nn.utils.clip_grad_norm_(self.port.parameters(), 1.0)
-        nn.utils.clip_grad_norm_(self.net_V.parameters(), 1.0)
-        
-        # Step
-        self.opt_port.step()
-        if self.args.train_core:
-            self.opt_core.step()
+            # === Per-Step Loss Calculation (Decoder) ===
+            # Predict x_{t+1} using z_{t+1}=(q,p,s)
+            # Use q as primary readout + p? Let's stick to q for now as per Port interface
+            # Target is batch_tokens[:, t+1]
             
+            # Decoder
+            # q: [B, D] -> Dec -> [B, 1, V]
+            # No prev_tokens -> Pure State Readout
+            logits = self.port.decoder(q, prev_tokens=None).squeeze(1) # [B, V]
+            target_t = batch_tokens[:, t+1] # [B]
+            
+            l_nll = nn.CrossEntropyLoss()(logits, target_t)
+            
+            # Regularization
+            l_reg = 1e-3 * (q**2).mean() + 1e-4 * (s**2).mean()
+            
+            loss_step = l_nll + l_reg
+            loss_accum += loss_step
+            
+            total_nll += l_nll.item()
+            total_reg += l_reg.item()
+            
+            # TBPTT Backward at chunk end or sequence end
+            if (t + 1) % chunk_size == 0 or t == L_eff - 1:
+                # Average per token in this chunk
+                loss_mean = loss_accum / (t % chunk_size + 1) 
+                
+                loss_mean.backward()
+                
+                # Clip
+                nn.utils.clip_grad_norm_(self.port.parameters(), 1.0)
+                nn.utils.clip_grad_norm_(self.net_V.parameters(), 1.0)
+                
+                # Step
+                self.opt_port.step()
+                if self.args.train_core:
+                    self.opt_core.step()
+                    
+                # Zero Grad
+                self.opt_port.zero_grad()
+                if self.opt_core: self.opt_core.zero_grad()
+                
+                loss_accum = 0.0
+                
+                # Detach state for next chunk logic is handled at start of loop
+                # But careful: q, p, s are updated IN PLACE in python variables.
+                # We need to detach them HERE for the next loop iteration's start?
+                # No, the logic `if t > 0 ... detach` at top handles it.
+                # BUT `backward()` clears the graph. We MUST detach `q,p,s` immediately after backward
+                # to prevent next chunk from trying to backprop into cleared graph.
+                q = q.detach()
+                p = p.detach()
+                s = s.detach()
+                
         return {
-            "loss": loss_total.item(),
-            "nll": loss_nll.item(),
-            "reg": loss_reg.item(),
+            "nll": total_nll / L_eff,
+            "reg": total_reg / L_eff,
             "q_mean": torch.stack(q_traj).mean().item()
         }
 

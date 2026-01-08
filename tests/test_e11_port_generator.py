@@ -12,6 +12,9 @@ class TestPortGenerator(unittest.TestCase):
         dim_q = 2
         # Use simple Dissipative (Recover A3/A4) as internal
         internal = DissipativeGenerator(dim_q, alpha=0.1)
+        # Neutralize potential so coupling physics is isolated
+        for param in internal.net_V.parameters():
+            param.data.zero_()
         port_gen = PortCoupledGenerator(internal, dim_u=dim_q)
         integrator = ContactIntegrator()
         

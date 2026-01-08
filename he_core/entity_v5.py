@@ -58,7 +58,13 @@ class UnifiedGeometricEntityV5(nn.Module):
         self._prev_chart_weights = None  # Track for transport logic
         
         # 5. Integrator
-        self.integrator = ContactIntegrator()
+        integrator_method = config.get('integrator_method', 'euler')
+        integrator_damping = float(config.get('damping', 0.1))
+        self.integrator = ContactIntegrator(
+            method=integrator_method,
+            dim_q=self.dim_q,
+            damping=integrator_damping
+        )
         
         # 6. Interface (Default: PortInterface for energy semantics)
         use_port = config.get('use_port_interface', True)
@@ -128,11 +134,15 @@ class UnifiedGeometricEntityV5(nn.Module):
         beta_kl = self.config.get('beta_kl', 0.01)
         gamma_pred = self.config.get('gamma_pred', 1.0)
         
-        # Potential Energy V(q, z)
+        # Potential Energy V(q, z) + stiffness
         # z needs to be expanded to batch size
         z_batch = self.z.expand(state.batch_size, -1) # (B, dim_z)
         inp = torch.cat([state.q, z_batch], dim=1)
-        V = self.net_V(inp).mean()
+        V = self.net_V(inp)
+        stiffness = getattr(self.internal_gen, 'stiffness', 0.0)
+        if stiffness > 0:
+            V = V + 0.5 * stiffness * (state.q ** 2).sum(dim=1, keepdim=True)
+        V = V.mean()
         
         # KL Regularization on z
         KL = beta_kl * self._compute_kl_z()

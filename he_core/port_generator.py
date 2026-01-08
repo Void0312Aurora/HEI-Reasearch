@@ -11,12 +11,22 @@ class PortCoupling(nn.Module):
     Learnable: B(q) = W q (Linear Map).
     Mixture: B(q) = sum w_k * W_k q (Gated Linear Map).
     """
-    def __init__(self, dim_q: int, dim_u: int, learnable: bool = False, num_charts: int = 1):
+    def __init__(
+        self,
+        dim_q: int,
+        dim_u: int,
+        learnable: bool = False,
+        num_charts: int = 1,
+        top_k: int = 0,
+        topk_impl: str = "grouped",
+    ):
         super().__init__()
         self.dim_q = dim_q
         self.dim_u = dim_u
         self.learnable = learnable
         self.num_charts = num_charts
+        self.top_k = int(top_k or 0)
+        self.topk_impl = str(topk_impl or "grouped")
         
         if learnable:
             # We need K matrices if num_charts > 1
@@ -55,19 +65,55 @@ class PortCoupling(nn.Module):
         """
         if not self.learnable:
             return -q # Assumes dim_q == dim_u
-            
-        # ... (Existing Einsum logic for B(q)) ...
-        # q -> (B, 1, Dq)
-        # W -> (K, Du, Dq)
-        # y_all = q W^T -> (B, K, Du)
-        Y_all = torch.einsum('kuq,bq->bku', self.W_stack, q)
-        
+
+        weights_provided = weights is not None
         if weights is None:
-             weights = torch.ones(q.shape[0], self.num_charts, device=q.device) / self.num_charts
-             
-        w_b = weights.unsqueeze(2)
-        B_q = (Y_all * w_b).sum(dim=1)
-        return B_q
+            weights = torch.ones(q.shape[0], self.num_charts, device=q.device, dtype=q.dtype) / self.num_charts
+
+        # Sparse mixture over charts (atlas locality): only keep top-k charts per sample.
+        if weights_provided and self.top_k > 0 and self.top_k < self.num_charts:
+            if self.topk_impl == "dense":
+                if self.top_k == 1:
+                    # Fast path: top-1 gating via argmax + gather (avoids per-step topk/scatter overhead).
+                    idx = weights.argmax(dim=1)  # [B]
+                    Y_all = torch.einsum("kuq,bq->bku", self.W_stack, q)  # [B,K,Du]
+                    return Y_all.gather(1, idx.view(-1, 1, 1).expand(-1, 1, self.dim_u)).squeeze(1)
+                w_vals, idx = torch.topk(weights, k=self.top_k, dim=1)  # [B,k]
+                w_norm = w_vals / w_vals.sum(dim=1, keepdim=True).clamp(min=1e-8)  # [B,k]
+                w_masked = torch.zeros_like(weights)
+                w_masked.scatter_(1, idx, w_norm)
+
+                # Dense compute (no Python loops) + masked top-k weights.
+                Y_all = torch.einsum("kuq,bq->bku", self.W_stack, q)  # [B,K,Du]
+                return (Y_all * w_masked.unsqueeze(2)).sum(dim=1)
+
+            # NOTE: avoid materializing W_stack[idx] as [B,k,Du,Dq] (can OOM for large dims).
+            # We group by selected chart id and accumulate with index_add_.
+            w_vals, idx = torch.topk(weights, k=self.top_k, dim=1)  # [B,k]
+            w_norm = w_vals / w_vals.sum(dim=1, keepdim=True).clamp(min=1e-8)
+
+            batch_size = q.shape[0]
+            k = int(self.top_k)
+            idx_flat = idx.reshape(-1)  # [B*k]
+            w_flat = w_norm.reshape(-1)  # [B*k]
+            b_idx = torch.arange(batch_size, device=q.device).repeat_interleave(k)  # [B*k]
+
+            out = torch.zeros(batch_size, self.dim_u, device=q.device, dtype=q.dtype)
+            # Important: avoid `.tolist()` / `.any()` on CUDA tensors, which forces a device sync.
+            for chart in range(self.num_charts):
+                mask = idx_flat == chart
+                rows = b_idx[mask]
+                if rows.numel() == 0:
+                    continue
+                q_sub = q.index_select(0, rows)  # [n,Dq]
+                y_sub = torch.matmul(q_sub, self.W_stack[chart].transpose(0, 1))  # [n,Du]
+                y_sub = y_sub * w_flat[mask].unsqueeze(1)
+                out.index_add_(0, rows, y_sub)
+            return out
+
+        # Dense mixture (all charts)
+        Y_all = torch.einsum('kuq,bq->bku', self.W_stack, q)  # [B, K, Du]
+        return (Y_all * weights.unsqueeze(2)).sum(dim=1)
 
     def get_action(self, q: torch.Tensor, p: Optional[torch.Tensor] = None, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -75,22 +121,73 @@ class PortCoupling(nn.Module):
         """
         if not self.learnable:
             return torch.zeros(q.shape[0], self.dim_u, device=q.device)
-            
-        # q term
+
+        weights_provided = weights is not None
+        if weights is None:
+            weights = torch.ones(q.shape[0], self.num_charts, device=q.device, dtype=q.dtype) / self.num_charts
+
+        # Sparse mixture over charts (atlas locality)
+        if weights_provided and self.top_k > 0 and self.top_k < self.num_charts:
+            if self.topk_impl == "dense":
+                if self.top_k == 1:
+                    idx = weights.argmax(dim=1)  # [B]
+                    Aq_all = torch.einsum("kuq,bq->bku", self.W_action_q, q)
+                    if p is not None:
+                        Ap_all = torch.einsum("kuq,bq->bku", self.W_action_p, p)
+                        A_all = Aq_all + Ap_all
+                    else:
+                        A_all = Aq_all
+                    action_raw = A_all.gather(1, idx.view(-1, 1, 1).expand(-1, 1, self.dim_u)).squeeze(1)
+                    return 5.0 * torch.tanh(action_raw)
+                w_vals, idx = torch.topk(weights, k=self.top_k, dim=1)  # [B,k]
+                w_norm = w_vals / w_vals.sum(dim=1, keepdim=True).clamp(min=1e-8)
+                w_masked = torch.zeros_like(weights)
+                w_masked.scatter_(1, idx, w_norm)
+
+                Aq_all = torch.einsum("kuq,bq->bku", self.W_action_q, q)
+                if p is not None:
+                    Ap_all = torch.einsum("kuq,bq->bku", self.W_action_p, p)
+                    A_all = Aq_all + Ap_all
+                else:
+                    A_all = Aq_all
+                action_raw = (A_all * w_masked.unsqueeze(2)).sum(dim=1)
+                return 5.0 * torch.tanh(action_raw)
+
+            w_vals, idx = torch.topk(weights, k=self.top_k, dim=1)  # [B,k]
+            w_norm = w_vals / w_vals.sum(dim=1, keepdim=True).clamp(min=1e-8)
+
+            batch_size = q.shape[0]
+            k = int(self.top_k)
+            idx_flat = idx.reshape(-1)  # [B*k]
+            w_flat = w_norm.reshape(-1)  # [B*k]
+            b_idx = torch.arange(batch_size, device=q.device).repeat_interleave(k)  # [B*k]
+
+            out = torch.zeros(batch_size, self.dim_u, device=q.device, dtype=q.dtype)
+            # Important: avoid `.tolist()` / `.any()` on CUDA tensors, which forces a device sync.
+            for chart in range(self.num_charts):
+                mask = idx_flat == chart
+                rows = b_idx[mask]
+                if rows.numel() == 0:
+                    continue
+                q_sub = q.index_select(0, rows)
+                a_sub = torch.matmul(q_sub, self.W_action_q[chart].transpose(0, 1))
+                if p is not None:
+                    p_sub = p.index_select(0, rows)
+                    a_sub = a_sub + torch.matmul(p_sub, self.W_action_p[chart].transpose(0, 1))
+                a_sub = a_sub * w_flat[mask].unsqueeze(1)
+                out.index_add_(0, rows, a_sub)
+
+            return 5.0 * torch.tanh(out)
+
+        # Dense mixture
         Aq_all = torch.einsum('kuq,bq->bku', self.W_action_q, q)
-        
-        # p term
         if p is not None:
             Ap_all = torch.einsum('kuq,bq->bku', self.W_action_p, p)
             A_all = Aq_all + Ap_all
         else:
             A_all = Aq_all
-        
-        if weights is None:
-             weights = torch.ones(q.shape[0], self.num_charts, device=q.device) / self.num_charts
-        
-        w_b = weights.unsqueeze(2)
-        Action_Raw = (A_all * w_b).sum(dim=1)
+
+        Action_Raw = (A_all * weights.unsqueeze(2)).sum(dim=1)
         # Apply Tanh to bound action
         return 5.0 * torch.tanh(Action_Raw)
 
@@ -99,21 +196,45 @@ class PortCoupledGenerator(nn.Module):
     Template 3: Hamiltonian with Multi-Port Coupling.
     H(x, u, t) = H_int(x) + sum_i <u_i, B_i(q)>
     """
-    def __init__(self, internal_generator: BaseGenerator, dim_u: int, learnable_coupling: bool = False, num_charts: int = 1):
+    def __init__(
+        self,
+        internal_generator: BaseGenerator,
+        dim_u: int,
+        learnable_coupling: bool = False,
+        num_charts: int = 1,
+        top_k: int = 0,
+        topk_impl: str = "grouped",
+    ):
         super().__init__()
         self.internal = internal_generator
         self.dim_u = dim_u
         self.dim_q = internal_generator.dim_q
         self.num_charts = num_charts
         self.learnable = learnable_coupling
+        self.top_k = int(top_k or 0)
+        self.topk_impl = str(topk_impl or "grouped")
         
         # We store ports in a ModuleDict
         self.ports = nn.ModuleDict({
-            'default': PortCoupling(self.dim_q, dim_u, learnable=learnable_coupling, num_charts=num_charts)
+            'default': PortCoupling(
+                self.dim_q,
+                dim_u,
+                learnable=learnable_coupling,
+                num_charts=num_charts,
+                top_k=self.top_k,
+                topk_impl=self.topk_impl,
+            )
         })
         
     def add_port(self, name: str, dim_u: int):
-        self.ports[name] = PortCoupling(self.dim_q, dim_u, learnable=self.learnable, num_charts=self.num_charts)
+        self.ports[name] = PortCoupling(
+            self.dim_q,
+            dim_u,
+            learnable=self.learnable,
+            num_charts=self.num_charts,
+            top_k=self.top_k,
+            topk_impl=self.topk_impl,
+        )
 
     def get_h_port(self, state: ContactState, port_name: str, u_val: torch.Tensor, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         """

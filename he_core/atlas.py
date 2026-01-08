@@ -23,27 +23,35 @@ class AtlasRouter(nn.Module):
     """
     Gating Network: Selects active charts based on global 'Context' (or q).
     """
-    def __init__(self, dim_q: int, num_charts: int):
+    def __init__(self, dim_q: int, num_charts: int, dim_context: int = 0):
         super().__init__()
+        self.dim_q = int(dim_q)
+        self.dim_context = int(dim_context or 0)
+        in_dim = self.dim_q + self.dim_context if self.dim_context > 0 else self.dim_q
         self.net = nn.Sequential(
-            nn.Linear(dim_q, 16),
+            nn.Linear(in_dim, 16),
             nn.ReLU(),
             nn.Linear(16, num_charts),
             nn.Softmax(dim=-1)
         )
         
-    def forward(self, q: torch.Tensor) -> torch.Tensor:
+    def forward(self, q: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
         """Returns weights (B, num_charts)"""
-        return self.net(q)
+        if self.dim_context <= 0:
+            return self.net(q)
+        if context is None:
+            context = torch.zeros(q.shape[0], self.dim_context, device=q.device, dtype=q.dtype)
+        return self.net(torch.cat([q, context], dim=1))
 
 class Atlas(nn.Module):
     """
     Manages K Charts with Router.
     """
-    def __init__(self, num_charts: int, dim_q: int):
+    def __init__(self, num_charts: int, dim_q: int, router_context_dim: int = 0):
         super().__init__()
         self.num_charts = num_charts
         self.dim_q = dim_q
+        self.router_context_dim = int(router_context_dim or 0)
         self.states = []
         for _ in range(num_charts):
             self.states.append(ContactState(dim_q))
@@ -55,11 +63,11 @@ class Atlas(nn.Module):
         self.integrator = ContactIntegrator()
         
         # Router
-        self.router = AtlasRouter(dim_q, num_charts)
+        self.router = AtlasRouter(dim_q, num_charts, dim_context=self.router_context_dim)
         
-    def get_active_weights(self, q_context: torch.Tensor) -> torch.Tensor:
+    def get_active_weights(self, q_context: torch.Tensor, router_context: torch.Tensor | None = None) -> torch.Tensor:
         """Wrapper for router"""
-        return self.router(q_context)
+        return self.router(q_context, context=router_context)
         
     def add_transition(self, i: int, j: int):
         key = f"{i}_{j}"

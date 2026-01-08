@@ -1,6 +1,7 @@
 
 import torch
 import torch.nn as nn
+import math
 from he_core.state import ContactState
 from he_core.generator import DeepDissipativeGenerator
 
@@ -29,7 +30,7 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
     """
     def __init__(self, dim_q: int, net_V: nn.Module = None, dim_z: int = 0, 
                  stiffness: float = 0.0, contact_stiffness: float = 0.1,
-                 alpha_max: float = 1.0, hyperbolic_c: float = 0.1):
+                 alpha_max: float = 1.0, alpha_min: float = 0.2, hyperbolic_c: float = 0.1):
         super().__init__(dim_q, alpha=0.0, net_V=net_V, stiffness=stiffness)
         self.dim_z = dim_z
         
@@ -40,6 +41,11 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
         # 耗散系数上界：确保Φ有下界
         # Φ_min = -α_max²/(2λ) 是有限的
         self.alpha_max = alpha_max
+
+        # 耗散系数下界：确保 dH/ds 有正的下界，从而在有界外力下动量不会无界增长。
+        # 这比单纯“>0”更强：允许 alpha(q) 过小会导致接近无耗散，p 在持续驱动下线性/超线性变大，
+        # 进而把群元推进到 cosh/sinh 溢出区间，引发 NaN。
+        self.alpha_min = float(alpha_min)
         
         # === 双曲度量参数（几何基础第二节）===
         # 曲率参数 c > 0，控制双曲效应强度
@@ -47,7 +53,7 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
         self.hyperbolic_c = hyperbolic_c
         
         # Learnable Damping Field α(q) ∈ (0, α_max]
-        # 使用sigmoid确保有界：α = α_max · sigmoid(net(q))
+        # 使用sigmoid确保正且有界：α = α_max · sigmoid(net(q))
         self.net_Alpha = nn.Sequential(
             nn.Linear(dim_q, 64),
             nn.Tanh(),
@@ -67,11 +73,25 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
             if 'weight' in name:
                 nn.init.normal_(param, mean=0.0, std=1e-5) # Almost zero gradient
             elif 'bias' in name:
-                # For hidden layers, bias=0
-                # For output layer, bias gives the initial damping level
-                # softplus(x) = alpha. Let alpha=0.1. x ~ -2.2
+                # For hidden layers, bias=0.
+                # For the output layer, bias sets the initial damping level.
+                # With alpha = alpha_max * sigmoid(alpha_raw), choose a small positive alpha
+                # so early training is dissipative (prevents immediate momentum blow-up).
                 if param.shape[0] == 1: # Output layer (assuming latent=64)
-                    nn.init.constant_(param, -2.0) # Start with small positive damping
+                    # Initialize near a mild, but strictly positive, dissipation level.
+                    # With alpha(q) = alpha_min + (alpha_max-alpha_min)*sigmoid(raw),
+                    # choose target_alpha in (alpha_min, alpha_max).
+                    alpha_min = float(self.alpha_min)
+                    alpha_max = float(self.alpha_max)
+                    if not (alpha_max > alpha_min):
+                        alpha_max = alpha_min + 1.0
+                        self.alpha_max = alpha_max
+                    target_alpha = alpha_min + 0.1 * (alpha_max - alpha_min)
+                    # Invert sigmoid: ratio = (alpha-target_min)/(alpha_max-alpha_min)
+                    ratio = (target_alpha - alpha_min) / (alpha_max - alpha_min)
+                    ratio = max(min(float(ratio), 0.99), 0.01)
+                    init_bias = math.log(ratio / (1.0 - ratio))
+                    nn.init.constant_(param, init_bias)
                 else:
                     nn.init.zeros_(param)
         
@@ -132,6 +152,9 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
         
         # === 势能 V(q, z) ===
         if self.dim_z > 0 and z is not None:
+            # Expand z if necessary to match q batch size
+            if z.shape[0] != q.shape[0]:
+                z = z.expand(q.shape[0], -1)
             inp = torch.cat([q, z], dim=1)
             V = self.net_V(inp)
         else:
@@ -142,7 +165,7 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
             V_conf = 0.5 * self.stiffness * (q**2).sum(dim=1, keepdim=True)
             V = V + V_conf
         
-        # === 接触势 Φ(s) = 0.5·λ·s² + α(q)·s ===
+        # === 接触势 Φ(s) ===
         # 
         # 关键约束：
         # 1. 凸性：Φ''(s) = λ > 0 ✓
@@ -151,14 +174,23 @@ class AdaptiveDissipativeGenerator(DeepDissipativeGenerator):
         # 最小值点：s* = -α/λ
         # 最小值：Φ(s*) = -α²/(2λ)
         
-        # 自适应耗散系数 α(q) ∈ [ε, α_max]
-        # 使用 sigmoid 确保严格有界
+        # 自适应耗散系数 α(q) ∈ (0, α_max]
+        # 与理论基础-7中“耗散系数需有上界且用于Lyapunov语义”的约束一致。
         alpha_raw = self.net_Alpha(q)
-        alpha_q = self.alpha_max * torch.sigmoid(alpha_raw) + 1e-3
+        alpha_min = float(self.alpha_min)
+        alpha_max = float(self.alpha_max)
+        if not (alpha_max > alpha_min):
+            alpha_max = alpha_min + 1.0
+        alpha_q = alpha_min + (alpha_max - alpha_min) * torch.sigmoid(alpha_raw)
         
-        # 凸接触势
+        # 关键修正（数值/动力学一致性）：
+        # 若使用二次项 0.5·λ·s²，则 dot_s = p·dH/dp - H 会包含 -0.5·λ·s²，
+        # 在常见情形下会把 s 推向 -∞，从而使 dH/ds = Φ'(s)+... → -∞，导致动量被强烈“负阻尼”泵爆。
+        # 为保持 Φ 的凸性但避免 dH/ds 无界，使用“渐近线性”的凸势：
+        #   Φ(s) = λ( sqrt(1+s²) - 1 ) + α(q)·s
+        # 其导数 Φ'(s) = λ * s/sqrt(1+s²) 有界于 [-λ, λ]。
         lambda_s = self.contact_stiffness
-        Phi_s = 0.5 * lambda_s * (s**2) + alpha_q * s
+        Phi_s = lambda_s * (torch.sqrt(1.0 + s * s) - 1.0) + alpha_q * s
         
         # 计算 Φ 的理论下界用于调试
         # Phi_min = -alpha_q**2 / (2 * lambda_s)
