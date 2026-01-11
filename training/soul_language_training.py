@@ -189,6 +189,9 @@ class SoulLanguageTrainer(nn.Module):
         
         # 添加语言端口到SoulEntity
         self.entity.add_interface('language', config.dim_q)
+
+        # CUDA-graph friendly scalar constants (avoid creating new CUDA tensors inside capture).
+        self.register_buffer("_pad_token", torch.tensor(int(tokenizer.pad_id), dtype=torch.long), persistent=False)
         
     def reset_entity(self, batch_size: int):
         """重置实体状态"""
@@ -433,6 +436,7 @@ class SoulLanguageTrainer(nn.Module):
         attention_mask = batch['attention_mask']
         batch_size, seq_len = token_ids.shape
         device = token_ids.device
+        mask_f = attention_mask.to(dtype=torch.float32)
 
         if self.config.reset_each_batch or self.entity.state is None or self.entity.state.batch_size != batch_size:
             self.reset_entity(batch_size)
@@ -450,28 +454,43 @@ class SoulLanguageTrainer(nn.Module):
         # Router diagnostics/regularizers (skills≈charts needs non-collapsed atlas usage).
         router_balance_w = float(getattr(self.config, "router_balance_weight", 0.0) or 0.0)
         router_entropy_w = float(getattr(self.config, "router_entropy_weight", 0.0) or 0.0)
-        router_token_count = torch.tensor(0.0, device=device)
+        router_token_count = state_flat.new_zeros(())
         router_weight_sum = None
-        router_entropy_sum = torch.tensor(0.0, device=device)
+        router_entropy_sum = state_flat.new_zeros(())
 
         # Run dynamics across the sequence. We update state even for special tokens, but freeze for PAD.
         detach_every = int(getattr(self.config, "detach_every", 0) or 0)
         ss_prob = float(getattr(self.config, "scheduled_sampling_prob", 0.0) or 0.0)
+        ss_prob = max(0.0, min(1.0, ss_prob))
+        ss_mode = str(getattr(self.config, "scheduled_sampling_mode", "sample"))
+        ss_temp = float(getattr(self.config, "scheduled_sampling_temperature", 1.0) or 1.0)
+        ss_top_k = int(getattr(self.config, "scheduled_sampling_top_k", 20) or 0)
+        pad_token = self._pad_token
 
         # Fast path (ss_prob=0): precompute token embeddings and vectorize the readout/loss over time.
         # This greatly reduces kernel-launch overhead and typically increases GPU utilization.
         vectorized_readout = ss_prob <= 0.0
         u_seq = None
-        q_states: List[torch.Tensor] = []
+        q_seq = None
         if vectorized_readout:
             u_seq = self.token_embedding(token_ids)  # [B,L,Dq]
-            u_seq = u_seq * attention_mask.float().unsqueeze(-1)
+            u_seq = u_seq * mask_f.unsqueeze(-1)
+            if seq_len > 1:
+                q_seq = torch.empty((batch_size, seq_len - 1, self.entity.dim_q), device=device, dtype=state_flat.dtype)
+        ss_mask = None
+        if (not vectorized_readout) and seq_len > 1:
+            # Precompute the scheduled-sampling decision mask once per sequence to avoid
+            # per-token RNG calls (and to be friendlier to CUDA graph capture).
+            if ss_prob >= 1.0 - 1e-8:
+                ss_mask = mask_f[:, 1:].bool()
+            else:
+                ss_mask = (torch.rand(batch_size, seq_len - 1, device=device) < ss_prob) & mask_f[:, 1:].bool()
 
         # Current token ids fed into the dynamics (scheduled sampling may overwrite teacher tokens).
         current_tokens = token_ids[:, 0]
 
         for t in range(seq_len):
-            mask_curr = attention_mask[:, t].float().unsqueeze(1)  # [B,1]
+            mask_curr = mask_f[:, t : t + 1]  # [B,1]
             if vectorized_readout:
                 assert u_seq is not None
                 u_t = u_seq[:, t, :]  # already masked
@@ -505,7 +524,7 @@ class SoulLanguageTrainer(nn.Module):
             if (router_balance_w != 0.0 or router_entropy_w != 0.0) and last_chart_weights is not None:
                 mask1 = mask_curr.squeeze(1)  # [B]
                 if router_weight_sum is None:
-                    router_weight_sum = torch.zeros(last_chart_weights.shape[1], device=device)
+                    router_weight_sum = state_flat.new_zeros((last_chart_weights.shape[1],))
                 router_token_count = router_token_count + mask1.sum()
                 router_weight_sum = router_weight_sum + (last_chart_weights * mask1.unsqueeze(1)).sum(dim=0)
                 entropy = -(last_chart_weights * torch.log(last_chart_weights + 1e-8)).sum(dim=1)  # [B]
@@ -514,9 +533,10 @@ class SoulLanguageTrainer(nn.Module):
             # Next-token prediction after consuming token t (teacher-forced target x_{t+1})
             if t < seq_len - 1:
                 if vectorized_readout:
-                    q_states.append(state_flat[:, : self.entity.dim_q])
+                    assert q_seq is not None
+                    q_seq[:, t, :] = state_flat[:, : self.entity.dim_q]
                 else:
-                    mask_tgt = attention_mask[:, t + 1].float()  # [B]
+                    mask_tgt = mask_f[:, t + 1]  # [B]
                     q = state_flat[:, :self.entity.dim_q]
                     logits = self.decode_logits_from_q(q)  # [B,V]
                     targets = token_ids[:, t + 1]
@@ -534,18 +554,15 @@ class SoulLanguageTrainer(nn.Module):
 
                     # Scheduled sampling: sometimes feed model output as next input (Protocol-5 mitigation).
                     # Avoid Python branching on CUDA tensors (e.g. `.any()`), which forces sync per token.
-                    if ss_prob > 0.0:
-                        use_sample = (torch.rand(batch_size, device=device) < ss_prob) & mask_tgt.bool()
-                        mode = str(getattr(self.config, "scheduled_sampling_mode", "sample"))
-                        temp = float(getattr(self.config, "scheduled_sampling_temperature", 1.0) or 1.0)
-                        top_k = int(getattr(self.config, "scheduled_sampling_top_k", 20) or 0)
-
-                        step_logits = logits / max(temp, 1e-6)
-                        if top_k > 0:
-                            v, _ = torch.topk(step_logits, min(top_k, step_logits.shape[-1]), dim=-1)
+                    next_tokens = targets
+                    if ss_mask is not None:
+                        use_sample = ss_mask[:, t] & mask_tgt.bool()
+                        step_logits = logits / max(ss_temp, 1e-6)
+                        if ss_top_k > 0:
+                            v, _ = torch.topk(step_logits, min(ss_top_k, step_logits.shape[-1]), dim=-1)
                             cutoff = v[:, -1].unsqueeze(-1)
                             step_logits = step_logits.masked_fill(step_logits < cutoff, float("-inf"))
-                        if mode == "argmax" or top_k == 1:
+                        if ss_mode == "argmax" or ss_top_k == 1:
                             sampled = torch.argmax(step_logits, dim=-1)
                         else:
                             probs = torch.softmax(step_logits, dim=-1)
@@ -556,11 +573,9 @@ class SoulLanguageTrainer(nn.Module):
                             sampled = torch.multinomial(probs, 1).squeeze(-1)
 
                         next_tokens = torch.where(use_sample, sampled, targets)
-                    else:
-                        next_tokens = targets
 
                     # For padded positions, keep feeding PAD (and dynamics is frozen by mask=0).
-                    next_tokens = torch.where(mask_tgt.bool(), next_tokens, torch.full_like(next_tokens, self.tokenizer.pad_id))
+                    next_tokens = torch.where(mask_tgt.bool(), next_tokens, pad_token)
                     current_tokens = next_tokens
 
             if detach_every > 0 and (t + 1) % detach_every == 0:
@@ -569,13 +584,13 @@ class SoulLanguageTrainer(nn.Module):
         if vectorized_readout:
             if self.output_proj is None:
                 raise RuntimeError("vectorized_readout requires output_proj (minimal port).")
-            if len(q_states) != max(seq_len - 1, 0):
-                raise RuntimeError(f"q_states length mismatch: got {len(q_states)} expected {max(seq_len-1,0)}")
-
-            q_seq = torch.stack(q_states, dim=1)  # [B,L-1,Dq]
-            logits_seq = self.output_proj(q_seq)  # [B,L-1,V]
+            if seq_len <= 1:
+                logits_seq = self.output_proj(torch.zeros((batch_size, 0, self.entity.dim_q), device=device, dtype=state_flat.dtype))
+            else:
+                assert q_seq is not None
+                logits_seq = self.output_proj(q_seq)  # [B,L-1,V]
             targets_seq = token_ids[:, 1:]  # [B,L-1]
-            mask_seq = attention_mask[:, 1:].float()  # [B,L-1]
+            mask_seq = mask_f[:, 1:]  # [B,L-1]
 
             flat_logits = logits_seq.reshape(-1, logits_seq.shape[-1])
             flat_targets = targets_seq.reshape(-1)
@@ -610,9 +625,9 @@ class SoulLanguageTrainer(nn.Module):
             self.entity.experience.push(zeros, zeros, state_to_store, r=0.0)
 
         # Atlas regularizers (treated as part of the unified functional in practice).
-        router_balance = torch.tensor(0.0, device=device)
-        router_entropy = torch.tensor(0.0, device=device)
-        atlas_reg = torch.tensor(0.0, device=device)
+        router_balance = state_flat.new_zeros(())
+        router_entropy = state_flat.new_zeros(())
+        atlas_reg = state_flat.new_zeros(())
         if router_weight_sum is not None:
             K = float(router_weight_sum.shape[0])
             mean_w = router_weight_sum / router_token_count.clamp(min=1.0)
@@ -623,11 +638,11 @@ class SoulLanguageTrainer(nn.Module):
             atlas_reg = router_balance_w * router_balance + router_entropy_w * router_entropy
 
         # Offline rollout (differentiable, A2/A3)
-        F_offline = torch.tensor(0.0, device=device)
-        F_offline_start = torch.tensor(0.0, device=device)
-        F_offline_end = torch.tensor(0.0, device=device)
-        delta_offline = torch.tensor(0.0, device=device)
-        offline_loss = torch.tensor(0.0, device=device)
+        F_offline = state_flat.new_zeros(())
+        F_offline_start = state_flat.new_zeros(())
+        F_offline_end = state_flat.new_zeros(())
+        delta_offline = state_flat.new_zeros(())
+        offline_loss = state_flat.new_zeros(())
         if self.config.num_offline_steps > 0:
             offline_init = current_state.clone()
             if self.config.offline_detach_init:
@@ -777,17 +792,18 @@ class SoulLanguageTrainer(nn.Module):
         for tok in prefix_ids:
             tok_t = torch.tensor([[tok]], device=device, dtype=torch.long)
             u_t = self.token_embedding(tok_t).squeeze(1)  # [1, Dq]
-            out = self.entity.forward_tensor(
-                state_flat=state_flat,
-                u_dict={'language': u_t},
-                dt=self.config.dt,
-                prev_chart_weights=prev_weights,
-                prediction_error=None,
-                detach_next_prev_weights=True,
-                compute_action=False,
-            )
-            state_flat = out['next_state_flat']
-            prev_weights = out['next_prev_chart_weights']
+            for _ in range(int(self.config.num_evolution_steps)):
+                out = self.entity.forward_tensor(
+                    state_flat=state_flat,
+                    u_dict={'language': u_t},
+                    dt=self.config.dt,
+                    prev_chart_weights=prev_weights,
+                    prediction_error=None,
+                    detach_next_prev_weights=True,
+                    compute_action=False,
+                )
+                state_flat = out['next_state_flat']
+                prev_weights = out['next_prev_chart_weights']
 
         generated: List[int] = list(prefix_ids)
         for _ in range(max_len):
@@ -810,17 +826,18 @@ class SoulLanguageTrainer(nn.Module):
 
             tok_t = torch.tensor([[next_tok]], device=device, dtype=torch.long)
             u_t = self.token_embedding(tok_t).squeeze(1)
-            out = self.entity.forward_tensor(
-                state_flat=state_flat,
-                u_dict={'language': u_t},
-                dt=self.config.dt,
-                prev_chart_weights=prev_weights,
-                prediction_error=None,
-                detach_next_prev_weights=True,
-                compute_action=False,
-            )
-            state_flat = out['next_state_flat']
-            prev_weights = out['next_prev_chart_weights']
+            for _ in range(int(self.config.num_evolution_steps)):
+                out = self.entity.forward_tensor(
+                    state_flat=state_flat,
+                    u_dict={'language': u_t},
+                    dt=self.config.dt,
+                    prev_chart_weights=prev_weights,
+                    prediction_error=None,
+                    detach_next_prev_weights=True,
+                    compute_action=False,
+                )
+                state_flat = out['next_state_flat']
+                prev_weights = out['next_prev_chart_weights']
 
         return self.tokenizer.decode(generated)
     

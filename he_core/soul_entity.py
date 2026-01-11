@@ -662,7 +662,7 @@ class SoulEntity(nn.Module):
         u_dict = {}
         
         # 可选: 回放注入
-        if replay_mode != 'none' and len(self.experience.states) > 0:
+        if replay_mode != 'none' and int(self.experience.size) > 0:
             replay = self.experience.sample_replay(1, mode=replay_mode)
             if replay is not None:
                 # 轻微扰动注入 (模拟回放)
@@ -791,7 +791,7 @@ class SoulEntity(nn.Module):
             's_value': s_val,
             'kinetic_energy': kinetic,
             'z_norm': self.z.norm().item(),
-            'experience_size': len(self.experience.states),
+            'experience_size': int(self.experience.size),
         }
 
 

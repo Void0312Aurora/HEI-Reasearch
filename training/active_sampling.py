@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional
 
+import torch
+
 
 @dataclass
 class ActiveSamplingConfig:
@@ -201,9 +203,15 @@ class ActiveSampler:
         self.bucket_counts: Dict[str, int] = {k: 0 for k in pool.bucket_to_indices}
         self.bucket_losses: Dict[str, float] = {k: 0.0 for k in pool.bucket_to_indices}
         self.total_seen = 0
+        self.token_cache: Optional[torch.Tensor] = None
+        self.mask_cache: Optional[torch.Tensor] = None
 
-    def sample_batch(self, batch_size: int) -> Tuple[List[str], List[str]]:
-        if not self.pool.samples:
+    def sample_indices(self, batch_size: int) -> Tuple[List[int], List[str]]:
+        """Sample indices + their bucket keys.
+
+        Always returns exactly `batch_size` indices when the pool is non-empty.
+        """
+        if not self.pool.samples or batch_size <= 0:
             return [], []
 
         random_count = int(batch_size * self.config.random_ratio)
@@ -220,16 +228,54 @@ class ActiveSampler:
 
         if active_count > 0:
             bucket_choices = self._sample_buckets(active_count)
+            if not bucket_choices:
+                # Fallback: no valid bucket scores yet; sample uniformly.
+                bucket_choices = [self.pool.samples[random.randrange(len(self.pool.samples))].bucket for _ in range(active_count)]
             for bucket in bucket_choices:
                 candidates = self.pool.bucket_to_indices[bucket]
                 if not candidates:
-                    continue
-                idx = random.choice(candidates)
+                    idx = random.randrange(len(self.pool.samples))
+                    bucket = self.pool.samples[idx].bucket
+                else:
+                    idx = random.choice(candidates)
                 indices.append(idx)
                 buckets.append(bucket)
 
-        texts = [self.pool.samples[i].text for i in indices]
-        return texts, buckets
+        # Safety: guarantee fixed batch size for CUDA-graph workflows.
+        while len(indices) < batch_size:
+            idx = random.randrange(len(self.pool.samples))
+            indices.append(idx)
+            buckets.append(self.pool.samples[idx].bucket)
+
+        if len(indices) > batch_size:
+            indices = indices[:batch_size]
+            buckets = buckets[:batch_size]
+
+        return indices, buckets
+
+    def sample_batch(
+        self,
+        batch_size: int,
+        *,
+        with_texts: bool = True,
+    ) -> Tuple[List[str], List[str], Optional[torch.Tensor], Optional[torch.Tensor]]:
+        if not self.pool.samples:
+            return [], [], None, None
+
+        indices, buckets = self.sample_indices(batch_size)
+
+        texts: List[str]
+        if with_texts:
+            texts = [self.pool.samples[i].text for i in indices]
+        else:
+            texts = []
+        token_batch = None
+        mask_batch = None
+        if self.token_cache is not None and self.mask_cache is not None:
+            idx_tensor = torch.as_tensor(indices, dtype=torch.long, device=self.token_cache.device)
+            token_batch = self.token_cache.index_select(0, idx_tensor)
+            mask_batch = self.mask_cache.index_select(0, idx_tensor)
+        return texts, buckets, token_batch, mask_batch
 
     def _sample_buckets(self, count: int) -> List[str]:
         scores = self._bucket_scores()
@@ -319,6 +365,14 @@ class ActiveSampler:
                 new = (1.0 - self.config.ema_rate) * prev + self.config.ema_rate * loss_f
                 if math.isfinite(new):
                     self.bucket_losses[bucket] = new
+                else:
+                    # Keep a finite value to avoid poisoning subsequent sampling stats.
+                    self.bucket_losses[bucket] = prev
             else:
-                # Keep a finite value to avoid poisoning subsequent sampling stats.
                 self.bucket_losses[bucket] = prev
+
+    def set_token_cache(self, token_ids: torch.Tensor, attention_mask: torch.Tensor) -> None:
+        if token_ids.shape != attention_mask.shape:
+            raise ValueError("Token cache and mask cache must share the same shape.")
+        self.token_cache = token_ids
+        self.mask_cache = attention_mask

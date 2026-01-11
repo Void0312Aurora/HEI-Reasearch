@@ -121,6 +121,7 @@ class Stage3Config(CurriculumConfig):
     alpha_chart: float = 0.0
 
     use_cuda_graph: bool = False
+    cuda_graph_warmup: int = 3
 
     # Gate thresholds (temp-04.md)
     gate_transform_acc: float = 0.95
@@ -174,11 +175,10 @@ class SymbolPort(nn.Module):
         nn.init.normal_(self.readout_weight, std=0.1)
         nn.init.zeros_(self.readout_bias)
 
-        self.decode_norm = nn.LayerNorm(self.decode_in_dim)
-        self.decode_mlp = nn.Sequential(
-            nn.Linear(self.decode_in_dim, self.decode_in_dim),
-            nn.Tanh(),
-        )
+        # Guardrail: keep the language-side port lightweight to avoid "port domination"
+        # (the dynamics core should carry the computation, not an MLP in the readout).
+        self.decode_norm = nn.Identity()
+        self.decode_mlp = nn.Identity()
 
     def encode(self, tokens: torch.Tensor, mode: torch.Tensor) -> torch.Tensor:
         # mode: 0=input, 1=output
@@ -213,31 +213,30 @@ class SymbolPort(nn.Module):
 
 class MemoryDecoder(nn.Module):
     """
-    Lightweight pointer-style attention over the *input* token embeddings.
+    Lightweight pointer-style attention over a dynamics-derived memory bank.
 
-    This provides an explicit read channel from the encoded input string to output tokens,
-    which is needed for algorithmic tasks like copy/reverse at length<=10.
+    Guardrail: the decoder does NOT receive privileged signals like (op_id, out_pos, mem_len),
+    and the memory bank is NOT raw token embeddings; it must be produced by the dynamics core.
     """
 
     def __init__(
         self,
         *,
         vocab_size: int,
+        dim_state: int,
         dim_q: int,
         max_mem_len: int,
-        max_out_len: int,
     ):
         super().__init__()
         self.vocab_size = int(vocab_size)
+        self.dim_state = int(dim_state)
         self.dim_q = int(dim_q)
         self.max_mem_len = int(max_mem_len)
-        self.max_out_len = int(max_out_len)
 
         self.mempos_embed = nn.Embedding(self.max_mem_len, self.dim_q)
-        self.outpos_embed = nn.Embedding(self.max_out_len + 1, self.dim_q)
-        self.len_embed = nn.Embedding(self.max_mem_len + 1, self.dim_q)
-        self.op_embed = nn.Embedding(4, self.dim_q)
 
+        self.query_in = nn.Linear(self.dim_state, self.dim_q)
+        self.mem_in = nn.Linear(self.dim_state, self.dim_q)
         self.q_proj = nn.Linear(self.dim_q, self.dim_q)
         self.k_proj = nn.Linear(self.dim_q, self.dim_q)
         self.v_proj = nn.Linear(self.dim_q, self.dim_q)
@@ -250,32 +249,25 @@ class MemoryDecoder(nn.Module):
 
         with torch.no_grad():
             nn.init.normal_(self.mempos_embed.weight, std=1.0)
-            nn.init.normal_(self.outpos_embed.weight, std=1.0)
-            nn.init.normal_(self.len_embed.weight, std=1.0)
-            nn.init.normal_(self.op_embed.weight, std=1.0)
 
     def forward(
         self,
         *,
-        q: torch.Tensor,  # [B,Dq]
-        op_ids: torch.Tensor,  # [B]
-        out_pos: torch.Tensor,  # [B] 0..max_out_len
-        mem_embed: torch.Tensor,  # [B,M,Dq]
+        state: torch.Tensor,  # [B,Ds]
+        mem_state: torch.Tensor,  # [B,M,Ds]
         mem_mask: torch.Tensor,  # [B,M] bool
-        mem_len: torch.Tensor,  # [B] 0..M
     ) -> torch.Tensor:
-        B, M, D = mem_embed.shape
-        out_pos = torch.clamp(out_pos, 0, int(self.max_out_len)).to(dtype=torch.long)
-        mem_len = torch.clamp(mem_len, 0, int(self.max_mem_len)).to(dtype=torch.long)
+        B, M, _ = mem_state.shape
 
-        pos_ids = torch.arange(M, device=mem_embed.device, dtype=torch.long).view(1, M).expand(B, -1)
-        k_in = mem_embed + self.mempos_embed(pos_ids)
+        mem = torch.tanh(self.mem_in(mem_state))  # [B,M,D]
+        pos_ids = torch.arange(M, device=mem.device, dtype=torch.long).view(1, M).expand(B, -1)
+        k_in = mem + self.mempos_embed(pos_ids)
         K = self.k_proj(k_in)  # [B,M,D]
-        V = self.v_proj(mem_embed)  # [B,M,D]
+        V = self.v_proj(mem)  # [B,M,D]
 
-        qv = self.q_proj(q) + self.op_embed(op_ids) + self.outpos_embed(out_pos) + self.len_embed(mem_len)
-        qv = torch.tanh(qv)  # [B,D]
+        qv = torch.tanh(self.q_proj(torch.tanh(self.query_in(state))))  # [B,D]
 
+        D = int(self.dim_q)
         scale = float(D) ** -0.5
         scores = (K * qv.unsqueeze(1)).sum(dim=2) * scale  # [B,M]
         scores = scores.masked_fill(~mem_mask, -1e9)
@@ -297,9 +289,6 @@ class SequenceModel(nn.Module):
         op_embed: nn.Embedding | None,
         mode_embed: nn.Embedding | None,
         pos_embed: nn.Embedding | None,
-        op_u_embed: nn.Embedding | None,
-        mode_u_embed: nn.Embedding | None,
-        time_u_embed: nn.Embedding | None,
     ):
         super().__init__()
         self.entity = entity
@@ -309,9 +298,9 @@ class SequenceModel(nn.Module):
         self.op_embed = op_embed
         self.mode_embed = mode_embed
         self.pos_embed = pos_embed
-        self.op_u_embed = op_u_embed
-        self.mode_u_embed = mode_u_embed
-        self.time_u_embed = time_u_embed
+        # Ablation toggles (kept as env flags to avoid threading through configs everywhere).
+        self.disable_mem_decoder = os.getenv("HEI_DISABLE_MEM_DECODER", "0") == "1"
+        self.disable_mem_bank = os.getenv("HEI_DISABLE_MEM_BANK", "0") == "1"
 
     def forward(
         self,
@@ -322,9 +311,6 @@ class SequenceModel(nn.Module):
         out_start: torch.Tensor,  # [B] token index of first output token
         out_len: torch.Tensor,  # [B] output token count (excluding EOS)
         seq_len: torch.Tensor,  # [B] actual sequence length (incl EOS)
-        mem_tokens: torch.Tensor,  # [B,M]
-        mem_mask: torch.Tensor,  # [B,M] bool
-        mem_len: torch.Tensor,  # [B]
         initial_state_flat: torch.Tensor,  # [B,D]
         return_chart_hist: bool = False,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -332,6 +318,7 @@ class SequenceModel(nn.Module):
         B, T = tokens.shape
         dq = int(self.config.dim_q)
         evo = int(self.config.evolution_steps)
+        max_mem = int(getattr(self.config, "max_str_len", 10)) + 2 * int(getattr(self.config, "max_nesting", 3))
 
         inputs = tokens[:, :-1]
         targets = tokens[:, 1:]
@@ -341,7 +328,9 @@ class SequenceModel(nn.Module):
         out_start_step = out_start - 1  # SEP2 step predicts first output token
         out_end_step = out_start + out_len - 1  # last output token step predicts EOS
         out_start_step_f = out_start_step.to(dtype=torch.long)
-        mem_embed = torch.tanh(self.port.embed_in(mem_tokens))  # [B,M,Dq]
+        mem_len = torch.clamp(out_start - 4, min=0, max=max_mem).to(dtype=torch.long)  # inp length
+        mem_mask = (torch.arange(max_mem, device=device, dtype=torch.long).view(1, -1) < mem_len.view(-1, 1))
+        mem_bank = torch.zeros((B, max_mem, int(initial_state_flat.shape[1])), device=device, dtype=initial_state_flat.dtype)
 
         state_flat = initial_state_flat
         prev_w = None
@@ -363,7 +352,6 @@ class SequenceModel(nn.Module):
             op_ctx = torch.tanh(self.op_embed(op_ids))  # [B,C]
         else:
             op_ctx = None
-        op_u = torch.tanh(self.op_u_embed(op_ids)) if self.op_u_embed is not None else None
 
         for t in range(T - 1):
             tok_t = inputs[:, t]
@@ -387,13 +375,6 @@ class SequenceModel(nn.Module):
                 router_ctx = pos_ctx if router_ctx is None else torch.tanh(router_ctx + pos_ctx)
 
             u = self.port.encode(tok_t, mode_t)
-            if op_u is not None:
-                u = u + op_u
-            if self.mode_u_embed is not None:
-                u = u + torch.tanh(self.mode_u_embed(mode_t))
-            if self.time_u_embed is not None:
-                t_ids = tok_t.new_full((B,), int(t), dtype=torch.long)
-                u = u + torch.tanh(self.time_u_embed(t_ids))
             # Mixed mode within batch is normal; avoid Python branching per sample by always passing both ports.
             u_in = u * (mode_t == 0).to(dtype=u.dtype).unsqueeze(1)
             u_out = u * (mode_t == 1).to(dtype=u.dtype).unsqueeze(1)
@@ -417,21 +398,25 @@ class SequenceModel(nn.Module):
                 prev_w = out.get("next_prev_chart_weights", None)
 
             q = state_flat[:, :dq]
+            mem_pos = t - 3  # token index 3 is the first input symbol
+            if (not self.disable_mem_bank) and (0 <= mem_pos < max_mem):
+                Ds = int(state_flat.shape[1])
+                idx = torch.full((B, 1, Ds), int(mem_pos), device=device, dtype=torch.long)
+                src = state_flat.unsqueeze(1) * (mem_pos < mem_len).to(dtype=state_flat.dtype).view(B, 1, 1)
+                mem_bank = mem_bank.scatter(1, idx, src)
             x = state_flat if bool(getattr(self.port, "decode_state", False)) else q
             logits_state = self.port.decode(x, chart_weights=chart_w)
 
-            out_pos = torch.clamp(t - out_start_step_f, min=0).to(dtype=torch.long)
-            logits_mem = self.mem_decoder(
-                q=q,
-                op_ids=op_ids,
-                out_pos=out_pos,
-                mem_embed=mem_embed,
-                mem_mask=mem_mask,
-                mem_len=mem_len,
-            )
-
             is_out = (t >= out_start_step) & (t <= out_end_step)
-            logits = torch.where(is_out.unsqueeze(1), logits_mem, logits_state)
+            if self.disable_mem_decoder:
+                logits = logits_state
+            else:
+                logits_mem = self.mem_decoder(
+                    state=state_flat,
+                    mem_state=mem_bank,
+                    mem_mask=mem_mask,
+                )
+                logits = torch.where(is_out.unsqueeze(1), logits_mem, logits_state)
             ce = F.cross_entropy(logits, tgt_t, reduction="none")
 
             # Valid steps stop at (seq_len-1)
@@ -499,26 +484,17 @@ class Stage3Trainer(BaseCurriculumTrainer):
                 nn.init.normal_(self.mode_embed.weight, std=1.0)
                 nn.init.normal_(self.pos_embed.weight, std=1.0)
 
-        # Token-drive conditioning: op/mode/time are provided as additional u-biases.
-        self.op_u_embed = nn.Embedding(4, int(config.dim_q)).to(config.device)
-        self.mode_u_embed = nn.Embedding(2, int(config.dim_q)).to(config.device)
-        self.time_u_embed = nn.Embedding(int(config.sequence_len), int(config.dim_q)).to(config.device)
-        with torch.no_grad():
-            nn.init.normal_(self.op_u_embed.weight, std=1.0)
-            nn.init.normal_(self.mode_u_embed.weight, std=1.0)
-            nn.init.normal_(self.time_u_embed.weight, std=1.0)
-
         # Keep the connection fixed: L3 doesn't require re-learning L2 geometry.
         for p in self.entity.connection.parameters():
             p.requires_grad_(False)
 
         max_mem_len = int(getattr(config, "max_str_len", 10)) + 2 * int(getattr(config, "max_nesting", 3))
-        max_out_len = int(getattr(config, "max_str_len", 10))
+        dim_state = 2 * int(config.dim_q) + 1
         self.mem_decoder = MemoryDecoder(
             vocab_size=int(config.vocab_size),
+            dim_state=dim_state,
             dim_q=int(config.dim_q),
             max_mem_len=max_mem_len,
-            max_out_len=max_out_len,
         ).to(config.device)
 
         lr = float(config.lr)
@@ -546,9 +522,6 @@ class Stage3Trainer(BaseCurriculumTrainer):
             fast_params.extend(list(self.mode_embed.parameters()))
         if self.pos_embed is not None:
             fast_params.extend(list(self.pos_embed.parameters()))
-        fast_params.extend(list(self.op_u_embed.parameters()))
-        fast_params.extend(list(self.mode_u_embed.parameters()))
-        fast_params.extend(list(self.time_u_embed.parameters()))
 
         param_groups = []
         if core_params:
@@ -560,10 +533,16 @@ class Stage3Trainer(BaseCurriculumTrainer):
 
         self._train_params = [p for g in param_groups for p in g["params"] if p.requires_grad]
 
+        use_cudagraph = (
+            bool(getattr(config, "use_cuda_graph", False))
+            and torch.cuda.is_available()
+            and str(config.device).startswith("cuda")
+        )
         self.optimizer = optim.AdamW(
             param_groups,
             lr=lr,
             weight_decay=weight_decay,
+            capturable=use_cudagraph,
             foreach=True,
         )
 
@@ -575,9 +554,6 @@ class Stage3Trainer(BaseCurriculumTrainer):
             op_embed=self.op_embed,
             mode_embed=self.mode_embed,
             pos_embed=self.pos_embed,
-            op_u_embed=self.op_u_embed,
-            mode_u_embed=self.mode_u_embed,
-            time_u_embed=self.time_u_embed,
         )
 
         torch.set_float32_matmul_precision("high")
@@ -587,6 +563,153 @@ class Stage3Trainer(BaseCurriculumTrainer):
             torch.backends.cudnn.benchmark = True
         except Exception:
             pass
+
+    def _clip_grad_norm_capturable_(self, max_norm: float = 1.0, eps: float = 1e-6) -> None:
+        max_norm = float(max_norm)
+        if max_norm <= 0.0:
+            return
+        grads = [p.grad for p in self._train_params if p.grad is not None]
+        if not grads:
+            return
+        device = grads[0].device
+        total_sq = torch.zeros((), device=device, dtype=grads[0].dtype)
+        for g in grads:
+            total_sq = total_sq + (g * g).sum()
+        total_norm = torch.sqrt(total_sq)
+        coef = max_norm / (total_norm + float(eps))
+        coef = torch.clamp(coef, max=1.0)
+        torch._foreach_mul_(grads, coef)
+
+    def _train_loop_cuda_graph(self) -> None:
+        device = self.config.device
+        if (not torch.cuda.is_available()) or (not str(device).startswith("cuda")):
+            raise RuntimeError("CUDA graph mode requested but CUDA is not available.")
+
+        # Autograd can execute CUDA backward ops from multiple CPU worker threads; per-thread
+        # streams can introduce cross-stream dependencies that break CUDA graph capture.
+        prev_autograd_mt = None
+        if hasattr(torch.autograd, "is_multithreading_enabled") and hasattr(torch.autograd, "set_multithreading_enabled"):
+            try:
+                prev_autograd_mt = bool(torch.autograd.is_multithreading_enabled())
+                if prev_autograd_mt:
+                    torch.autograd.set_multithreading_enabled(False)
+            except Exception:
+                prev_autograd_mt = None
+
+        try:
+            print(f"Starting Stage 3 Training (CUDA Graph) on {device}...")
+            print(f"Config: {self.config}")
+            print("L3: symbolic manipulation")
+
+            os.makedirs(self.config.save_dir, exist_ok=True)
+            best_path = os.path.join(self.config.save_dir, "stage3_best.pt")
+            best_score = -1.0
+
+            B = int(self.config.batch_size)
+            T = int(self.config.sequence_len)
+            dq = int(self.config.dim_q)
+            D = 2 * dq + 1
+
+            tokens_buf = torch.empty((B, T), device=device, dtype=torch.long)
+            modes_buf = torch.empty((B, T), device=device, dtype=torch.long)
+            op_ids_buf = torch.empty((B,), device=device, dtype=torch.long)
+            out_start_buf = torch.empty((B,), device=device, dtype=torch.long)
+            out_len_buf = torch.empty((B,), device=device, dtype=torch.long)
+            seq_len_buf = torch.empty((B,), device=device, dtype=torch.long)
+            init_state_buf = torch.zeros((B, D), device=device, dtype=torch.float32)
+
+            loss_buf = torch.zeros((), device=device)
+            outacc_buf = torch.zeros((), device=device)
+            chartent_buf = torch.zeros((), device=device)
+
+            def refill_buffers() -> None:
+                batch = self.generate_batch(eval_mode=False)
+                tokens_buf.copy_(batch["tokens"])
+                modes_buf.copy_(batch["modes"])
+                op_ids_buf.copy_(batch["op_ids"])
+                out_start_buf.copy_(batch["out_start"])
+                out_len_buf.copy_(batch["out_len"])
+                seq_len_buf.copy_(batch["seq_len"])
+
+            def fwd_bwd_step() -> None:
+                # Keep grads allocated (set_to_none=False) for stable CUDA-graph replay.
+                self.optimizer.zero_grad(set_to_none=False)
+                loss, diag = self.seq_model(
+                    tokens=tokens_buf,
+                    modes=modes_buf,
+                    op_ids=op_ids_buf,
+                    out_start=out_start_buf,
+                    out_len=out_len_buf,
+                    seq_len=seq_len_buf,
+                    initial_state_flat=init_state_buf,
+                    return_chart_hist=False,
+                )
+                loss_buf.copy_(loss.detach())
+                outacc_buf.copy_(diag["acc_out"].detach())
+                chartent_buf.copy_(diag["chart_entropy"].detach())
+                loss.backward()
+                self._clip_grad_norm_capturable_(1.0)
+
+            warmup = int(getattr(self.config, "cuda_graph_warmup", 3) or 3)
+            warmup = max(1, warmup)
+            for _ in range(warmup):
+                refill_buffers()
+                fwd_bwd_step()
+                self.optimizer.step()
+
+            torch.cuda.synchronize()
+            pool = torch.cuda.graphs.graph_pool_handle()
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph, pool=pool):
+                fwd_bwd_step()
+
+            start = time.time()
+            for step in range(1, int(self.config.steps) + 1):
+                refill_buffers()
+                graph.replay()
+
+                if step % int(self.config.log_every) == 0:
+                    torch.cuda.synchronize()
+                    elapsed = time.time() - start
+                    print(
+                        f"Step {step}: Loss={float(loss_buf.item()):.4f} "
+                        f"OutAcc={float(outacc_buf.item()):.3f} ChartEnt={float(chartent_buf.item()):.2f} "
+                        f"Time={elapsed:.1f}s"
+                    )
+                    try:
+                        gate = self.evaluate_L3_gate(
+                            batch_size=int(os.getenv("HEI_EVAL_BATCH", "2048")),
+                            seed=int(os.getenv("HEI_EVAL_SEED", "0")),
+                        )
+                        score = float(
+                            gate["acc_copy"] + gate["acc_reverse"] + gate["acc_substitute"] + gate["acc_unparen"]
+                        )
+                        if score > best_score:
+                            best_score = score
+                            torch.save(self.state_dict(), best_path)
+                            print(f"GateBest: score={best_score:.3f} passed={gate['passed']}")
+                    except Exception as e:
+                        print(f"GateEval: failed ({type(e).__name__}: {e})")
+
+                # Apply the parameter update after (optional) logging.
+                self.optimizer.step()
+
+            if os.path.exists(best_path):
+                try:
+                    self.load_state_dict(torch.load(best_path, map_location=self.config.device))
+                    print(f"Loaded best checkpoint: {best_path}")
+                except Exception as e:
+                    print(f"Best checkpoint load failed ({type(e).__name__}: {e})")
+
+            save_path = os.path.join(self.config.save_dir, "stage3_final.pt")
+            torch.save(self.state_dict(), save_path)
+            print(f"Stage 3 Complete. Saved to {save_path}")
+        finally:
+            if prev_autograd_mt is not None:
+                try:
+                    torch.autograd.set_multithreading_enabled(prev_autograd_mt)
+                except Exception:
+                    pass
 
     def load_stage2_entity(self, path: str) -> None:
         sd = torch.load(path, map_location=self.config.device)
@@ -634,8 +757,6 @@ class Stage3Trainer(BaseCurriculumTrainer):
         out_len = torch.zeros((B,), dtype=torch.long, device="cpu")
         seq_len = torch.zeros((B,), dtype=torch.long, device="cpu")
         nesting = torch.zeros((B,), dtype=torch.long, device="cpu")
-        mem_tokens = torch.full((B, max_mem), TOK_PAD, dtype=torch.long, device="cpu")
-        mem_len = torch.zeros((B,), dtype=torch.long, device="cpu")
 
         base_symbols = [TOK_A, TOK_B, TOK_C]
         sub_map = {TOK_A: TOK_X, TOK_B: TOK_Y}
@@ -679,8 +800,6 @@ class Stage3Trainer(BaseCurriculumTrainer):
             out_start[i] = sep2_pos + 1
             out_len[i] = len(out)
             seq_len[i] = len(seq)
-            mem_len[i] = len(inp)
-            mem_tokens[i, : len(inp)] = torch.tensor(inp, dtype=torch.long)
 
         batch = {
             "tokens": tokens.to(device=device, non_blocking=True),
@@ -690,9 +809,6 @@ class Stage3Trainer(BaseCurriculumTrainer):
             "out_len": out_len.to(device=device, non_blocking=True),
             "seq_len": seq_len.to(device=device, non_blocking=True),
             "nesting": nesting.to(device=device, non_blocking=True),
-            "mem_tokens": mem_tokens.to(device=device, non_blocking=True),
-            "mem_mask": (torch.arange(max_mem).view(1, -1) < mem_len.view(-1, 1)).to(device=device, non_blocking=True),
-            "mem_len": mem_len.to(device=device, non_blocking=True),
         }
         return batch
 
@@ -734,9 +850,6 @@ class Stage3Trainer(BaseCurriculumTrainer):
             out_start=out_start,
             out_len=out_len,
             seq_len=seq_len,
-            mem_tokens=batch["mem_tokens"],
-            mem_mask=batch["mem_mask"],
-            mem_len=batch["mem_len"],
             initial_state_flat=init,
             return_chart_hist=True,
         )
@@ -755,17 +868,16 @@ class Stage3Trainer(BaseCurriculumTrainer):
         state_flat = init
         prev_w = None
         preds = torch.zeros((B, TT), device=tokens.device, dtype=torch.long)
-        mem_tokens = batch["mem_tokens"]
-        mem_mask = batch["mem_mask"]
-        mem_len = batch["mem_len"]
-        mem_embed = torch.tanh(self.port.embed_in(mem_tokens))
+        max_mem = int(getattr(self.config, "max_str_len", 10)) + 2 * int(getattr(self.config, "max_nesting", 3))
+        mem_len = torch.clamp(out_start - 4, min=0, max=max_mem).to(dtype=torch.long)
+        mem_mask = (torch.arange(max_mem, device=tokens.device, dtype=torch.long).view(1, -1) < mem_len.view(-1, 1))
+        mem_bank = torch.zeros((B, max_mem, int(init.shape[1])), device=tokens.device, dtype=init.dtype)
 
         evo = int(self.config.evolution_steps)
         if self.op_embed is not None:
             op_ctx = torch.tanh(self.op_embed(op_ids))
         else:
             op_ctx = None
-        op_u = torch.tanh(self.op_u_embed(op_ids)) if hasattr(self, "op_u_embed") else None
 
         for t in range(TT):
             tok_t = inputs[:, t]
@@ -785,13 +897,6 @@ class Stage3Trainer(BaseCurriculumTrainer):
                 router_ctx = pos_ctx if router_ctx is None else torch.tanh(router_ctx + pos_ctx)
 
             u = self.port.encode(tok_t, mode_t)
-            if op_u is not None:
-                u = u + op_u
-            if hasattr(self, "mode_u_embed") and self.mode_u_embed is not None:
-                u = u + torch.tanh(self.mode_u_embed(mode_t))
-            if hasattr(self, "time_u_embed") and self.time_u_embed is not None:
-                t_ids = tok_t.new_full((B,), int(t), dtype=torch.long)
-                u = u + torch.tanh(self.time_u_embed(t_ids))
             u_in = u * (mode_t == 0).to(dtype=u.dtype).unsqueeze(1)
             u_out = u * (mode_t == 1).to(dtype=u.dtype).unsqueeze(1)
             u_dict = {"symbol_in": u_in, "symbol_out": u_out}
@@ -814,19 +919,24 @@ class Stage3Trainer(BaseCurriculumTrainer):
                 prev_w = out.get("next_prev_chart_weights", None)
 
             q = state_flat[:, :dq]
+            mem_pos = t - 3
+            if (not getattr(self.seq_model, "disable_mem_bank", False)) and (0 <= mem_pos < max_mem):
+                Ds = int(state_flat.shape[1])
+                idx = torch.full((B, 1, Ds), int(mem_pos), device=tokens.device, dtype=torch.long)
+                src = state_flat.unsqueeze(1) * (mem_pos < mem_len).to(dtype=state_flat.dtype).view(B, 1, 1)
+                mem_bank = mem_bank.scatter(1, idx, src)
             x = state_flat if bool(getattr(self.port, "decode_state", False)) else q
             logits_state = self.port.decode(x, chart_weights=chart_w)
-            out_pos = torch.clamp(t - (out_start - 1), min=0).to(dtype=torch.long)
-            logits_mem = self.mem_decoder(
-                q=q,
-                op_ids=op_ids,
-                out_pos=out_pos,
-                mem_embed=mem_embed,
-                mem_mask=mem_mask,
-                mem_len=mem_len,
-            )
             is_out = (t >= (out_start - 1)) & (t <= (out_start + out_len - 1))
-            logits = torch.where(is_out.unsqueeze(1), logits_mem, logits_state)
+            if getattr(self.seq_model, "disable_mem_decoder", False):
+                logits = logits_state
+            else:
+                logits_mem = self.mem_decoder(
+                    state=state_flat,
+                    mem_state=mem_bank,
+                    mem_mask=mem_mask,
+                )
+                logits = torch.where(is_out.unsqueeze(1), logits_mem, logits_state)
             preds[:, t] = logits.argmax(dim=-1)
 
         # Sequence-level transform correctness on output region (output tokens + EOS)
@@ -913,6 +1023,14 @@ class Stage3Trainer(BaseCurriculumTrainer):
         }
 
     def train_loop(self) -> None:
+        use_cudagraph = (
+            bool(getattr(self.config, "use_cuda_graph", False))
+            and torch.cuda.is_available()
+            and str(self.config.device).startswith("cuda")
+        )
+        if use_cudagraph:
+            return self._train_loop_cuda_graph()
+
         print(f"Starting Stage 3 Training on {self.config.device}...")
         print(f"Config: {self.config}")
         print("L3: symbolic manipulation")
@@ -936,9 +1054,6 @@ class Stage3Trainer(BaseCurriculumTrainer):
                 out_start=batch["out_start"],
                 out_len=batch["out_len"],
                 seq_len=batch["seq_len"],
-                mem_tokens=batch["mem_tokens"],
-                mem_mask=batch["mem_mask"],
-                mem_len=batch["mem_len"],
                 initial_state_flat=init,
                 return_chart_hist=False,
             )
@@ -1025,6 +1140,10 @@ def _apply_env_overrides(config: Stage3Config) -> Stage3Config:
         config.loss_in_weight = float(os.getenv("HEI_LOSS_IN_W", str(config.loss_in_weight)))
     if os.getenv("HEI_LOSS_OUT_W") is not None:
         config.loss_out_weight = float(os.getenv("HEI_LOSS_OUT_W", str(config.loss_out_weight)))
+    if os.getenv("HEI_CUDA_GRAPH") is not None:
+        config.use_cuda_graph = os.getenv("HEI_CUDA_GRAPH", "0") == "1"
+    if os.getenv("HEI_CUDA_GRAPH_WARMUP") is not None:
+        config.cuda_graph_warmup = int(os.getenv("HEI_CUDA_GRAPH_WARMUP", str(config.cuda_graph_warmup)))
     return config
 
 

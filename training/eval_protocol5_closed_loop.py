@@ -245,6 +245,7 @@ def teacher_forced_diagnostics(
                         prev_chart_weights=prev_weights,
                         prediction_error=None,
                         detach_next_prev_weights=True,
+                        compute_action=False,
                     )
                     next_state_flat = out["next_state_flat"]
                     next_prev = out["next_prev_chart_weights"]
@@ -357,6 +358,7 @@ def generate_open_loop(
         return generated, margins
 
     if port_arch == "minimal":
+        trainer.entity.enter_online()
         state_flat = trainer.entity.state.flat
         prev_weights = None
 
@@ -364,16 +366,18 @@ def generate_open_loop(
         for tok in prefix_ids:
             tok_t = torch.tensor([[tok]], device=device, dtype=torch.long)
             u_t = trainer.token_embedding(tok_t).squeeze(1)  # [1,Dq]
-            out = trainer.entity.forward_tensor(
-                state_flat=state_flat,
-                u_dict={"language": u_t},
-                dt=trainer.config.dt,
-                prev_chart_weights=prev_weights,
-                prediction_error=None,
-                detach_next_prev_weights=True,
-            )
-            state_flat = out["next_state_flat"]
-            prev_weights = out["next_prev_chart_weights"]
+            for _ in range(int(trainer.config.num_evolution_steps)):
+                out = trainer.entity.forward_tensor(
+                    state_flat=state_flat,
+                    u_dict={"language": u_t},
+                    dt=trainer.config.dt,
+                    prev_chart_weights=prev_weights,
+                    prediction_error=None,
+                    detach_next_prev_weights=True,
+                    compute_action=False,
+                )
+                state_flat = out["next_state_flat"]
+                prev_weights = out["next_prev_chart_weights"]
 
         generated = list(prefix_ids)
         margins: List[float] = []
@@ -402,16 +406,18 @@ def generate_open_loop(
 
             tok_t = torch.tensor([[next_token]], device=device, dtype=torch.long)
             u_t = trainer.token_embedding(tok_t).squeeze(1)
-            out = trainer.entity.forward_tensor(
-                state_flat=state_flat,
-                u_dict={"language": u_t},
-                dt=trainer.config.dt,
-                prev_chart_weights=prev_weights,
-                prediction_error=None,
-                detach_next_prev_weights=True,
-            )
-            state_flat = out["next_state_flat"]
-            prev_weights = out["next_prev_chart_weights"]
+            for _ in range(int(trainer.config.num_evolution_steps)):
+                out = trainer.entity.forward_tensor(
+                    state_flat=state_flat,
+                    u_dict={"language": u_t},
+                    dt=trainer.config.dt,
+                    prev_chart_weights=prev_weights,
+                    prediction_error=None,
+                    detach_next_prev_weights=True,
+                    compute_action=False,
+                )
+                state_flat = out["next_state_flat"]
+                prev_weights = out["next_prev_chart_weights"]
 
         return generated, margins
 
