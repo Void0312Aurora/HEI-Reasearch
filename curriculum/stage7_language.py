@@ -30,7 +30,7 @@ class Stage7Config:
     eval_text_file: str = os.getenv("HEI_STAGE7_EVAL_FILE", "HEI/data/CLUE/CLUECorpusSmall.txt")
     eval_lines: int = int(os.getenv("HEI_STAGE7_EVAL_LINES", "2000"))
     gate_profile: str = os.getenv("HEI_STAGE7_GATE_PROFILE", "base")
-    gate_batch_size: int = int(os.getenv("HEI_STAGE7_GATE_BATCH_SIZE", "16"))
+    gate_batch_size: int = int(os.getenv("HEI_STAGE7_GATE_BATCH_SIZE", "64"))
     gate_num_prompts: int = int(os.getenv("HEI_STAGE7_GATE_NUM_PROMPTS", "200"))
     gate_prompt_chars: int = int(os.getenv("HEI_STAGE7_GATE_PROMPT_CHARS", "4"))
     gate_max_new_tokens: int = int(os.getenv("HEI_STAGE7_GATE_MAX_NEW_TOKENS", "64"))
@@ -52,6 +52,9 @@ class Stage7Config:
     beta_kl: float = float(os.getenv("HEI_STAGE7_BETA_KL", "0.01"))
     gamma_pred: float = float(os.getenv("HEI_STAGE7_GAMMA_PRED", "1.0"))
     tf32: int = int(os.getenv("HEI_STAGE7_TF32", os.getenv("HEI_TF32", "1")))
+    amp: int = int(os.getenv("HEI_STAGE7_AMP", os.getenv("HEI_AMP", "1")))
+    amp_dtype: str = os.getenv("HEI_STAGE7_AMP_DTYPE", os.getenv("HEI_AMP_DTYPE", "bf16"))
+    fused_adamw: int = int(os.getenv("HEI_STAGE7_FUSED_ADAMW", os.getenv("HEI_FUSED_ADAMW", "1")))
     cuda_graph: int = int(os.getenv("HEI_STAGE7_CUDA_GRAPH", os.getenv("HEI_CUDA_GRAPH", "-1")))
     init_entity_ckpt: str = os.getenv(
         "HEI_STAGE7_INIT_ENTITY_CKPT",
@@ -63,8 +66,12 @@ class Stage7Config:
     scheduled_sampling_mode: str = os.getenv("HEI_STAGE7_SS_MODE", "sample")
     scheduled_sampling_top_k: int = int(os.getenv("HEI_STAGE7_SS_TOP_K", "20"))
     scheduled_sampling_temperature: float = float(os.getenv("HEI_STAGE7_SS_TEMP", "1.0"))
+    unlikelihood_weight: float = float(os.getenv("HEI_STAGE7_UNLIKELIHOOD_W", "0.0"))
+    unlikelihood_window: int = int(os.getenv("HEI_STAGE7_UNLIKELIHOOD_WINDOW", "1"))
     save_dir: str = os.getenv("HEI_STAGE7_SAVE_DIR", "checkpoints/curriculum/stage7_active")
     resume: bool = os.getenv("HEI_STAGE7_RESUME", "1") == "1"
+    resume_optimizer: int = int(os.getenv("HEI_STAGE7_RESUME_OPTIMIZER", "1"))
+    resume_strict: int = int(os.getenv("HEI_STAGE7_RESUME_STRICT", "1"))
     sample_every: int = int(os.getenv("HEI_STAGE7_SAMPLE_EVERY", "200"))
     save_every: int = int(os.getenv("HEI_STAGE7_SAVE_EVERY", "500"))
     device: str = os.getenv("HEI_STAGE7_DEVICE", os.getenv("HEI_DEVICE", "cuda"))
@@ -95,6 +102,10 @@ class Stage7Config:
             sys.executable,
             os.path.join(os.path.dirname(__file__), "../training/train_active_sampling.py"),
             *resume_args,
+            "--resume_optimizer",
+            str(int(self.resume_optimizer)),
+            "--resume_strict",
+            str(int(self.resume_strict)),
             "--device",
             self.device,
             "--wiki_path",
@@ -127,6 +138,12 @@ class Stage7Config:
             str(self.gamma_pred),
             "--tf32",
             str(int(self.tf32)),
+            "--amp",
+            str(int(self.amp)),
+            "--amp_dtype",
+            str(self.amp_dtype),
+            "--fused_adamw",
+            str(int(self.fused_adamw)),
             "--cuda_graph",
             str(int(self.cuda_graph)),
             "--steps",
@@ -155,6 +172,10 @@ class Stage7Config:
             str(int(self.scheduled_sampling_top_k)),
             "--scheduled_sampling_temperature",
             str(float(self.scheduled_sampling_temperature)),
+            "--unlikelihood_weight",
+            str(float(self.unlikelihood_weight)),
+            "--unlikelihood_window",
+            str(int(self.unlikelihood_window)),
             "--router_balance_weight",
             "0.0",
             "--router_entropy_weight",
@@ -248,6 +269,9 @@ def parse_stage7_args() -> argparse.Namespace:
     parser.add_argument("--beta_kl", type=float)
     parser.add_argument("--gamma_pred", type=float)
     parser.add_argument("--tf32", type=int)
+    parser.add_argument("--amp", type=int)
+    parser.add_argument("--amp_dtype", choices=["bf16", "fp16"])
+    parser.add_argument("--fused_adamw", type=int)
     parser.add_argument("--cuda_graph", type=int)
     parser.add_argument("--init_entity_ckpt", help="Optional entity init checkpoint (e.g. Stage5).")
     parser.add_argument("--port_trainable", type=int)
@@ -256,8 +280,12 @@ def parse_stage7_args() -> argparse.Namespace:
     parser.add_argument("--scheduled_sampling_mode", choices=["sample", "argmax"])
     parser.add_argument("--scheduled_sampling_top_k", type=int)
     parser.add_argument("--scheduled_sampling_temperature", type=float)
+    parser.add_argument("--unlikelihood_weight", type=float, help="Protocol-5 hardening: unlikelihood weight.")
+    parser.add_argument("--unlikelihood_window", type=int, help="Protocol-5 hardening: unlikelihood window.")
     parser.add_argument("--save_dir", help="Checkpoint directory.")
     parser.add_argument("--resume", type=int)
+    parser.add_argument("--resume_optimizer", type=int)
+    parser.add_argument("--resume_strict", type=int)
     parser.add_argument("--sample_every", type=int)
     parser.add_argument("--save_every", type=int)
     parser.add_argument("--device", help="Training device (cuda/cpu).")

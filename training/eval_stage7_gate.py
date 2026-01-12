@@ -15,6 +15,7 @@ Example:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import random
 import sys
@@ -33,7 +34,7 @@ from training.eval_protocol5_closed_loop import (
     collect_eval_texts_from_pool,
     detect_tail_cycle,
     extract_prompts,
-    generate_open_loop,
+    generate_open_loop_batch,
     ngram_repetition_rate,
     teacher_forced_diagnostics,
 )
@@ -63,6 +64,29 @@ def _profile_defaults(profile: str) -> Dict[str, float]:
     }
 
 
+def _read_nonempty_lines(path: str) -> List[str]:
+    out: List[str] = []
+    with open(path, "r", encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if ln:
+                out.append(ln)
+    return out
+
+
+def _eval_cache_path(*, eval_text_file: str, eval_samples: int, seed: int, cache_dir: str) -> str:
+    try:
+        st = os.stat(eval_text_file)
+        stamp = f"{int(st.st_size)}:{int(st.st_mtime)}"
+    except Exception:
+        stamp = "nostat"
+    key = f"{os.path.abspath(eval_text_file)}|{stamp}|{int(eval_samples)}|{int(seed)}"
+    h = hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+    base = os.path.basename(eval_text_file).replace(os.sep, "_")
+    name = f"stage7_eval_texts_{base}_n{int(eval_samples)}_seed{int(seed)}_{h}.txt"
+    return os.path.join(cache_dir, name)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ckpt", required=True, help="Checkpoint .pt path (e.g., .../last.pt)")
@@ -77,6 +101,12 @@ def main() -> int:
     parser.add_argument("--max_samples_wiki", type=int, default=200000)
     parser.add_argument("--max_samples_clue", type=int, default=200000)
     parser.add_argument("--eval_samples", type=int, default=2000)
+    parser.add_argument(
+        "--eval_cache",
+        type=int,
+        default=1,
+        help="Cache sampled eval texts next to checkpoint to speed repeated gate runs (1/0).",
+    )
     parser.add_argument("--seed", type=int, default=0)
 
     # Teacher-forced batching
@@ -114,18 +144,31 @@ def main() -> int:
             torch.cuda.manual_seed_all(seed)
     except Exception:
         pass
-    tokenizer_path = args.tokenizer_path or None
-    trainer, tokenizer, train_cfg, meta = load_trainer_from_checkpoint(
-        args.ckpt,
-        device=device,
-        tokenizer_path=tokenizer_path if tokenizer_path else None,
-        override_cfg={"batch_size": int(args.batch_size), "max_seq_len": int(args.max_seq_len), "experience_push_n": 0},
-        strict=False,
-    )
-
     # Collect evaluation texts
     if args.eval_text_file:
-        texts = collect_eval_texts(eval_text_file=args.eval_text_file, eval_samples=args.eval_samples, seed=args.seed)
+        texts: List[str] = []
+        cache_path = ""
+        if bool(args.eval_cache) and int(args.eval_samples) > 0:
+            cache_dir = os.path.dirname(os.path.abspath(args.ckpt))
+            cache_path = _eval_cache_path(
+                eval_text_file=args.eval_text_file,
+                eval_samples=int(args.eval_samples),
+                seed=int(args.seed),
+                cache_dir=cache_dir,
+            )
+            if os.path.exists(cache_path):
+                texts = _read_nonempty_lines(cache_path)
+        if not texts:
+            texts = collect_eval_texts(eval_text_file=args.eval_text_file, eval_samples=args.eval_samples, seed=args.seed)
+            if bool(args.eval_cache) and cache_path:
+                try:
+                    with open(cache_path, "w", encoding="utf-8") as f:
+                        for t in texts:
+                            t = str(t).strip()
+                            if t:
+                                f.write(t + "\n")
+                except Exception:
+                    pass
     else:
         cfg = ActiveSamplingConfig(
             wiki_path=args.wiki_path,
@@ -144,6 +187,17 @@ def main() -> int:
     prompts = extract_prompts(texts, num_prompts=args.num_prompts, prompt_chars=args.prompt_chars)
     if not prompts:
         raise RuntimeError("No prompts extracted. Try larger --eval_samples or smaller --prompt_chars.")
+
+    # Load trainer/tokenizer AFTER we have texts/prompts.
+    # This avoids holding large GPU allocations while we potentially stream huge eval files on CPU.
+    tokenizer_path = args.tokenizer_path or None
+    trainer, tokenizer, train_cfg, meta = load_trainer_from_checkpoint(
+        args.ckpt,
+        device=device,
+        tokenizer_path=tokenizer_path if tokenizer_path else None,
+        override_cfg={"batch_size": int(args.batch_size), "max_seq_len": int(args.max_seq_len), "experience_push_n": 0},
+        strict=False,
+    )
 
     # --- Teacher-forced diagnostics ---
     tf = teacher_forced_diagnostics(
@@ -170,16 +224,16 @@ def main() -> int:
         top_k = 20 if str(args.profile).lower() == "base" else 1
 
     w = max(int(args.margin_window), 1)
-    for prompt in prompts:
-        tokens, margins = generate_open_loop(
-            trainer=trainer,
-            tokenizer=tokenizer,
-            prompt=prompt,
-            device=device,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            top_k=top_k,
-        )
+    all_tokens, all_margins = generate_open_loop_batch(
+        trainer=trainer,
+        tokenizer=tokenizer,
+        prompts=prompts,
+        device=device,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        top_k=top_k,
+    )
+    for prompt, tokens, margins in zip(prompts, all_tokens, all_margins):
         out_text = tokenizer.decode(tokens)
         unique_outputs.add(out_text)
 

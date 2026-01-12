@@ -74,15 +74,42 @@ def collect_eval_texts_from_pool(*, pool: CorpusPool, eval_samples: int, seed: i
 
 
 def collect_eval_texts(*, eval_text_file: str, eval_samples: int, seed: int) -> List[str]:
+    """
+    Stream-sample lines from a potentially huge text file.
+
+    NOTE: The old implementation loaded the entire file into memory, which is
+    unusable for multi-GB corpora (e.g. CLUECorpusSmall). Here we use reservoir
+    sampling to keep memory O(eval_samples).
+    """
     rng = random.Random(seed)
+    if eval_samples <= 0:
+        # Backward-compatible "return all": only safe for small files.
+        out: List[str] = []
+        with open(eval_text_file, "r", encoding="utf-8") as f:
+            for ln in f:
+                ln = ln.strip()
+                if ln:
+                    out.append(ln)
+        if out:
+            rng.shuffle(out)
+        return out
+
+    reservoir: List[str] = []
+    seen = 0
     with open(eval_text_file, "r", encoding="utf-8") as f:
-        lines = [ln.strip() for ln in f if ln.strip()]
-    if not lines:
-        return []
-    if eval_samples <= 0 or eval_samples >= len(lines):
-        rng.shuffle(lines)
-        return lines
-    return rng.sample(lines, eval_samples)
+        for ln in f:
+            ln = ln.strip()
+            if not ln:
+                continue
+            if seen < eval_samples:
+                reservoir.append(ln)
+                seen += 1
+                continue
+            seen += 1
+            j = rng.randrange(seen)
+            if j < eval_samples:
+                reservoir[j] = ln
+    return reservoir
 
 
 def extract_prompts(texts: Sequence[str], *, num_prompts: int, prompt_chars: int) -> List[str]:
@@ -222,7 +249,7 @@ def teacher_forced_diagnostics(
             correct += float(correct_masked.sum().item())
             total_tokens += token_count
         elif port_arch == "minimal":
-            # --- Recurrent rollout: tokens drive dynamics; q_t predicts x_{t+1} ---
+            # --- Recurrent rollout (teacher-forced): vectorize readout across time ---
             trainer.reset_entity(bs)
             trainer.entity.enter_online()
 
@@ -230,13 +257,15 @@ def teacher_forced_diagnostics(
             prev_weights = None
             u_seq = trainer.encode_token_sequence(token_ids)  # [B,L,Dq]
 
-            per_sample_loss = torch.zeros(bs, device=device)
-            per_sample_count = torch.zeros(bs, device=device)
+            seq_len = int(token_ids.shape[1])
+            if seq_len > 1:
+                q_seq = torch.empty((bs, seq_len - 1, trainer.entity.dim_q), device=device, dtype=state_flat.dtype)
+            else:
+                q_seq = torch.empty((bs, 0, trainer.entity.dim_q), device=device, dtype=state_flat.dtype)
 
-            for t in range(token_ids.shape[1]):
+            for t in range(seq_len):
                 mask_curr = attn[:, t].float().unsqueeze(1)
                 u_t = u_seq[:, t, :] * mask_curr
-
                 for _ in range(trainer.config.num_evolution_steps):
                     out = trainer.entity.forward_tensor(
                         state_flat=state_flat,
@@ -252,39 +281,42 @@ def teacher_forced_diagnostics(
                     state_flat = mask_curr * next_state_flat + (1.0 - mask_curr) * state_flat
                     prev_weights = next_prev if prev_weights is None else (mask_curr * next_prev + (1.0 - mask_curr) * prev_weights)
 
-                if t < token_ids.shape[1] - 1:
-                    mask_tgt = attn[:, t + 1].bool()
-                    if mask_tgt.any():
-                        q = state_flat[:, : trainer.entity.dim_q]
-                        logits = trainer.decode_logits_from_q(q)  # [B,V]
-                        targets = token_ids[:, t + 1]
+                if t < seq_len - 1:
+                    q_seq[:, t, :] = state_flat[:, : trainer.entity.dim_q]
 
-                        top2 = torch.topk(logits, k=2, dim=-1).values
-                        margin = top2[:, 0] - top2[:, 1]
-                        pred = logits.argmax(dim=-1)
+            logits_seq = trainer.decode_logits_from_q(q_seq)  # [B,L-1,V]
+            targets_seq = token_ids[:, 1:]
+            mask_seq = attn[:, 1:].bool()
 
-                        gt_logit = logits.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
-                        max_logit = top2[:, 0]
-
-                        loss_vec = torch.nn.functional.cross_entropy(
-                            logits,
-                            targets,
-                            ignore_index=tokenizer.pad_id,
-                            reduction="none",
-                        )
-                        loss_vec = loss_vec * mask_tgt.float()
-                        per_sample_loss += loss_vec
-                        per_sample_count += mask_tgt.float()
-
-                        sum_margin += float((margin * mask_tgt.float()).sum().item())
-                        sum_max_logit += float((max_logit * mask_tgt.float()).sum().item())
-                        sum_gt_logit += float((gt_logit * mask_tgt.float()).sum().item())
-                        correct += float(((pred == targets) & mask_tgt).sum().item())
-                        total_tokens += float(mask_tgt.sum().item())
-
-            per_sample_count = per_sample_count.clamp(min=1.0)
+            flat_logits = logits_seq.reshape(-1, logits_seq.shape[-1])
+            flat_targets = targets_seq.reshape(-1)
+            flat_loss = torch.nn.functional.cross_entropy(
+                flat_logits,
+                flat_targets,
+                ignore_index=tokenizer.pad_id,
+                reduction="none",
+            )
+            loss_mat = flat_loss.view(bs, -1)
+            mask_f = mask_seq.float()
+            per_sample_loss = (loss_mat * mask_f).sum(dim=1)
+            per_sample_count = mask_f.sum(dim=1).clamp(min=1.0)
             E_pred_per_sample = per_sample_loss / per_sample_count
             sum_E += float(E_pred_per_sample.mean().item()) * bs
+
+            top2 = torch.topk(logits_seq, k=2, dim=-1).values
+            margin = top2[..., 0] - top2[..., 1]
+            pred = logits_seq.argmax(dim=-1)
+            correct_masked = (pred == targets_seq) & mask_seq
+            gt_logit = logits_seq.gather(dim=-1, index=targets_seq.unsqueeze(-1)).squeeze(-1)
+            max_logit = top2[..., 0]
+
+            token_count = float(mask_seq.sum().item())
+            if token_count > 0:
+                sum_margin += float((margin * mask_f).sum().item())
+                sum_max_logit += float((max_logit * mask_f).sum().item())
+                sum_gt_logit += float((gt_logit * mask_f).sum().item())
+                correct += float(correct_masked.sum().item())
+                total_tokens += token_count
         else:
             raise ValueError(f"Unknown port_arch: {port_arch}")
 
@@ -422,6 +454,169 @@ def generate_open_loop(
         return generated, margins
 
     raise ValueError(f"Unknown port_arch: {port_arch}")
+
+
+@torch.no_grad()
+def generate_open_loop_batch(
+    *,
+    trainer,
+    tokenizer,
+    prompts: List[str],
+    device: str,
+    max_new_tokens: int,
+    temperature: float,
+    top_k: int,
+) -> Tuple[List[List[int]], List[List[float]]]:
+    """
+    Batched open-loop generation for gate evaluation.
+
+    This is critical for Stage7 gate speed: the naïve per-prompt loop issues
+    thousands of tiny kernels and keeps GPU utilization low.
+    """
+    if not prompts:
+        return [], []
+
+    trainer.eval()
+    port_arch = getattr(getattr(trainer, "config", trainer), "port_arch", getattr(trainer, "port_arch", "transformer"))
+    if port_arch != "minimal":
+        # Fallback: keep old behavior.
+        out_tokens: List[List[int]] = []
+        out_margins: List[List[float]] = []
+        for p in prompts:
+            tks, ms = generate_open_loop(
+                trainer=trainer,
+                tokenizer=tokenizer,
+                prompt=p,
+                device=device,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_k=top_k,
+            )
+            out_tokens.append(tks)
+            out_margins.append(ms)
+        return out_tokens, out_margins
+
+    B = int(len(prompts))
+    eos_id = int(getattr(tokenizer, "eos_id", getattr(tokenizer, "pad_id", 0)))
+    pad_id = int(getattr(tokenizer, "pad_id", 0))
+
+    # Encode prompts.
+    prefix_ids_list: List[List[int]] = []
+    prefix_lens: List[int] = []
+    for p in prompts:
+        ids = tokenizer.encode(p)
+        prefix_ids = ids[:-1] if len(ids) >= 2 else ids
+        if not prefix_ids:
+            prefix_ids = [tokenizer.bos_id]
+        prefix_ids_list.append(prefix_ids)
+        prefix_lens.append(len(prefix_ids))
+
+    prefix_max = max(prefix_lens) if prefix_lens else 1
+    prefix_tokens = torch.full((B, prefix_max), pad_id, dtype=torch.long, device=device)
+    prefix_mask = torch.zeros((B, prefix_max), dtype=torch.float32, device=device)
+    for i, ids in enumerate(prefix_ids_list):
+        L = len(ids)
+        if L <= 0:
+            continue
+        prefix_tokens[i, :L] = torch.tensor(ids, dtype=torch.long, device=device)
+        prefix_mask[i, :L] = 1.0
+
+    # Roll-in: consume prefix (teacher tokens).
+    trainer.reset_entity(B)
+    trainer.entity.enter_online()
+    state_flat = trainer.entity.state.flat
+    prev_weights = None
+    for t in range(prefix_max):
+        mask_t = prefix_mask[:, t].unsqueeze(1)
+        tok_t = prefix_tokens[:, t]
+        u_t = trainer.token_embedding(tok_t.unsqueeze(1)).squeeze(1) * mask_t
+        for _ in range(int(trainer.config.num_evolution_steps)):
+            out = trainer.entity.forward_tensor(
+                state_flat=state_flat,
+                u_dict={"language": u_t},
+                dt=trainer.config.dt,
+                prev_chart_weights=prev_weights,
+                prediction_error=None,
+                detach_next_prev_weights=True,
+                compute_action=False,
+            )
+            next_state = out["next_state_flat"]
+            next_prev = out["next_prev_chart_weights"]
+            state_flat = mask_t * next_state + (1.0 - mask_t) * state_flat
+            prev_weights = next_prev if prev_weights is None else (mask_t * next_prev + (1.0 - mask_t) * prev_weights)
+
+    gen_tokens = torch.full((B, max_new_tokens), pad_id, dtype=torch.long, device=device)
+    gen_margins = torch.zeros((B, max_new_tokens), dtype=torch.float32, device=device)
+    alive = torch.ones((B,), dtype=torch.bool, device=device)
+
+    temp = max(float(temperature), 1e-6)
+    k = int(top_k)
+    for t in range(int(max_new_tokens)):
+        q = state_flat[:, : trainer.entity.dim_q]
+        logits = trainer.decode_logits_from_q(q)  # [B,V]
+        logits = logits / temp
+
+        top2 = torch.topk(logits, k=2, dim=-1).values
+        gen_margins[:, t] = (top2[:, 0] - top2[:, 1]).float()
+
+        step_logits = logits
+        if k > 0:
+            v, _ = torch.topk(step_logits, min(k, int(step_logits.shape[-1])), dim=-1)
+            cutoff = v[:, -1].unsqueeze(-1)
+            step_logits = step_logits.masked_fill(step_logits < cutoff, float("-inf"))
+
+        if k == 1:
+            next_tok = torch.argmax(step_logits, dim=-1)
+        else:
+            probs = torch.softmax(step_logits, dim=-1)
+            probs = torch.nan_to_num(probs, nan=0.0, posinf=0.0, neginf=0.0)
+            probs = probs.clamp(min=0.0)
+            probs = probs + 1e-8
+            probs = probs / probs.sum(dim=-1, keepdim=True).clamp(min=1e-12)
+            next_tok = torch.multinomial(probs, 1).squeeze(-1)
+
+        alive_before = alive
+        next_tok = torch.where(alive_before, next_tok, torch.full_like(next_tok, eos_id))
+        gen_tokens[:, t] = next_tok
+
+        update_mask = (alive_before & (next_tok != eos_id)).float().unsqueeze(1)
+        alive = alive_before & (next_tok != eos_id)
+
+        # Feed back generated token into dynamics for sequences still alive.
+        u_t = trainer.token_embedding(next_tok.unsqueeze(1)).squeeze(1) * update_mask
+        for _ in range(int(trainer.config.num_evolution_steps)):
+            out = trainer.entity.forward_tensor(
+                state_flat=state_flat,
+                u_dict={"language": u_t},
+                dt=trainer.config.dt,
+                prev_chart_weights=prev_weights,
+                prediction_error=None,
+                detach_next_prev_weights=True,
+                compute_action=False,
+            )
+            next_state = out["next_state_flat"]
+            next_prev = out["next_prev_chart_weights"]
+            state_flat = update_mask * next_state + (1.0 - update_mask) * state_flat
+            prev_weights = next_prev if prev_weights is None else (update_mask * next_prev + (1.0 - update_mask) * prev_weights)
+
+        if not bool(alive.any()):
+            break
+
+    gen_tokens_cpu = gen_tokens.detach().cpu()
+    gen_margins_cpu = gen_margins.detach().cpu()
+
+    out_tokens: List[List[int]] = []
+    out_margins: List[List[float]] = []
+    for i in range(B):
+        prefix = prefix_ids_list[i]
+        row = gen_tokens_cpu[i].tolist()
+        mrow = gen_margins_cpu[i].tolist()
+        cut = len(row)
+        if eos_id in row:
+            cut = row.index(eos_id) + 1
+        out_tokens.append(prefix + row[:cut])
+        out_margins.append(mrow[:cut])
+    return out_tokens, out_margins
 
 
 def _mean(xs: Sequence[float]) -> float:

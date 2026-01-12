@@ -252,6 +252,18 @@ def main():
     parser.add_argument("--scheduled_sampling_mode", default="sample", choices=["sample", "argmax"])
     parser.add_argument("--scheduled_sampling_top_k", type=int, default=20)
     parser.add_argument("--scheduled_sampling_temperature", type=float, default=1.0)
+    parser.add_argument(
+        "--unlikelihood_weight",
+        type=float,
+        default=0.0,
+        help="Protocol-5 hardening: unlikelihood weight penalizing p(x_{t+1}=x_t) unless target repeats (0=disable).",
+    )
+    parser.add_argument(
+        "--unlikelihood_window",
+        type=int,
+        default=1,
+        help="Protocol-5 hardening: penalize repeating any of the last K fed tokens (K=1 matches immediate-repeat).",
+    )
     parser.add_argument("--router_balance_weight", type=float, default=0.0, help="encourage uniform chart usage (skills capacity)")
     parser.add_argument("--router_entropy_weight", type=float, default=0.0, help="penalize router entropy (encourage sparse chart selection)")
     # NOTE: pushing experience involves randomness + bookkeeping that adds overhead and can induce syncs.
@@ -368,8 +380,9 @@ def main():
     use_scaler = use_amp and amp_dtype == torch.float16
     scaler = torch.amp.GradScaler(device="cuda", enabled=use_scaler) if str(device).startswith("cuda") else None
 
-    # CUDA-graph policy (mirrors L4/L5 assumptions: fixed shapes + teacher-forced recurrent + pretokenized on device).
-    if str(device).startswith("cuda") and (not use_amp):
+    # CUDA-graph policy (mirrors L4/L5 assumptions: fixed shapes + recurrent + pretokenized).
+    # Allow bf16 autocast (no GradScaler) but keep fp16 GradScaler unsupported in graph mode.
+    if str(device).startswith("cuda") and (not use_scaler):
         auto = (
             args.port_arch == "minimal"
             and args.sequence_mode == "recurrent"
@@ -478,6 +491,8 @@ def main():
                 "scheduled_sampling_mode": str(args.scheduled_sampling_mode),
                 "scheduled_sampling_top_k": int(args.scheduled_sampling_top_k),
                 "scheduled_sampling_temperature": float(args.scheduled_sampling_temperature),
+                "unlikelihood_weight": float(args.unlikelihood_weight),
+                "unlikelihood_window": int(args.unlikelihood_window),
                 "router_balance_weight": float(args.router_balance_weight),
                 "router_entropy_weight": float(args.router_entropy_weight),
                 "experience_push_n": int(args.experience_push_n),
@@ -524,6 +539,8 @@ def main():
             scheduled_sampling_mode=str(args.scheduled_sampling_mode),
             scheduled_sampling_top_k=int(args.scheduled_sampling_top_k),
             scheduled_sampling_temperature=float(args.scheduled_sampling_temperature),
+            unlikelihood_weight=float(args.unlikelihood_weight),
+            unlikelihood_window=int(args.unlikelihood_window),
             router_balance_weight=float(args.router_balance_weight),
             router_entropy_weight=float(args.router_entropy_weight),
             experience_push_n=int(args.experience_push_n),
@@ -610,7 +627,9 @@ def main():
             f"Closed-loop: ss_prob={getattr(train_cfg,'scheduled_sampling_prob',0.0)} "
             f"ss_mode={getattr(train_cfg,'scheduled_sampling_mode','sample')} "
             f"ss_top_k={getattr(train_cfg,'scheduled_sampling_top_k',0)} "
-            f"ss_temp={getattr(train_cfg,'scheduled_sampling_temperature',1.0)}"
+            f"ss_temp={getattr(train_cfg,'scheduled_sampling_temperature',1.0)} "
+            f"ul_w={getattr(train_cfg,'unlikelihood_weight',0.0)} "
+            f"ul_win={int(getattr(train_cfg,'unlikelihood_window',1) or 1)}"
         )
         print(
             f"Atlas: balance_w={getattr(train_cfg,'router_balance_weight',0.0)} "
@@ -642,8 +661,12 @@ def main():
         step = start_step
         try:
             if use_cuda_graph:
-                if use_amp:
-                    raise RuntimeError("CUDA graph mode currently requires --amp=0.")
+                # CUDA graphs can work with bf16 autocast (no GradScaler). Keep fp16 unsupported here
+                # to avoid GradScaler/overflow complexities inside capture.
+                if use_amp and amp_dtype != torch.bfloat16:
+                    raise RuntimeError("CUDA graph mode supports --amp=1 only with --amp_dtype bf16.")
+                if use_scaler:
+                    raise RuntimeError("CUDA graph mode does not support fp16 GradScaler.")
 
                 B = int(args.batch_size)
                 L = int(args.max_seq_len)
@@ -658,6 +681,8 @@ def main():
                 rb_buf = torch.zeros((), device=device, dtype=torch.float32)
                 re_buf = torch.zeros((), device=device, dtype=torch.float32)
                 ar_buf = torch.zeros((), device=device, dtype=torch.float32)
+                ul_buf = torch.zeros((), device=device, dtype=torch.float32)
+                qn_buf = torch.zeros((), device=device, dtype=torch.float32)
                 E_buf = torch.zeros((), device=device, dtype=torch.float32)
                 ppl_buf = torch.zeros((), device=device, dtype=torch.float32)
                 zero_scalar = torch.zeros((), device=device, dtype=torch.float32)
@@ -711,8 +736,14 @@ def main():
 
                 def fwd_bwd_step() -> None:
                     optimizer.zero_grad(set_to_none=False)
-                    out = trainer.train_step({"input_ids": token_buf, "attention_mask": mask_buf})
-                    loss = out["loss"]
+                    autocast_ctx = (
+                        torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp)
+                        if str(device).startswith("cuda")
+                        else contextlib.nullcontext()
+                    )
+                    with autocast_ctx:
+                        out = trainer.train_step({"input_ids": token_buf, "attention_mask": mask_buf})
+                        loss = out["loss"]
                     loss_buf.copy_(loss.detach().float())
                     F_on_buf.copy_(out["free_energy_online"].detach().float())
                     F_off_buf.copy_(out["free_energy_offline"].detach().float())
@@ -721,6 +752,8 @@ def main():
                     rb_buf.copy_(out.get("router_balance", zero_scalar).detach().float())
                     re_buf.copy_(out.get("router_entropy", zero_scalar).detach().float())
                     ar_buf.copy_(out.get("atlas_reg", zero_scalar).detach().float())
+                    ul_buf.copy_(out.get("unlikelihood_loss", zero_scalar).detach().float())
+                    qn_buf.copy_(out.get("q_norm", zero_scalar).detach().float())
                     E_buf.copy_(out["prediction_error"].detach().float())
                     ppl_buf.copy_(out["perplexity"].detach().float())
                     loss.backward()
@@ -739,11 +772,11 @@ def main():
                 with torch.cuda.graph(graph, pool=pool):
                     fwd_bwd_step()
 
+                window_t0 = time.perf_counter()
                 for step in range(start_step + 1, args.steps + 1):
                     if stop_requested:
                         stop_reason = "interrupted"
                         break
-                    t0 = time.perf_counter()
                     bucket_keys = refill()
                     graph.replay()
                     optimizer.step()
@@ -755,18 +788,17 @@ def main():
                     sampler.update_counts(bucket_keys)
                     last_step = step
 
-                    dt = time.perf_counter() - t0
-                    window_time += dt
-
                     if step % args.log_every == 0:
                         torch.cuda.synchronize()
-                        tok_s = (window_tokens / max(window_time, 1e-9))
-                        elapsed = time.perf_counter() - start_time
+                        now = time.perf_counter()
+                        tok_s = (window_tokens / max(now - window_t0, 1e-9))
+                        elapsed = now - start_time
                         msg = (
                             f"Step {step}: F={float(loss_buf.item()):.4f} "
                             f"F_on={float(F_on_buf.item()):.4f} F_off={float(F_off_buf.item()):.4f} "
                             f"dF_off={float(dF_off_buf.item()):.4f} L_off={float(off_loss_buf.item()):.4f} "
                             f"R_bal={float(rb_buf.item()):.4f} R_ent={float(re_buf.item()):.4f} R_atlas={float(ar_buf.item()):.4f} "
+                            f"UL={float(ul_buf.item()):.4f} q={float(qn_buf.item()):.2f} "
                             f"E_pred={float(E_buf.item()):.4f} PPL={float(ppl_buf.item()):.2f} "
                             f"tok={total_tokens} tok/s={tok_s:.1f} t={elapsed:.1f}s"
                         )
@@ -775,7 +807,7 @@ def main():
                         torch.cuda.reset_peak_memory_stats()
                         print(msg)
                         window_tokens = 0
-                        window_time = 0.0
+                        window_t0 = now
 
                     if args.sample_every and args.sample_every > 0 and step % args.sample_every == 0:
                         try:
@@ -909,6 +941,8 @@ def main():
                         rb = result.get("router_balance", torch.tensor(0.0)).item()
                         re = result.get("router_entropy", torch.tensor(0.0)).item()
                         ar = result.get("atlas_reg", torch.tensor(0.0)).item()
+                        ul = result.get("unlikelihood_loss", torch.tensor(0.0)).item()
+                        qn = result.get("q_norm", torch.tensor(0.0)).item()
                         tok_s = (window_tokens / max(window_time, 1e-9))
                         elapsed = time.perf_counter() - start_time
                         msg = (
@@ -916,6 +950,7 @@ def main():
                             f"F_on={F_online:.4f} F_off={F_offline:.4f} "
                             f"dF_off={delta_off:.4f} L_off={off_loss:.4f} "
                             f"R_bal={rb:.4f} R_ent={re:.4f} R_atlas={ar:.4f} "
+                            f"UL={ul:.4f} q={qn:.2f} "
                             f"E_pred={pred_err:.4f} PPL={result['perplexity']:.2f} "
                             f"tok={total_tokens} tok/s={tok_s:.1f} t={elapsed:.1f}s"
                         )

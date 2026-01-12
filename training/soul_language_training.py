@@ -50,6 +50,13 @@ class TrainingConfig:
     scheduled_sampling_top_k: int = 20
     scheduled_sampling_temperature: float = 1.0
 
+    # Closed-loop hardening (Protocol-5): unlikelihood on immediate repetition.
+    # Penalize p(x_{t+1}=x_t) unless the target also repeats.
+    unlikelihood_weight: float = 0.0
+    # Penalize repeating any of the last K tokens (K=1 matches the immediate-repeat case).
+    # This aims to reduce short-cycle collapse under greedy open-loop decoding.
+    unlikelihood_window: int = 1
+
     # Atlas skill shaping
     router_balance_weight: float = 0.0   # encourage uniform chart usage across batch/time
     router_entropy_weight: float = 0.0   # encourage sparse chart selection (min entropy)
@@ -352,8 +359,10 @@ class SoulLanguageTrainer(nn.Module):
             last_out = None
             for _ in range(self.config.num_offline_steps):
                 u_off = {}
-                if self.config.offline_replay_mode != 'none' and len(self.entity.experience.states) > 0:
-                    replay = self.entity.experience.sample_replay(batch_size, mode=self.config.offline_replay_mode)
+                exp = getattr(self.entity, "experience", None)
+                exp_size = int(getattr(exp, "size", 0) or 0) if exp is not None else 0
+                if self.config.offline_replay_mode != 'none' and exp is not None and exp_size > 0:
+                    replay = exp.sample_replay(batch_size, mode=self.config.offline_replay_mode)
                     if replay is not None:
                         replay_state = replay['states'].to(device)
                         if replay_state.shape[0] < batch_size:
@@ -451,6 +460,20 @@ class SoulLanguageTrainer(nn.Module):
         per_sample_loss = torch.zeros(batch_size, device=device)
         per_sample_count = torch.zeros(batch_size, device=device)
 
+        pad_token = self._pad_token
+
+        # Protocol-5 hardening: unlikelihood on immediate repetition.
+        ul_w = float(getattr(self.config, "unlikelihood_weight", 0.0) or 0.0)
+        ul_w = max(0.0, ul_w)
+        ul_window = int(getattr(self.config, "unlikelihood_window", 1) or 1)
+        ul_window = max(1, ul_window)
+        ul_token_sum = state_flat.new_zeros(())
+        ul_token_count = state_flat.new_zeros(())
+        ul_hist = None
+        ul_pos = 0
+        if ul_w > 0.0 and ul_window > 1:
+            ul_hist = pad_token.expand(batch_size, ul_window).clone()
+
         # Router diagnostics/regularizers (skills≈charts needs non-collapsed atlas usage).
         router_balance_w = float(getattr(self.config, "router_balance_weight", 0.0) or 0.0)
         router_entropy_w = float(getattr(self.config, "router_entropy_weight", 0.0) or 0.0)
@@ -465,7 +488,6 @@ class SoulLanguageTrainer(nn.Module):
         ss_mode = str(getattr(self.config, "scheduled_sampling_mode", "sample"))
         ss_temp = float(getattr(self.config, "scheduled_sampling_temperature", 1.0) or 1.0)
         ss_top_k = int(getattr(self.config, "scheduled_sampling_top_k", 20) or 0)
-        pad_token = self._pad_token
 
         # Fast path (ss_prob=0): precompute token embeddings and vectorize the readout/loss over time.
         # This greatly reduces kernel-launch overhead and typically increases GPU utilization.
@@ -490,6 +512,11 @@ class SoulLanguageTrainer(nn.Module):
         current_tokens = token_ids[:, 0]
 
         for t in range(seq_len):
+            if ul_hist is not None:
+                ul_hist[:, ul_pos] = current_tokens
+                ul_pos += 1
+                if ul_pos >= ul_window:
+                    ul_pos = 0
             mask_curr = mask_f[:, t : t + 1]  # [B,1]
             if vectorized_readout:
                 assert u_seq is not None
@@ -552,6 +579,22 @@ class SoulLanguageTrainer(nn.Module):
                     per_sample_loss = per_sample_loss + loss_vec
                     per_sample_count = per_sample_count + mask_tgt
 
+                    if ul_w > 0.0:
+                        logp = F.log_softmax(logits, dim=-1)
+                        if ul_hist is None:
+                            bad_tokens = current_tokens.unsqueeze(1)  # [B,1]
+                        else:
+                            # IMPORTANT: `bad_tokens` participates in gather backward; do not reuse a
+                            # mutable buffer that we modify later in the time loop (inplace versioning).
+                            bad_tokens = ul_hist.clone()  # [B,W]
+                        tgt = targets.unsqueeze(1)
+                        bad_mask = (bad_tokens != tgt) & mask_tgt.bool().unsqueeze(1) & (bad_tokens != pad_token)
+                        logp_bad = logp.gather(dim=-1, index=bad_tokens)
+                        p_bad = torch.exp(logp_bad).clamp(max=1.0 - 1e-6)
+                        ul_vec = -torch.log1p(-p_bad)
+                        ul_token_sum = ul_token_sum + (ul_vec * bad_mask.float()).sum()
+                        ul_token_count = ul_token_count + mask_tgt.sum()
+
                     # Scheduled sampling: sometimes feed model output as next input (Protocol-5 mitigation).
                     # Avoid Python branching on CUDA tensors (e.g. `.any()`), which forces sync per token.
                     next_tokens = targets
@@ -604,9 +647,25 @@ class SoulLanguageTrainer(nn.Module):
             per_sample_loss = (loss_mat * mask_seq).sum(dim=1)
             per_sample_count = mask_seq.sum(dim=1)
 
+            if ul_w > 0.0 and seq_len > 1:
+                # Penalize predicting the immediately previous token again.
+                ul_window_cfg = int(getattr(self.config, "unlikelihood_window", 1) or 1)
+                if ul_window_cfg != 1:
+                    ul_window_cfg = 1
+                bad_tokens = token_ids[:, :-1]  # x_t
+                logp = F.log_softmax(logits_seq, dim=-1)
+                logp_bad = logp.gather(dim=-1, index=bad_tokens.unsqueeze(-1)).squeeze(-1)
+                p_bad = torch.exp(logp_bad).clamp(max=1.0 - 1e-6)
+                ul = -torch.log1p(-p_bad)
+                ul_mask = (bad_tokens != targets_seq) & (mask_seq > 0)
+                ul = ul * ul_mask.float()
+                ul_token_sum = ul.sum()
+                ul_token_count = mask_seq.sum()
+
         per_sample_count = per_sample_count.clamp(min=1.0)
         E_pred_per_sample = per_sample_loss / per_sample_count
         E_pred = E_pred_per_sample.mean()
+        ul_loss = ul_token_sum / ul_token_count.clamp(min=1.0)
 
         current_state = ContactState(self.entity.dim_q, batch_size, device, state_flat)
 
@@ -697,7 +756,7 @@ class SoulLanguageTrainer(nn.Module):
                 else:
                     raise ValueError(f"Unknown offline_loss_mode: {mode}")
 
-        F_total = F_online + self.config.offline_weight * offline_loss + atlas_reg
+        F_total = F_online + self.config.offline_weight * offline_loss + atlas_reg + ul_w * ul_loss
 
         # Persist a detached state snapshot for generation/debugging without retaining graphs.
         self.entity.state = ContactState(self.entity.dim_q, batch_size, device, state_flat.detach())
@@ -720,6 +779,7 @@ class SoulLanguageTrainer(nn.Module):
             'offline_loss': offline_loss.detach(),
             'prediction_error': E_pred.detach(),
             'prediction_error_per_sample': E_pred_per_sample.detach(),
+            'unlikelihood_loss': ul_loss.detach(),
             'perplexity': ppl,
             'q_norm': q_norm,
             'p_norm': p_norm,
