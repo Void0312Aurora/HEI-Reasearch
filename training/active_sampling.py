@@ -24,6 +24,9 @@ class ActiveSamplingConfig:
     source_weights: Dict[str, float] = field(default_factory=lambda: {"wiki": 0.6, "clue": 0.4})
     loss_weight: float = 1.0
     coverage_weight: float = 0.5
+    # Learning-progress sampling: prioritize buckets where loss is *decreasing* (i.e. learnable gaps).
+    # Computed from the bucket loss EMA; higher progress => higher sampling score.
+    progress_weight: float = 0.0
     temperature: float = 1.0
     random_ratio: float = 0.1
     ema_rate: float = 0.1
@@ -202,6 +205,7 @@ class ActiveSampler:
         self.config = config
         self.bucket_counts: Dict[str, int] = {k: 0 for k in pool.bucket_to_indices}
         self.bucket_losses: Dict[str, float] = {k: 0.0 for k in pool.bucket_to_indices}
+        self.bucket_progress: Dict[str, float] = {k: 0.0 for k in pool.bucket_to_indices}
         self.total_seen = 0
         self.token_cache: Optional[torch.Tensor] = None
         self.mask_cache: Optional[torch.Tensor] = None
@@ -284,6 +288,12 @@ class ActiveSampler:
 
         buckets = list(scores.keys())
         weights = list(scores.values())
+        temp = float(getattr(self.config, "temperature", 1.0) or 1.0)
+        if (not math.isfinite(temp)) or temp <= 0:
+            temp = 1.0
+        if abs(temp - 1.0) > 1e-6:
+            inv_t = 1.0 / temp
+            weights = [max(w, 1e-12) ** inv_t for w in weights]
         total = sum(weights)
         if (not math.isfinite(total)) or total <= 0:
             weights = [1.0 / len(weights)] * len(weights)
@@ -300,6 +310,9 @@ class ActiveSampler:
         avg_loss = self._global_avg_loss()
         if (not math.isfinite(avg_loss)) or avg_loss <= 0:
             avg_loss = 1.0
+        avg_progress = self._global_avg_progress()
+        if (not math.isfinite(avg_progress)) or avg_progress <= 0:
+            avg_progress = 0.0
 
         for bucket, target_ratio in self.pool.bucket_targets.items():
             count = self.bucket_counts.get(bucket, 0)
@@ -314,8 +327,17 @@ class ActiveSampler:
             deficit = max(expected - count, 0.0)
             deficit_norm = deficit / (total_seen + 1e-6)
 
-            score = (self.config.loss_weight * loss_norm +
-                     self.config.coverage_weight * deficit_norm)
+            progress = self.bucket_progress.get(bucket, 0.0)
+            if not math.isfinite(progress):
+                progress = 0.0
+            progress = max(progress, 0.0)
+            progress_norm = (progress / (avg_progress + 1e-6)) if avg_progress > 0 else 0.0
+
+            score = (
+                self.config.loss_weight * loss_norm
+                + self.config.coverage_weight * deficit_norm
+                + float(getattr(self.config, "progress_weight", 0.0) or 0.0) * progress_norm
+            )
             if not math.isfinite(score):
                 score = 1e-6
             scores[bucket] = max(score, 1e-6)
@@ -331,6 +353,16 @@ class ActiveSampler:
                     total += loss
                     count += 1
         return total / count if count > 0 else 1.0
+
+    def _global_avg_progress(self) -> float:
+        total = 0.0
+        count = 0
+        for bucket, prog in self.bucket_progress.items():
+            if self.bucket_counts.get(bucket, 0) > 0:
+                if math.isfinite(prog) and prog > 0:
+                    total += prog
+                    count += 1
+        return total / count if count > 0 else 0.0
 
     def update_stats(self, bucket_keys: List[str], loss_values) -> None:
         # Backward-compatible wrapper: update both counts and loss EMA.
@@ -365,6 +397,15 @@ class ActiveSampler:
                 new = (1.0 - self.config.ema_rate) * prev + self.config.ema_rate * loss_f
                 if math.isfinite(new):
                     self.bucket_losses[bucket] = new
+                    # Learning progress: positive improvement in the loss EMA.
+                    # We keep a separate EMA of progress to reduce sampling oscillations.
+                    prog = max(prev - new, 0.0)
+                    prev_prog = self.bucket_progress.get(bucket, 0.0)
+                    if not math.isfinite(prev_prog):
+                        prev_prog = 0.0
+                    prog_ema = (1.0 - self.config.ema_rate) * prev_prog + self.config.ema_rate * prog
+                    if math.isfinite(prog_ema):
+                        self.bucket_progress[bucket] = prog_ema
                 else:
                     # Keep a finite value to avoid poisoning subsequent sampling stats.
                     self.bucket_losses[bucket] = prev

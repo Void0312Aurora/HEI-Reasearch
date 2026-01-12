@@ -68,6 +68,7 @@ class Stage7Config:
     scheduled_sampling_temperature: float = float(os.getenv("HEI_STAGE7_SS_TEMP", "1.0"))
     unlikelihood_weight: float = float(os.getenv("HEI_STAGE7_UNLIKELIHOOD_W", "0.0"))
     unlikelihood_window: int = int(os.getenv("HEI_STAGE7_UNLIKELIHOOD_WINDOW", "1"))
+    experience_push_n: int = int(os.getenv("HEI_STAGE7_EXPERIENCE_PUSH_N", "0"))
     save_dir: str = os.getenv("HEI_STAGE7_SAVE_DIR", "checkpoints/curriculum/stage7_active")
     resume: bool = os.getenv("HEI_STAGE7_RESUME", "1") == "1"
     resume_optimizer: int = int(os.getenv("HEI_STAGE7_RESUME_OPTIMIZER", "1"))
@@ -76,6 +77,14 @@ class Stage7Config:
     save_every: int = int(os.getenv("HEI_STAGE7_SAVE_EVERY", "500"))
     device: str = os.getenv("HEI_STAGE7_DEVICE", os.getenv("HEI_DEVICE", "cuda"))
     offline_replay_mode: str = os.getenv("HEI_STAGE7_OFFLINE_REPLAY_MODE", "none")
+    sampler_loss_update_every: int = int(os.getenv("HEI_STAGE7_SAMPLER_LOSS_UPDATE_EVERY", "50"))
+    sampler_loss_update_mode: str = os.getenv("HEI_STAGE7_SAMPLER_LOSS_UPDATE_MODE", "per_sample")
+    sampler_loss_weight: float = float(os.getenv("HEI_STAGE7_SAMPLER_LOSS_WEIGHT", "1.0"))
+    sampler_coverage_weight: float = float(os.getenv("HEI_STAGE7_SAMPLER_COVERAGE_WEIGHT", "0.5"))
+    sampler_progress_weight: float = float(os.getenv("HEI_STAGE7_SAMPLER_PROGRESS_WEIGHT", "0.5"))
+    sampler_temperature: float = float(os.getenv("HEI_STAGE7_SAMPLER_TEMPERATURE", "1.0"))
+    sampler_random_ratio: float = float(os.getenv("HEI_STAGE7_SAMPLER_RANDOM_RATIO", "0.1"))
+    sampler_ema_rate: float = float(os.getenv("HEI_STAGE7_SAMPLER_EMA_RATE", "0.1"))
     # Default off: keeping a 400k×128 token cache on GPU costs ~0.8GB for char vocab,
     # and CUDA graphs no longer require on-device data. Enable explicitly if desired.
     data_on_device: bool = os.getenv("HEI_STAGE7_DATA_ON_DEVICE", "0") == "1"
@@ -160,6 +169,22 @@ class Stage7Config:
             "minimal",
             "--sequence_mode",
             "recurrent",
+            "--sampler_loss_update_every",
+            str(int(self.sampler_loss_update_every)),
+            "--sampler_loss_update_mode",
+            str(self.sampler_loss_update_mode),
+            "--sampler_loss_weight",
+            str(float(self.sampler_loss_weight)),
+            "--sampler_coverage_weight",
+            str(float(self.sampler_coverage_weight)),
+            "--sampler_progress_weight",
+            str(float(self.sampler_progress_weight)),
+            "--sampler_temperature",
+            str(float(self.sampler_temperature)),
+            "--sampler_random_ratio",
+            str(float(self.sampler_random_ratio)),
+            "--sampler_ema_rate",
+            str(float(self.sampler_ema_rate)),
             "--port_trainable",
             str(int(self.port_trainable)),
             "--detach_every",
@@ -180,6 +205,8 @@ class Stage7Config:
             "0.0",
             "--router_entropy_weight",
             "0.0",
+            "--experience_push_n",
+            str(int(self.experience_push_n)),
             "--offline_replay_mode",
             self.offline_replay_mode,
             "--pretokenize_samples",
@@ -282,6 +309,7 @@ def parse_stage7_args() -> argparse.Namespace:
     parser.add_argument("--scheduled_sampling_temperature", type=float)
     parser.add_argument("--unlikelihood_weight", type=float, help="Protocol-5 hardening: unlikelihood weight.")
     parser.add_argument("--unlikelihood_window", type=int, help="Protocol-5 hardening: unlikelihood window.")
+    parser.add_argument("--experience_push_n", type=int, help="Push N end states per batch into experience buffer (0=disable).")
     parser.add_argument("--save_dir", help="Checkpoint directory.")
     parser.add_argument("--resume", type=int)
     parser.add_argument("--resume_optimizer", type=int)
@@ -290,6 +318,14 @@ def parse_stage7_args() -> argparse.Namespace:
     parser.add_argument("--save_every", type=int)
     parser.add_argument("--device", help="Training device (cuda/cpu).")
     parser.add_argument("--offline_replay_mode", help="Offline replay mode (none/prioritized/...).")
+    parser.add_argument("--sampler_loss_update_every", type=int)
+    parser.add_argument("--sampler_loss_update_mode", choices=["per_sample", "batch_mean"])
+    parser.add_argument("--sampler_loss_weight", type=float)
+    parser.add_argument("--sampler_coverage_weight", type=float)
+    parser.add_argument("--sampler_progress_weight", type=float)
+    parser.add_argument("--sampler_temperature", type=float)
+    parser.add_argument("--sampler_random_ratio", type=float)
+    parser.add_argument("--sampler_ema_rate", type=float)
     parser.add_argument("--data_on_device", type=int, help="Keep cached token tensors on device (1/0).")
     parser.add_argument("--gate_profile", choices=["base", "robust"])
     parser.add_argument("--gate_batch_size", type=int)

@@ -648,16 +648,36 @@ class SoulLanguageTrainer(nn.Module):
             per_sample_count = mask_seq.sum(dim=1)
 
             if ul_w > 0.0 and seq_len > 1:
-                # Penalize predicting the immediately previous token again.
+                # Penalize repeating any of the last K fed tokens (K=unlikelihood_window).
                 ul_window_cfg = int(getattr(self.config, "unlikelihood_window", 1) or 1)
-                if ul_window_cfg != 1:
-                    ul_window_cfg = 1
-                bad_tokens = token_ids[:, :-1]  # x_t
+                ul_window_cfg = max(1, ul_window_cfg)
+
+                # bad_tokens: [B,L-1,W], where W lists the previous tokens up to window size.
+                # Align with targets_seq (x_{t+1}) and mask_seq.
+                bad_tokens = torch.full(
+                    (batch_size, max(seq_len - 1, 0), ul_window_cfg),
+                    pad_token,
+                    dtype=torch.long,
+                    device=device,
+                )
+                if seq_len > 1:
+                    # offset=0 => x_t
+                    bad_tokens[:, :, 0] = token_ids[:, :-1]
+                    # offset=o => x_{t-o}
+                    for o in range(1, ul_window_cfg):
+                        if (seq_len - 1 - o) <= 0:
+                            break
+                        bad_tokens[:, o:, o] = token_ids[:, : -(1 + o)]
+
                 logp = F.log_softmax(logits_seq, dim=-1)
-                logp_bad = logp.gather(dim=-1, index=bad_tokens.unsqueeze(-1)).squeeze(-1)
+                logp_bad = logp.gather(dim=-1, index=bad_tokens)  # [B,L-1,W]
                 p_bad = torch.exp(logp_bad).clamp(max=1.0 - 1e-6)
                 ul = -torch.log1p(-p_bad)
-                ul_mask = (bad_tokens != targets_seq) & (mask_seq > 0)
+                ul_mask = (
+                    (bad_tokens != targets_seq.unsqueeze(-1))
+                    & (bad_tokens != pad_token)
+                    & (mask_seq > 0).unsqueeze(-1).bool()
+                )
                 ul = ul * ul_mask.float()
                 ul_token_sum = ul.sum()
                 ul_token_count = mask_seq.sum()
@@ -717,17 +737,22 @@ class SoulLanguageTrainer(nn.Module):
                 prev_off_weights = prev_off_weights.detach()
 
             last_out = None
+            replay_q = None
+            if self.config.offline_replay_mode != 'none' and len(self.entity.experience.states) > 0:
+                replay = self.entity.experience.sample_replay(batch_size, mode=self.config.offline_replay_mode)
+                if replay is not None and replay.get('states', None) is not None:
+                    replay_state = replay['states']
+                    if replay_state.device != device:
+                        replay_state = replay_state.to(device)
+                    if replay_state.shape[0] < batch_size:
+                        pad = replay_state[0:1].expand(batch_size - replay_state.shape[0], -1)
+                        replay_state = torch.cat([replay_state, pad], dim=0)
+                    replay_q = replay_state[:, : self.entity.dim_q]
+
             for _ in range(self.config.num_offline_steps):
                 u_off = {}
-                if self.config.offline_replay_mode != 'none' and len(self.entity.experience.states) > 0:
-                    replay = self.entity.experience.sample_replay(batch_size, mode=self.config.offline_replay_mode)
-                    if replay is not None:
-                        replay_state = replay['states'].to(device)
-                        if replay_state.shape[0] < batch_size:
-                            pad = replay_state[0:1].expand(batch_size - replay_state.shape[0], -1)
-                            replay_state = torch.cat([replay_state, pad], dim=0)
-                        replay_q = replay_state[:, :self.entity.dim_q]
-                        u_off['replay'] = 0.1 * (replay_q - offline_state.q)
+                if replay_q is not None:
+                    u_off['replay'] = 0.1 * (replay_q - offline_state.q)
 
                 last_out = self.entity.forward_tensor(
                     state_flat=offline_state.flat,

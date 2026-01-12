@@ -14,6 +14,7 @@ python HEI/training/train_active_sampling.py --tokenizer char --port_arch transf
 
 import argparse
 import contextlib
+import math
 import os
 import queue
 import random
@@ -337,6 +338,42 @@ def main():
         choices=["per_sample", "batch_mean"],
         help="Active sampler: per_sample uses per-sample prediction error (slower, syncs); batch_mean uses batch mean only (faster).",
     )
+    parser.add_argument(
+        "--sampler_loss_weight",
+        type=float,
+        default=1.0,
+        help="Active sampler score weight for normalized loss (difficulty).",
+    )
+    parser.add_argument(
+        "--sampler_coverage_weight",
+        type=float,
+        default=0.5,
+        help="Active sampler score weight for coverage deficit (target distribution matching).",
+    )
+    parser.add_argument(
+        "--sampler_progress_weight",
+        type=float,
+        default=0.0,
+        help="Active sampler score weight for learning progress (EMA loss decrease).",
+    )
+    parser.add_argument(
+        "--sampler_temperature",
+        type=float,
+        default=1.0,
+        help="Active sampler temperature (higher=flatter, lower=sharper).",
+    )
+    parser.add_argument(
+        "--sampler_random_ratio",
+        type=float,
+        default=0.1,
+        help="Active sampler random batch fraction in [0,1].",
+    )
+    parser.add_argument(
+        "--sampler_ema_rate",
+        type=float,
+        default=0.1,
+        help="Active sampler EMA rate for bucket loss/progress in (0,1].",
+    )
     parser.add_argument("--save_dir", default="", help="If set, save checkpoints (tokenizer/config/last.pt).")
     parser.add_argument("--save_every", type=int, default=0, help="Also keep step checkpoints every N steps (0 = only last.pt).")
     parser.add_argument("--resume_ckpt", default="", help="Resume training from this checkpoint .pt (e.g. .../last.pt).")
@@ -387,6 +424,9 @@ def main():
             args.port_arch == "minimal"
             and args.sequence_mode == "recurrent"
             and bool(args.pretokenize_samples)
+            and float(getattr(args, "scheduled_sampling_prob", 0.0) or 0.0) <= 0.0
+            and int(getattr(args, "experience_push_n", 0) or 0) == 0
+            and str(getattr(args, "offline_replay_mode", "none") or "none") == "none"
         )
         use_cuda_graph = bool(auto) if int(args.cuda_graph) == -1 else bool(int(args.cuda_graph))
     else:
@@ -451,7 +491,12 @@ def main():
         hf_text_field=args.hf_text_field,
         max_samples_hf=args.max_samples_hf,
         source_weights=base_weights,
-        random_ratio=0.1,
+        loss_weight=max(float(args.sampler_loss_weight), 0.0) if math.isfinite(float(args.sampler_loss_weight)) else 1.0,
+        coverage_weight=max(float(args.sampler_coverage_weight), 0.0) if math.isfinite(float(args.sampler_coverage_weight)) else 0.5,
+        progress_weight=max(float(args.sampler_progress_weight), 0.0) if math.isfinite(float(args.sampler_progress_weight)) else 0.0,
+        temperature=max(float(args.sampler_temperature), 1e-6) if math.isfinite(float(args.sampler_temperature)) else 1.0,
+        random_ratio=min(max(float(args.sampler_random_ratio), 0.0), 1.0) if math.isfinite(float(args.sampler_random_ratio)) else 0.1,
+        ema_rate=min(max(float(args.sampler_ema_rate), 1e-6), 1.0) if math.isfinite(float(args.sampler_ema_rate)) else 0.1,
     )
 
     pool = CorpusPool(sampler_cfg)
@@ -684,6 +729,7 @@ def main():
                 ul_buf = torch.zeros((), device=device, dtype=torch.float32)
                 qn_buf = torch.zeros((), device=device, dtype=torch.float32)
                 E_buf = torch.zeros((), device=device, dtype=torch.float32)
+                E_ps_buf = torch.empty((B,), device=device, dtype=torch.float32)
                 ppl_buf = torch.zeros((), device=device, dtype=torch.float32)
                 zero_scalar = torch.zeros((), device=device, dtype=torch.float32)
 
@@ -755,6 +801,7 @@ def main():
                     ul_buf.copy_(out.get("unlikelihood_loss", zero_scalar).detach().float())
                     qn_buf.copy_(out.get("q_norm", zero_scalar).detach().float())
                     E_buf.copy_(out["prediction_error"].detach().float())
+                    E_ps_buf.copy_(out["prediction_error_per_sample"].detach().float())
                     ppl_buf.copy_(out["perplexity"].detach().float())
                     loss.backward()
                     _clip_grad_norm_no_sync_(train_params, 1.0)
@@ -788,8 +835,20 @@ def main():
                     sampler.update_counts(bucket_keys)
                     last_step = step
 
-                    if step % args.log_every == 0:
+                    update_loss_now = bool(args.sampler_loss_update_every) and step % int(args.sampler_loss_update_every) == 0
+                    log_now = step % args.log_every == 0
+                    if update_loss_now or log_now:
                         torch.cuda.synchronize()
+
+                    if update_loss_now:
+                        if str(args.sampler_loss_update_mode) == "per_sample":
+                            loss_cpu = E_ps_buf.detach().cpu()
+                            sampler.update_losses(bucket_keys, loss_cpu)
+                        else:
+                            mean_loss = float(E_buf.item())
+                            sampler.update_losses(bucket_keys, mean_loss)
+
+                    if log_now:
                         now = time.perf_counter()
                         tok_s = (window_tokens / max(now - window_t0, 1e-9))
                         elapsed = now - start_time
