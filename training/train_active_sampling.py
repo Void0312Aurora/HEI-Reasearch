@@ -13,6 +13,7 @@ python HEI/training/train_active_sampling.py --tokenizer char --port_arch transf
 """
 
 import argparse
+import hashlib
 import contextlib
 import math
 import os
@@ -23,6 +24,7 @@ import sys
 import threading
 import time
 import traceback
+from collections import Counter
 from typing import Dict, List, Tuple
 
 import torch
@@ -230,6 +232,177 @@ def _maybe_init_entity_from_state_dict(entity: torch.nn.Module, ckpt_path: str) 
         f"[Init] entity={type(entity).__name__} init_from={ckpt_path} prefix={used} "
         f"loaded={len(state)} missing={len(missing)} unexpected={len(unexpected)}"
     )
+
+
+def _mean(xs: List[float]) -> float:
+    return float(sum(xs) / len(xs)) if xs else 0.0
+
+
+def _stage7_gate_profile_defaults(profile: str) -> Dict[str, float]:
+    profile = str(profile or "base").lower()
+    if profile == "robust":
+        return {
+            "gate_ppl_ratio": 0.60,
+            "gate_cycle_rate": 0.40,
+            "gate_dominant_cycle": 0.10,
+            "gate_rep": 0.50,
+            "gate_unique_ratio": 0.60,
+        }
+    return {
+        "gate_ppl_ratio": 0.85,
+        "gate_cycle_rate": 0.60,
+        "gate_dominant_cycle": 0.20,
+        "gate_rep": 0.60,
+        "gate_unique_ratio": 0.40,
+    }
+
+
+def _read_nonempty_lines(path: str) -> List[str]:
+    out: List[str] = []
+    with open(path, "r", encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if ln:
+                out.append(ln)
+    return out
+
+
+def _eval_cache_path(*, eval_text_file: str, eval_samples: int, seed: int, cache_dir: str) -> str:
+    try:
+        st = os.stat(eval_text_file)
+        stamp = f"{int(st.st_size)}:{int(st.st_mtime)}"
+    except Exception:
+        stamp = "nostat"
+    key = f"{os.path.abspath(eval_text_file)}|{stamp}|{int(eval_samples)}|{int(seed)}"
+    h = hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+    base = os.path.basename(eval_text_file).replace(os.sep, "_")
+    name = f"stage7_eval_texts_{base}_n{int(eval_samples)}_seed{int(seed)}_{h}.txt"
+    return os.path.join(cache_dir, name)
+
+
+@torch.no_grad()
+def _run_stage7_gate_eval(
+    *,
+    trainer,
+    tokenizer,
+    texts: List[str],
+    prompts: List[str],
+    device: str,
+    profile: str,
+    batch_size: int,
+    max_seq_len: int,
+    max_new_tokens: int,
+    temperature: float,
+    top_k: int,
+    cycle_max_period: int,
+    cycle_min_repeats: int,
+    cycle_tail_window: int,
+    ngram_n: int,
+    margin_window: int,
+    gate_ppl_ratio: float,
+    gate_cycle_rate: float,
+    gate_dominant_cycle: float,
+    gate_rep: float,
+    gate_unique_ratio: float,
+) -> Dict[str, object]:
+    from training.eval_protocol5_closed_loop import (
+        detect_tail_cycle,
+        generate_open_loop_batch,
+        ngram_repetition_rate,
+        teacher_forced_diagnostics,
+    )
+
+    trainer.eval()
+
+    tf = teacher_forced_diagnostics(
+        trainer=trainer,
+        tokenizer=tokenizer,
+        texts=texts,
+        device=device,
+        batch_size=int(batch_size),
+        max_seq_len=int(max_seq_len),
+    )
+    vocab = float(len(tokenizer))
+    ppl_ratio = float(tf["tf_PPL"]) / max(vocab, 1.0)
+
+    cycle_counter: Counter = Counter()
+    unique_outputs: set = set()
+    cycle_hits = 0
+    rep_rates: List[float] = []
+    amp_ratios: List[float] = []
+
+    top_k_eff = int(top_k)
+    if top_k_eff <= 0:
+        top_k_eff = 20 if str(profile).lower() == "base" else 1
+
+    w = max(int(margin_window), 1)
+    all_tokens, all_margins = generate_open_loop_batch(
+        trainer=trainer,
+        tokenizer=tokenizer,
+        prompts=prompts,
+        device=device,
+        max_new_tokens=int(max_new_tokens),
+        temperature=float(temperature),
+        top_k=top_k_eff,
+    )
+    for prompt, tokens, margins in zip(prompts, all_tokens, all_margins):
+        out_text = tokenizer.decode(tokens)
+        unique_outputs.add(out_text)
+
+        ids = tokenizer.encode(prompt)
+        prefix_ids = ids[:-1] if len(ids) >= 2 else ids
+        prefix_len = max(len(prefix_ids), 1)
+        cont = tokens[prefix_len:] if len(tokens) > prefix_len else []
+        rep_rates.append(float(ngram_repetition_rate(cont, int(ngram_n))))
+
+        cinfo = detect_tail_cycle(
+            cont,
+            max_period=int(cycle_max_period),
+            min_repeats=int(cycle_min_repeats),
+            tail_window=int(cycle_tail_window),
+        )
+        if cinfo is not None:
+            cycle_hits += 1
+            cycle_counter[(cinfo.period, cinfo.pattern)] += 1
+
+        early = margins[:w]
+        late = margins[-w:] if len(margins) >= w else margins
+        early_m = _mean([float(x) for x in early])
+        late_m = _mean([float(x) for x in late])
+        if early_m > 0:
+            amp_ratios.append(late_m / early_m)
+
+    cycle_rate = cycle_hits / max(len(prompts), 1)
+    dominant_cycle = 0.0
+    if cycle_counter:
+        dominant_cycle = cycle_counter.most_common(1)[0][1] / max(len(prompts), 1)
+    rep = _mean(rep_rates)
+    unique_ratio = len(unique_outputs) / max(len(prompts), 1)
+    margin_amp = _mean(amp_ratios)
+
+    checks = {
+        "TeacherForced:PPL_ratio": (ppl_ratio <= float(gate_ppl_ratio)),
+        "OpenLoop:cycle_rate": (cycle_rate <= float(gate_cycle_rate)),
+        "OpenLoop:dominant_cycle": (dominant_cycle <= float(gate_dominant_cycle)),
+        f"OpenLoop:rep{int(ngram_n)}": (rep <= float(gate_rep)),
+        "OpenLoop:unique_ratio": (unique_ratio >= float(gate_unique_ratio)),
+    }
+    passed = all(bool(v) for v in checks.values())
+
+    return {
+        "passed": bool(passed),
+        "checks": checks,
+        "teacher_forced": tf,
+        "ppl_ratio": float(ppl_ratio),
+        "open_loop": {
+            "rep": float(rep),
+            "cycle_rate": float(cycle_rate),
+            "dominant_cycle": float(dominant_cycle),
+            "unique_ratio": float(unique_ratio),
+            "margin_amp": float(margin_amp),
+            "prompts": int(len(prompts)),
+        },
+    }
 
 
 class BatchPrefetcher:
@@ -455,6 +628,51 @@ def main():
     # -1 = auto (enable for CUDA+minimal+recurrent+teacher-forced+pretokenized on device)
     parser.add_argument("--cuda_graph", type=int, default=-1, help="Enable CUDA graph capture (1/0; -1=auto).")
     parser.add_argument("--cuda_graph_warmup", type=int, default=3, help="Warmup steps before graph capture.")
+    # Stage7 maintenance: periodically run Protocol-5 gate and auto-harden on failure.
+    parser.add_argument("--auto_gate", type=int, default=0, help="Enable periodic Stage7 gate checks (1/0).")
+    parser.add_argument("--auto_gate_profile", default="robust", choices=["base", "robust"], help="Gate profile.")
+    parser.add_argument("--auto_gate_every", type=int, default=500, help="Run gate every N steps (0=disable).")
+    parser.add_argument("--auto_gate_at_end", type=int, default=1, help="Also run gate at end (1/0).")
+    parser.add_argument(
+        "--auto_gate_stop_on_fail",
+        type=int,
+        default=1,
+        help="If auto-harden cannot restore the gate, stop training (1/0).",
+    )
+    parser.add_argument("--auto_gate_seed", type=int, default=0, help="Seed for fixed eval set.")
+    parser.add_argument("--auto_gate_eval_text_file", default="", help="Optional eval texts file (newline-separated).")
+    parser.add_argument("--auto_gate_eval_samples", type=int, default=2000, help="How many eval texts to sample.")
+    parser.add_argument("--auto_gate_eval_cache", type=int, default=1, help="Cache sampled eval texts in save_dir (1/0).")
+    parser.add_argument("--auto_gate_batch_size", type=int, default=64, help="Teacher-forced eval batch size.")
+    parser.add_argument("--auto_gate_max_seq_len", type=int, default=-1, help="Teacher-forced eval seq len (-1=use train).")
+    parser.add_argument("--auto_gate_num_prompts", type=int, default=200, help="Open-loop prompts.")
+    parser.add_argument("--auto_gate_prompt_chars", type=int, default=4, help="Prompt length in chars.")
+    parser.add_argument("--auto_gate_max_new_tokens", type=int, default=64, help="Open-loop continuation length.")
+    parser.add_argument("--auto_gate_temperature", type=float, default=1.0, help="Open-loop temperature.")
+    parser.add_argument("--auto_gate_top_k", type=int, default=0, help="Open-loop top-k (0=auto by profile).")
+    parser.add_argument("--auto_gate_cycle_max_period", type=int, default=8)
+    parser.add_argument("--auto_gate_cycle_min_repeats", type=int, default=3)
+    parser.add_argument("--auto_gate_cycle_tail_window", type=int, default=32)
+    parser.add_argument("--auto_gate_ngram_n", type=int, default=3)
+    parser.add_argument("--auto_gate_margin_window", type=int, default=10)
+    # Threshold overrides (negative => profile default)
+    parser.add_argument("--auto_gate_ppl_ratio", type=float, default=-1.0)
+    parser.add_argument("--auto_gate_cycle_rate", type=float, default=-1.0)
+    parser.add_argument("--auto_gate_dominant_cycle", type=float, default=-1.0)
+    parser.add_argument("--auto_gate_rep", type=float, default=-1.0)
+    parser.add_argument("--auto_gate_unique_ratio", type=float, default=-1.0)
+    # Auto-hardening burst settings (used when auto_gate fails).
+    parser.add_argument("--auto_harden_steps", type=int, default=200, help="Hardening burst steps per round.")
+    parser.add_argument("--auto_harden_max_rounds", type=int, default=6, help="Max hardening rounds before stop.")
+    parser.add_argument(
+        "--auto_harden_unlikelihood_weight",
+        type=float,
+        default=20.0,
+        help="Hardening: unlikelihood weight.",
+    )
+    parser.add_argument("--auto_harden_unlikelihood_window", type=int, default=32, help="Hardening: unlikelihood window.")
+    parser.add_argument("--auto_harden_denoise_mode", default="repeat", choices=["none", "replace", "repeat"])
+    parser.add_argument("--auto_harden_denoise_prob", type=float, default=0.5)
     args = parser.parse_args()
 
     device = args.device if torch.cuda.is_available() else "cpu"
@@ -760,6 +978,156 @@ def main():
     if args.save_dir:
         print(f"Checkpoint dir: {args.save_dir} (keep_every={args.save_every})")
 
+    auto_gate_enabled = bool(int(getattr(args, "auto_gate", 0) or 0)) and int(getattr(args, "auto_gate_every", 0) or 0) > 0
+    auto_gate_profile = str(getattr(args, "auto_gate_profile", "robust") or "robust")
+    auto_gate_texts: List[str] = []
+    auto_gate_prompts: List[str] = []
+    auto_gate_thresholds: Dict[str, float] = {}
+
+    quality_denoise_mode = str(getattr(args, "denoise_mode", "none") or "none")
+    quality_denoise_prob = float(getattr(args, "denoise_prob", 0.0) or 0.0)
+    harden_denoise_mode = str(getattr(args, "auto_harden_denoise_mode", "repeat") or "repeat")
+    harden_denoise_prob = float(getattr(args, "auto_harden_denoise_prob", 0.0) or 0.0)
+    denoise_mode = quality_denoise_mode
+    denoise_prob = quality_denoise_prob
+
+    quality_ul_w = float(getattr(args, "unlikelihood_weight", 0.0) or 0.0)
+    quality_ul_win = int(getattr(args, "unlikelihood_window", 1) or 1)
+    harden_ul_w = float(getattr(args, "auto_harden_unlikelihood_weight", 0.0) or 0.0)
+    harden_ul_win = int(getattr(args, "auto_harden_unlikelihood_window", 1) or 1)
+
+    mode = "quality"
+    harden_remaining = 0
+    harden_round = 0
+
+    if auto_gate_enabled:
+        from training.eval_protocol5_closed_loop import collect_eval_texts, collect_eval_texts_from_pool, extract_prompts
+
+        seed = int(getattr(args, "auto_gate_seed", 0) or 0)
+        cache_dir = args.save_dir or (os.path.dirname(os.path.abspath(resume_ckpt)) if resume_ckpt else os.getcwd())
+        cache_dir = str(cache_dir or "").strip() or os.getcwd()
+        if bool(getattr(args, "auto_gate_eval_cache", 1)) and cache_dir:
+            try:
+                os.makedirs(cache_dir, exist_ok=True)
+            except Exception:
+                pass
+
+        eval_text_file = str(getattr(args, "auto_gate_eval_text_file", "") or "").strip()
+        eval_samples = int(getattr(args, "auto_gate_eval_samples", 0) or 0)
+        if eval_samples <= 0:
+            eval_samples = 2000
+        if eval_text_file:
+            texts: List[str] = []
+            cache_path = ""
+            if bool(getattr(args, "auto_gate_eval_cache", 1)) and eval_samples > 0 and cache_dir:
+                cache_path = _eval_cache_path(
+                    eval_text_file=eval_text_file,
+                    eval_samples=eval_samples,
+                    seed=seed,
+                    cache_dir=cache_dir,
+                )
+                if os.path.exists(cache_path):
+                    texts = _read_nonempty_lines(cache_path)
+            if not texts:
+                texts = collect_eval_texts(eval_text_file=eval_text_file, eval_samples=eval_samples, seed=seed)
+                if bool(getattr(args, "auto_gate_eval_cache", 1)) and cache_path:
+                    try:
+                        with open(cache_path, "w", encoding="utf-8") as f:
+                            for t in texts:
+                                t = str(t).strip()
+                                if t:
+                                    f.write(t + "\n")
+                    except Exception:
+                        pass
+            auto_gate_texts = texts
+        else:
+            auto_gate_texts = collect_eval_texts_from_pool(pool=pool, eval_samples=eval_samples, seed=seed)
+
+        if not auto_gate_texts:
+            raise RuntimeError("auto_gate: no eval texts found (check --auto_gate_eval_text_file / corpus paths).")
+
+        auto_gate_prompts = extract_prompts(
+            auto_gate_texts,
+            num_prompts=int(getattr(args, "auto_gate_num_prompts", 200) or 200),
+            prompt_chars=int(getattr(args, "auto_gate_prompt_chars", 4) or 4),
+        )
+        if not auto_gate_prompts:
+            raise RuntimeError("auto_gate: no prompts extracted (try smaller --auto_gate_prompt_chars).")
+
+        defaults = _stage7_gate_profile_defaults(auto_gate_profile)
+        auto_gate_thresholds = {
+            "gate_ppl_ratio": defaults["gate_ppl_ratio"]
+            if float(getattr(args, "auto_gate_ppl_ratio", -1.0)) < 0
+            else float(getattr(args, "auto_gate_ppl_ratio")),
+            "gate_cycle_rate": defaults["gate_cycle_rate"]
+            if float(getattr(args, "auto_gate_cycle_rate", -1.0)) < 0
+            else float(getattr(args, "auto_gate_cycle_rate")),
+            "gate_dominant_cycle": defaults["gate_dominant_cycle"]
+            if float(getattr(args, "auto_gate_dominant_cycle", -1.0)) < 0
+            else float(getattr(args, "auto_gate_dominant_cycle")),
+            "gate_rep": defaults["gate_rep"]
+            if float(getattr(args, "auto_gate_rep", -1.0)) < 0
+            else float(getattr(args, "auto_gate_rep")),
+            "gate_unique_ratio": defaults["gate_unique_ratio"]
+            if float(getattr(args, "auto_gate_unique_ratio", -1.0)) < 0
+            else float(getattr(args, "auto_gate_unique_ratio")),
+        }
+        print(
+            "[AutoGate] enabled:"
+            f" profile={auto_gate_profile}"
+            f" every={int(args.auto_gate_every)}"
+            f" eval_texts={len(auto_gate_texts)}"
+            f" prompts={len(auto_gate_prompts)}"
+            f" harden_steps={int(getattr(args,'auto_harden_steps',0) or 0)}"
+            f" harden_ul_w={harden_ul_w}"
+            f" harden_ul_win={harden_ul_win}"
+            f" harden_denoise={harden_denoise_mode}:{harden_denoise_prob}"
+        )
+
+        def _auto_gate_eval(step_now: int, *, tag: str) -> Dict[str, object]:
+            if str(device).startswith("cuda"):
+                torch.cuda.synchronize()
+            eval_max_seq_len = int(getattr(args, "auto_gate_max_seq_len", -1) or -1)
+            if eval_max_seq_len <= 0:
+                eval_max_seq_len = int(args.max_seq_len)
+            out = _run_stage7_gate_eval(
+                trainer=trainer,
+                tokenizer=tokenizer,
+                texts=auto_gate_texts,
+                prompts=auto_gate_prompts,
+                device=device,
+                profile=auto_gate_profile,
+                batch_size=int(getattr(args, "auto_gate_batch_size", 64) or 64),
+                max_seq_len=int(eval_max_seq_len),
+                max_new_tokens=int(getattr(args, "auto_gate_max_new_tokens", 64) or 64),
+                temperature=float(getattr(args, "auto_gate_temperature", 1.0) or 1.0),
+                top_k=int(getattr(args, "auto_gate_top_k", 0) or 0),
+                cycle_max_period=int(getattr(args, "auto_gate_cycle_max_period", 8) or 8),
+                cycle_min_repeats=int(getattr(args, "auto_gate_cycle_min_repeats", 3) or 3),
+                cycle_tail_window=int(getattr(args, "auto_gate_cycle_tail_window", 32) or 32),
+                ngram_n=int(getattr(args, "auto_gate_ngram_n", 3) or 3),
+                margin_window=int(getattr(args, "auto_gate_margin_window", 10) or 10),
+                gate_ppl_ratio=float(auto_gate_thresholds["gate_ppl_ratio"]),
+                gate_cycle_rate=float(auto_gate_thresholds["gate_cycle_rate"]),
+                gate_dominant_cycle=float(auto_gate_thresholds["gate_dominant_cycle"]),
+                gate_rep=float(auto_gate_thresholds["gate_rep"]),
+                gate_unique_ratio=float(auto_gate_thresholds["gate_unique_ratio"]),
+            )
+            ol = out.get("open_loop", {}) if isinstance(out, dict) else {}
+            passed = bool(out.get("passed", False)) if isinstance(out, dict) else False
+            print(
+                f"[AutoGate:{tag}] step={int(step_now)} passed={passed}"
+                f" ppl_ratio={float(out.get('ppl_ratio',0.0)):.4f}"
+                f" rep={float(ol.get('rep',0.0)):.4f}"
+                f" cycle_rate={float(ol.get('cycle_rate',0.0)):.4f}"
+                f" dominant_cycle={float(ol.get('dominant_cycle',0.0)):.4f}"
+                f" unique_ratio={float(ol.get('unique_ratio',0.0)):.4f}"
+            )
+            if not passed and isinstance(out, dict):
+                print(f"[AutoGate:{tag}] checks={out.get('checks',{})}")
+            trainer.train()
+            return out
+
     window_tokens = 0
     window_time = 0.0
     start_time = time.perf_counter()
@@ -848,14 +1216,14 @@ def main():
                                 mask_buf.copy_(mask_batch, non_blocking=True)
 
                         target_buf.copy_(token_buf)
-                        if float(getattr(args, "denoise_prob", 0.0) or 0.0) > 0.0 and str(getattr(args, "denoise_mode", "none")) != "none":
+                        if denoise_prob > 0.0 and denoise_mode != "none":
                             token_buf.copy_(
                                 _apply_denoise(
                                     token_buf,
                                     token_clean=target_buf,
                                     attention_mask=mask_buf,
-                                    mode=str(args.denoise_mode),
-                                    prob=float(args.denoise_prob),
+                                    mode=denoise_mode,
+                                    prob=denoise_prob,
                                     vocab_size=len(tokenizer),
                                     pad_id=int(tokenizer.pad_id),
                                     bos_id=int(tokenizer.bos_id),
@@ -871,14 +1239,14 @@ def main():
                     token_buf.copy_(batch2["input_ids"].to(device=device, non_blocking=True))
                     mask_buf.copy_(batch2["attention_mask"].to(device=device, non_blocking=True))
                     target_buf.copy_(token_buf)
-                    if float(getattr(args, "denoise_prob", 0.0) or 0.0) > 0.0 and str(getattr(args, "denoise_mode", "none")) != "none":
+                    if denoise_prob > 0.0 and denoise_mode != "none":
                         token_buf.copy_(
                             _apply_denoise(
                                 token_buf,
                                 token_clean=target_buf,
                                 attention_mask=mask_buf,
-                                mode=str(args.denoise_mode),
-                                prob=float(args.denoise_prob),
+                                mode=denoise_mode,
+                                prob=denoise_prob,
                                 vocab_size=len(tokenizer),
                                 pad_id=int(tokenizer.pad_id),
                                 bos_id=int(tokenizer.bos_id),
@@ -915,6 +1283,10 @@ def main():
                     _clip_grad_norm_no_sync_(train_params, 1.0)
 
                 warmup = max(1, int(args.cuda_graph_warmup))
+
+                # Capture a quality graph (baseline config) and optionally a harden graph.
+                train_cfg.unlikelihood_weight = float(quality_ul_w)
+                train_cfg.unlikelihood_window = int(quality_ul_win)
                 for _ in range(warmup):
                     bucket_keys = refill()
                     fwd_bwd_step()
@@ -922,18 +1294,45 @@ def main():
                     sampler.update_counts(bucket_keys)
 
                 torch.cuda.synchronize()
-                pool = torch.cuda.graphs.graph_pool_handle()
-                graph = torch.cuda.CUDAGraph()
-                with torch.cuda.graph(graph, pool=pool):
+                graph_pool = torch.cuda.graphs.graph_pool_handle()
+                graph_quality = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(graph_quality, pool=graph_pool):
                     fwd_bwd_step()
+
+                graph_harden = graph_quality
+                if auto_gate_enabled and (float(harden_ul_w) != float(quality_ul_w) or int(harden_ul_win) != int(quality_ul_win)):
+                    train_cfg.unlikelihood_weight = float(harden_ul_w)
+                    train_cfg.unlikelihood_window = int(harden_ul_win)
+                    for _ in range(warmup):
+                        bucket_keys = refill()
+                        fwd_bwd_step()
+                        optimizer.step()
+                        sampler.update_counts(bucket_keys)
+                    torch.cuda.synchronize()
+                    graph_harden = torch.cuda.CUDAGraph()
+                    with torch.cuda.graph(graph_harden, pool=graph_pool):
+                        fwd_bwd_step()
+                    train_cfg.unlikelihood_weight = float(quality_ul_w)
+                    train_cfg.unlikelihood_window = int(quality_ul_win)
+                    print(f"[AutoGate] Captured harden CUDA graph (ul_w={harden_ul_w} ul_win={harden_ul_win}).")
 
                 window_t0 = time.perf_counter()
                 for step in range(start_step + 1, args.steps + 1):
                     if stop_requested:
                         stop_reason = "interrupted"
                         break
+                    mode_used = mode
+                    if mode_used == "harden":
+                        denoise_mode = harden_denoise_mode
+                        denoise_prob = harden_denoise_prob
+                        active_graph = graph_harden
+                    else:
+                        denoise_mode = quality_denoise_mode
+                        denoise_prob = quality_denoise_prob
+                        active_graph = graph_quality
+
                     bucket_keys = refill()
-                    graph.replay()
+                    active_graph.replay()
                     optimizer.step()
 
                     # No-sync approximate token count in CUDA-graph mode.
@@ -961,7 +1360,7 @@ def main():
                         tok_s = (window_tokens / max(now - window_t0, 1e-9))
                         elapsed = now - start_time
                         msg = (
-                            f"Step {step}: F={float(loss_buf.item()):.4f} "
+                            f"Step {step} ({mode_used}): F={float(loss_buf.item()):.4f} "
                             f"F_on={float(F_on_buf.item()):.4f} F_off={float(F_off_buf.item()):.4f} "
                             f"dF_off={float(dF_off_buf.item()):.4f} L_off={float(off_loss_buf.item()):.4f} "
                             f"R_bal={float(rb_buf.item()):.4f} R_ent={float(re_buf.item()):.4f} R_atlas={float(ar_buf.item()):.4f} "
@@ -997,6 +1396,57 @@ def main():
                             keep_every=args.save_every,
                         )
 
+                    if auto_gate_enabled:
+                        max_rounds = int(getattr(args, "auto_harden_max_rounds", 1) or 1)
+                        harden_steps = int(getattr(args, "auto_harden_steps", 0) or 0)
+                        stop_on_fail = bool(int(getattr(args, "auto_gate_stop_on_fail", 1)))
+                        try:
+                            if mode_used == "quality":
+                                run_now = (step % int(args.auto_gate_every) == 0) or (
+                                    bool(int(getattr(args, "auto_gate_at_end", 1) or 1)) and step == int(args.steps)
+                                )
+                                if run_now:
+                                    tag = "periodic" if step % int(args.auto_gate_every) == 0 else "end"
+                                    gate_out = _auto_gate_eval(step, tag=tag)
+                                    if not bool(gate_out.get("passed", False)):
+                                        if harden_steps <= 0:
+                                            stop_reason = "auto_gate_failed"
+                                            break
+                                        mode = "harden"
+                                        harden_round = 1
+                                        harden_remaining = harden_steps
+                                        print(f"[AutoGate] FAIL -> enter harden round {harden_round} ({harden_remaining} steps)")
+                            else:
+                                harden_remaining -= 1
+                                if harden_remaining <= 0:
+                                    gate_out = _auto_gate_eval(step, tag=f"post_harden_r{harden_round}")
+                                    if bool(gate_out.get("passed", False)):
+                                        mode = "quality"
+                                        harden_round = 0
+                                        harden_remaining = 0
+                                        print("[AutoGate] PASS -> back to quality")
+                                    else:
+                                        harden_round += 1
+                                        if max_rounds > 0 and harden_round > max_rounds:
+                                            if stop_on_fail:
+                                                stop_reason = "auto_gate_failed"
+                                                break
+                                            harden_round = max_rounds
+                                            harden_remaining = max(harden_steps, 1)
+                                            mode = "harden"
+                                            print("[AutoGate] exceeded max rounds; continue harden (stop_on_fail=0)")
+                                        else:
+                                            harden_remaining = max(harden_steps, 1)
+                                            mode = "harden"
+                                            print(
+                                                f"[AutoGate] still failing -> harden round {harden_round} ({harden_remaining} steps)"
+                                            )
+                        except Exception as exc:
+                            stop_reason = "auto_gate_error"
+                            print(f"[AutoGate] error: {exc}")
+                            traceback.print_exc()
+                            break
+
                     if args.max_tokens and total_tokens >= args.max_tokens:
                         stop_reason = "max_tokens_reached"
                         break
@@ -1006,6 +1456,18 @@ def main():
                     if stop_requested:
                         stop_reason = "interrupted"
                         break
+
+                    mode_used = mode
+                    if mode_used == "harden":
+                        denoise_mode = harden_denoise_mode
+                        denoise_prob = harden_denoise_prob
+                        train_cfg.unlikelihood_weight = float(harden_ul_w)
+                        train_cfg.unlikelihood_window = int(harden_ul_win)
+                    else:
+                        denoise_mode = quality_denoise_mode
+                        denoise_prob = quality_denoise_prob
+                        train_cfg.unlikelihood_weight = float(quality_ul_w)
+                        train_cfg.unlikelihood_window = int(quality_ul_win)
 
                     t0 = time.perf_counter()
 
@@ -1032,15 +1494,15 @@ def main():
 
                     target_device = torch.device(device)
                     batch = {k: (v if v.device == target_device else v.to(target_device, non_blocking=True)) for k, v in batch.items()}
-                    if float(getattr(args, "denoise_prob", 0.0) or 0.0) > 0.0 and str(getattr(args, "denoise_mode", "none")) != "none":
+                    if denoise_prob > 0.0 and denoise_mode != "none":
                         clean = batch["input_ids"]
                         token_in = clean.clone()
                         token_in = _apply_denoise(
                             token_in,
                             token_clean=clean,
                             attention_mask=batch["attention_mask"],
-                            mode=str(args.denoise_mode),
-                            prob=float(args.denoise_prob),
+                            mode=denoise_mode,
+                            prob=denoise_prob,
                             vocab_size=len(tokenizer),
                             pad_id=int(tokenizer.pad_id),
                             bos_id=int(tokenizer.bos_id),
@@ -1130,7 +1592,7 @@ def main():
                         tok_s = (window_tokens / max(window_time, 1e-9))
                         elapsed = time.perf_counter() - start_time
                         msg = (
-                            f"Step {step}: F={avg_loss:.4f} "
+                            f"Step {step} ({mode_used}): F={avg_loss:.4f} "
                             f"F_on={F_online:.4f} F_off={F_offline:.4f} "
                             f"dF_off={delta_off:.4f} L_off={off_loss:.4f} "
                             f"R_bal={rb:.4f} R_ent={re:.4f} R_atlas={ar:.4f} "
@@ -1170,6 +1632,57 @@ def main():
                             extra={"sampler_cfg": asdict(sampler_cfg)},
                             keep_every=args.save_every,
                         )
+
+                    if auto_gate_enabled:
+                        max_rounds = int(getattr(args, "auto_harden_max_rounds", 1) or 1)
+                        harden_steps = int(getattr(args, "auto_harden_steps", 0) or 0)
+                        stop_on_fail = bool(int(getattr(args, "auto_gate_stop_on_fail", 1)))
+                        try:
+                            if mode_used == "quality":
+                                run_now = (step % int(args.auto_gate_every) == 0) or (
+                                    bool(int(getattr(args, "auto_gate_at_end", 1) or 1)) and step == int(args.steps)
+                                )
+                                if run_now:
+                                    tag = "periodic" if step % int(args.auto_gate_every) == 0 else "end"
+                                    gate_out = _auto_gate_eval(step, tag=tag)
+                                    if not bool(gate_out.get("passed", False)):
+                                        if harden_steps <= 0:
+                                            stop_reason = "auto_gate_failed"
+                                            break
+                                        mode = "harden"
+                                        harden_round = 1
+                                        harden_remaining = harden_steps
+                                        print(f"[AutoGate] FAIL -> enter harden round {harden_round} ({harden_remaining} steps)")
+                            else:
+                                harden_remaining -= 1
+                                if harden_remaining <= 0:
+                                    gate_out = _auto_gate_eval(step, tag=f"post_harden_r{harden_round}")
+                                    if bool(gate_out.get("passed", False)):
+                                        mode = "quality"
+                                        harden_round = 0
+                                        harden_remaining = 0
+                                        print("[AutoGate] PASS -> back to quality")
+                                    else:
+                                        harden_round += 1
+                                        if max_rounds > 0 and harden_round > max_rounds:
+                                            if stop_on_fail:
+                                                stop_reason = "auto_gate_failed"
+                                                break
+                                            harden_round = max_rounds
+                                            harden_remaining = max(harden_steps, 1)
+                                            mode = "harden"
+                                            print("[AutoGate] exceeded max rounds; continue harden (stop_on_fail=0)")
+                                        else:
+                                            harden_remaining = max(harden_steps, 1)
+                                            mode = "harden"
+                                            print(
+                                                f"[AutoGate] still failing -> harden round {harden_round} ({harden_remaining} steps)"
+                                            )
+                        except Exception as exc:
+                            stop_reason = "auto_gate_error"
+                            print(f"[AutoGate] error: {exc}")
+                            traceback.print_exc()
+                            break
 
                     if args.max_tokens and total_tokens >= args.max_tokens:
                         stop_reason = "max_tokens_reached"

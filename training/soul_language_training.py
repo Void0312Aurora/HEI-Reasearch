@@ -656,10 +656,18 @@ class SoulLanguageTrainer(nn.Module):
                 # bad_tokens: [B,L-1,W], where W lists the previous tokens up to window size.
                 # Align with targets_seq (x_{t+1}) and mask_seq.
                 bad_shape = (batch_size, max(seq_len - 1, 0), ul_window_cfg)
-                bad_tokens = getattr(self, "_ul_bad_tokens_buf", None)
+                # CUDA graphs: this training loop can be captured at multiple unlikelihood_window values
+                # (e.g. quality vs harden). If we overwrite a single buffer tensor, a previously captured
+                # graph may retain pointers to freed memory and crash (segfault) on replay. Keep per-window
+                # buffers alive and select by ul_window_cfg.
+                bufs = getattr(self, "_ul_bad_tokens_bufs", None)
+                if not isinstance(bufs, dict):
+                    bufs = {}
+                    self._ul_bad_tokens_bufs = bufs
+                bad_tokens = bufs.get(ul_window_cfg, None)
                 if bad_tokens is None or tuple(bad_tokens.shape) != bad_shape or bad_tokens.device != device:
                     bad_tokens = torch.empty(bad_shape, device=device, dtype=torch.long)
-                    self._ul_bad_tokens_buf = bad_tokens
+                    bufs[ul_window_cfg] = bad_tokens
                 bad_tokens.fill_(pad_token)
                 if seq_len > 1:
                     # offset=0 => x_t
