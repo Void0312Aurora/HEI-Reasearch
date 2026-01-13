@@ -68,6 +68,8 @@ class Stage7Config:
     scheduled_sampling_temperature: float = float(os.getenv("HEI_STAGE7_SS_TEMP", "1.0"))
     unlikelihood_weight: float = float(os.getenv("HEI_STAGE7_UNLIKELIHOOD_W", "0.0"))
     unlikelihood_window: int = int(os.getenv("HEI_STAGE7_UNLIKELIHOOD_WINDOW", "1"))
+    denoise_mode: str = os.getenv("HEI_STAGE7_DENOISE_MODE", "none")
+    denoise_prob: float = float(os.getenv("HEI_STAGE7_DENOISE_PROB", "0.0"))
     experience_push_n: int = int(os.getenv("HEI_STAGE7_EXPERIENCE_PUSH_N", "0"))
     save_dir: str = os.getenv("HEI_STAGE7_SAVE_DIR", "checkpoints/curriculum/stage7_active")
     resume: bool = os.getenv("HEI_STAGE7_RESUME", "1") == "1"
@@ -201,6 +203,10 @@ class Stage7Config:
             str(float(self.unlikelihood_weight)),
             "--unlikelihood_window",
             str(int(self.unlikelihood_window)),
+            "--denoise_mode",
+            str(self.denoise_mode),
+            "--denoise_prob",
+            str(float(self.denoise_prob)),
             "--router_balance_weight",
             "0.0",
             "--router_entropy_weight",
@@ -309,6 +315,8 @@ def parse_stage7_args() -> argparse.Namespace:
     parser.add_argument("--scheduled_sampling_temperature", type=float)
     parser.add_argument("--unlikelihood_weight", type=float, help="Protocol-5 hardening: unlikelihood weight.")
     parser.add_argument("--unlikelihood_window", type=int, help="Protocol-5 hardening: unlikelihood window.")
+    parser.add_argument("--denoise_mode", choices=["none", "replace", "repeat"], help="B3 denoising mode.")
+    parser.add_argument("--denoise_prob", type=float, help="B3 denoising corruption probability.")
     parser.add_argument("--experience_push_n", type=int, help="Push N end states per batch into experience buffer (0=disable).")
     parser.add_argument("--save_dir", help="Checkpoint directory.")
     parser.add_argument("--resume", type=int)

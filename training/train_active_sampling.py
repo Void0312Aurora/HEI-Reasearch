@@ -144,6 +144,57 @@ def _pretokenize_samples(
     return token_buf, mask_buf
 
 
+def _apply_denoise(
+    token_in: torch.Tensor,
+    *,
+    token_clean: torch.Tensor,
+    attention_mask: torch.Tensor,
+    mode: str,
+    prob: float,
+    vocab_size: int,
+    pad_id: int,
+    bos_id: int,
+    eos_id: int,
+    unk_id: int | None = None,
+) -> torch.Tensor:
+    mode = str(mode or "none").lower()
+    prob = float(prob or 0.0)
+    if (not math.isfinite(prob)) or prob <= 0.0 or mode == "none":
+        return token_in
+
+    if token_in.shape != token_clean.shape or token_in.shape != attention_mask.shape:
+        raise ValueError("denoise: token_in, token_clean, attention_mask must share the same shape.")
+
+    device = token_in.device
+    mask = attention_mask.to(dtype=torch.bool)
+
+    corr = (torch.rand(token_in.shape, device=device) < prob) & mask
+    # Keep BOS position stable (prefix anchor); do not corrupt special tokens.
+    if token_in.shape[1] > 0:
+        corr[:, 0] = False
+    corr = corr & (token_clean != pad_id) & (token_clean != bos_id) & (token_clean != eos_id)
+    if unk_id is not None:
+        corr = corr & (token_clean != int(unk_id))
+
+    if mode == "replace":
+        special_max = max(int(pad_id), int(bos_id), int(eos_id), int(unk_id) if unk_id is not None else 0)
+        low = special_max + 1
+        if low >= int(vocab_size):
+            low = 0
+        rand = torch.randint(low, int(vocab_size), token_in.shape, device=device, dtype=torch.long)
+        token_in = torch.where(corr, rand, token_in)
+        return token_in
+
+    if mode == "repeat":
+        prev = token_clean.clone()
+        if token_clean.shape[1] > 1:
+            prev[:, 1:] = token_clean[:, :-1]
+        token_in = torch.where(corr, prev, token_in)
+        return token_in
+
+    raise ValueError(f"Unknown denoise_mode: {mode}")
+
+
 def _maybe_init_entity_from_state_dict(entity: torch.nn.Module, ckpt_path: str) -> None:
     ckpt_path = str(ckpt_path or "").strip()
     if not ckpt_path:
@@ -264,6 +315,18 @@ def main():
         type=int,
         default=1,
         help="Protocol-5 hardening: penalize repeating any of the last K fed tokens (K=1 matches immediate-repeat).",
+    )
+    parser.add_argument(
+        "--denoise_mode",
+        default="none",
+        choices=["none", "replace", "repeat"],
+        help="B3 denoising: corrupt the fed token stream but predict clean targets (none/replace/repeat).",
+    )
+    parser.add_argument(
+        "--denoise_prob",
+        type=float,
+        default=0.0,
+        help="B3 denoising: corruption probability per non-pad token (0=disable).",
     )
     parser.add_argument("--router_balance_weight", type=float, default=0.0, help="encourage uniform chart usage (skills capacity)")
     parser.add_argument("--router_entropy_weight", type=float, default=0.0, help="penalize router entropy (encourage sparse chart selection)")
@@ -419,18 +482,29 @@ def main():
 
     # CUDA-graph policy (mirrors L4/L5 assumptions: fixed shapes + recurrent + pretokenized).
     # Allow bf16 autocast (no GradScaler) but keep fp16 GradScaler unsupported in graph mode.
-    if str(device).startswith("cuda") and (not use_scaler):
-        auto = (
-            args.port_arch == "minimal"
-            and args.sequence_mode == "recurrent"
-            and bool(args.pretokenize_samples)
-            and float(getattr(args, "scheduled_sampling_prob", 0.0) or 0.0) <= 0.0
-            and int(getattr(args, "experience_push_n", 0) or 0) == 0
-            and str(getattr(args, "offline_replay_mode", "none") or "none") == "none"
-        )
-        use_cuda_graph = bool(auto) if int(args.cuda_graph) == -1 else bool(int(args.cuda_graph))
+    graph_safe = (
+        str(device).startswith("cuda")
+        and (not use_scaler)
+        and args.port_arch == "minimal"
+        and args.sequence_mode == "recurrent"
+        and bool(args.pretokenize_samples)
+        # Graph capture cannot include RNG-dependent control flow (scheduled sampling).
+        and float(getattr(args, "scheduled_sampling_prob", 0.0) or 0.0) <= 0.0
+        # Experience push / replay sampling use randomness + dynamic buffers.
+        and int(getattr(args, "experience_push_n", 0) or 0) == 0
+        and str(getattr(args, "offline_replay_mode", "none") or "none") == "none"
+    )
+    if int(args.cuda_graph) == -1:
+        use_cuda_graph = bool(graph_safe)
     else:
-        use_cuda_graph = bool(int(args.cuda_graph)) if int(args.cuda_graph) >= 0 else False
+        requested = bool(int(args.cuda_graph))
+        if requested and (not graph_safe):
+            raise RuntimeError(
+                "CUDA graph is not supported with the current settings. "
+                "Disable graph-friendly blockers (scheduled sampling / experience push / offline replay) "
+                "or set --cuda_graph -1 to auto-disable."
+            )
+        use_cuda_graph = bool(requested)
 
     def _make_optimizer(params):
         opt_kwargs = {"lr": args.lr}
@@ -716,6 +790,7 @@ def main():
                 B = int(args.batch_size)
                 L = int(args.max_seq_len)
                 token_buf = torch.empty((B, L), device=device, dtype=torch.long)
+                target_buf = torch.empty((B, L), device=device, dtype=torch.long)
                 mask_buf = torch.empty((B, L), device=device, dtype=torch.long)
 
                 loss_buf = torch.zeros((), device=device, dtype=torch.float32)
@@ -771,6 +846,23 @@ def main():
                                 mask_batch = mask_cache.index_select(0, idx)
                                 token_buf.copy_(token_batch, non_blocking=True)
                                 mask_buf.copy_(mask_batch, non_blocking=True)
+
+                        target_buf.copy_(token_buf)
+                        if float(getattr(args, "denoise_prob", 0.0) or 0.0) > 0.0 and str(getattr(args, "denoise_mode", "none")) != "none":
+                            token_buf.copy_(
+                                _apply_denoise(
+                                    token_buf,
+                                    token_clean=target_buf,
+                                    attention_mask=mask_buf,
+                                    mode=str(args.denoise_mode),
+                                    prob=float(args.denoise_prob),
+                                    vocab_size=len(tokenizer),
+                                    pad_id=int(tokenizer.pad_id),
+                                    bos_id=int(tokenizer.bos_id),
+                                    eos_id=int(tokenizer.eos_id),
+                                    unk_id=int(getattr(tokenizer, "unk_id", -1)) if hasattr(tokenizer, "unk_id") else None,
+                                )
+                            )
                         return bucket_keys
 
                     # Fallback: this is slower; CUDA-graph mode expects pretokenized cache.
@@ -778,6 +870,22 @@ def main():
                     batch2 = build_batch(texts, tokenizer, args.max_seq_len)
                     token_buf.copy_(batch2["input_ids"].to(device=device, non_blocking=True))
                     mask_buf.copy_(batch2["attention_mask"].to(device=device, non_blocking=True))
+                    target_buf.copy_(token_buf)
+                    if float(getattr(args, "denoise_prob", 0.0) or 0.0) > 0.0 and str(getattr(args, "denoise_mode", "none")) != "none":
+                        token_buf.copy_(
+                            _apply_denoise(
+                                token_buf,
+                                token_clean=target_buf,
+                                attention_mask=mask_buf,
+                                mode=str(args.denoise_mode),
+                                prob=float(args.denoise_prob),
+                                vocab_size=len(tokenizer),
+                                pad_id=int(tokenizer.pad_id),
+                                bos_id=int(tokenizer.bos_id),
+                                eos_id=int(tokenizer.eos_id),
+                                unk_id=int(getattr(tokenizer, "unk_id", -1)) if hasattr(tokenizer, "unk_id") else None,
+                            )
+                        )
                     return bucket_keys
 
                 def fwd_bwd_step() -> None:
@@ -788,7 +896,7 @@ def main():
                         else contextlib.nullcontext()
                     )
                     with autocast_ctx:
-                        out = trainer.train_step({"input_ids": token_buf, "attention_mask": mask_buf})
+                        out = trainer.train_step({"input_ids": token_buf, "target_ids": target_buf, "attention_mask": mask_buf})
                         loss = out["loss"]
                     loss_buf.copy_(loss.detach().float())
                     F_on_buf.copy_(out["free_energy_online"].detach().float())
@@ -924,6 +1032,23 @@ def main():
 
                     target_device = torch.device(device)
                     batch = {k: (v if v.device == target_device else v.to(target_device, non_blocking=True)) for k, v in batch.items()}
+                    if float(getattr(args, "denoise_prob", 0.0) or 0.0) > 0.0 and str(getattr(args, "denoise_mode", "none")) != "none":
+                        clean = batch["input_ids"]
+                        token_in = clean.clone()
+                        token_in = _apply_denoise(
+                            token_in,
+                            token_clean=clean,
+                            attention_mask=batch["attention_mask"],
+                            mode=str(args.denoise_mode),
+                            prob=float(args.denoise_prob),
+                            vocab_size=len(tokenizer),
+                            pad_id=int(tokenizer.pad_id),
+                            bos_id=int(tokenizer.bos_id),
+                            eos_id=int(tokenizer.eos_id),
+                            unk_id=int(getattr(tokenizer, "unk_id", -1)) if hasattr(tokenizer, "unk_id") else None,
+                        )
+                        batch["target_ids"] = clean
+                        batch["input_ids"] = token_in
 
                     try:
                         autocast_ctx = (

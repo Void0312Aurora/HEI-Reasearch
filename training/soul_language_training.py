@@ -442,6 +442,7 @@ class SoulLanguageTrainer(nn.Module):
             raise RuntimeError("recurrent training currently requires port_arch='minimal'.")
 
         token_ids = batch['input_ids']
+        target_ids = batch.get("target_ids", token_ids)
         attention_mask = batch['attention_mask']
         batch_size, seq_len = token_ids.shape
         device = token_ids.device
@@ -566,7 +567,7 @@ class SoulLanguageTrainer(nn.Module):
                     mask_tgt = mask_f[:, t + 1]  # [B]
                     q = state_flat[:, :self.entity.dim_q]
                     logits = self.decode_logits_from_q(q)  # [B,V]
-                    targets = token_ids[:, t + 1]
+                    targets = target_ids[:, t + 1]
 
                     # Masked CE (padding targets are ignore_index; mask further guards non-pad count).
                     loss_vec = F.cross_entropy(
@@ -632,7 +633,7 @@ class SoulLanguageTrainer(nn.Module):
             else:
                 assert q_seq is not None
                 logits_seq = self.output_proj(q_seq)  # [B,L-1,V]
-            targets_seq = token_ids[:, 1:]  # [B,L-1]
+            targets_seq = target_ids[:, 1:]  # [B,L-1]
             mask_seq = mask_f[:, 1:]  # [B,L-1]
 
             flat_logits = logits_seq.reshape(-1, logits_seq.shape[-1])
@@ -654,20 +655,20 @@ class SoulLanguageTrainer(nn.Module):
 
                 # bad_tokens: [B,L-1,W], where W lists the previous tokens up to window size.
                 # Align with targets_seq (x_{t+1}) and mask_seq.
-                bad_tokens = torch.full(
-                    (batch_size, max(seq_len - 1, 0), ul_window_cfg),
-                    pad_token,
-                    dtype=torch.long,
-                    device=device,
-                )
+                bad_shape = (batch_size, max(seq_len - 1, 0), ul_window_cfg)
+                bad_tokens = getattr(self, "_ul_bad_tokens_buf", None)
+                if bad_tokens is None or tuple(bad_tokens.shape) != bad_shape or bad_tokens.device != device:
+                    bad_tokens = torch.empty(bad_shape, device=device, dtype=torch.long)
+                    self._ul_bad_tokens_buf = bad_tokens
+                bad_tokens.fill_(pad_token)
                 if seq_len > 1:
                     # offset=0 => x_t
-                    bad_tokens[:, :, 0] = token_ids[:, :-1]
+                    bad_tokens[:, :, 0].copy_(token_ids[:, :-1])
                     # offset=o => x_{t-o}
                     for o in range(1, ul_window_cfg):
                         if (seq_len - 1 - o) <= 0:
                             break
-                        bad_tokens[:, o:, o] = token_ids[:, : -(1 + o)]
+                        bad_tokens[:, o:, o].copy_(token_ids[:, : -(1 + o)])
 
                 logp = F.log_softmax(logits_seq, dim=-1)
                 logp_bad = logp.gather(dim=-1, index=bad_tokens)  # [B,L-1,W]
