@@ -236,7 +236,10 @@ def compute_loss(
     beta_kl: float,
     gamma_pred: float,
     cost_weight: float,
-) -> Tuple[torch.Tensor, Dict[str, float]]:
+    anti_lock_weight: float = 0.0,
+    anti_lock_sigma: float = 1.0,
+    revisit_penalty_per_sample: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
     V_ps = compute_v_term_per_sample(entity, state)  # [B]
     V_term = V_ps.mean()
     KL = 0.5 * (entity.z ** 2).sum() * float(beta_kl)
@@ -246,14 +249,31 @@ def compute_loss(
     if action_delta is not None:
         cost = float(cost_weight) * (action_delta.to(dtype=V_term.dtype) ** 2).mean()
 
-    F = V_term + KL + E_pred + cost
+    anti_lock = V_term.new_zeros(())
+    if action_delta is not None and float(anti_lock_weight) > 0.0:
+        sigma = max(float(anti_lock_sigma), 1e-6)
+        d = action_delta.to(dtype=V_term.dtype)
+        anti_lock = float(anti_lock_weight) * torch.exp(-0.5 * (d / sigma) ** 2).mean()
+
+    revisit = V_term.new_zeros(())
+    if revisit_penalty_per_sample is not None:
+        revisit = revisit_penalty_per_sample.to(dtype=V_term.dtype).mean()
+
+    F = V_term + KL + E_pred + cost + anti_lock + revisit
+    # Important: return tensors to avoid per-step GPU sync via `.item()`.
     return F, {
-        "V_term": float(V_term.detach().item()),
-        "KL": float(KL.detach().item()),
-        "E_pred": float(E_pred.detach().item()),
-        "cost": float(cost.detach().item()),
-        "F": float(F.detach().item()),
+        "V_term": V_term.detach(),
+        "KL": KL.detach(),
+        "E_pred": E_pred.detach(),
+        "cost": cost.detach(),
+        "anti_lock": anti_lock.detach(),
+        "revisit": revisit.detach(),
+        "F": F.detach(),
     }
+
+
+def _parts_to_float(parts: Dict[str, torch.Tensor]) -> Dict[str, float]:
+    return {k: float(v.detach().item()) for k, v in parts.items()}
 
 
 @torch.no_grad()
@@ -269,6 +289,11 @@ def choose_delta_one_step(
     gamma_pred: float,
     cost_weight: float,
     noise_std: float,
+    pointer_drift: float = 0.0,
+    anti_lock_weight: float = 0.0,
+    anti_lock_sigma: float = 1.0,
+    revisit_weight: float = 0.0,
+    recent_s: Optional[torch.Tensor] = None,  # [K,B] long (quantized pointer history)
 ) -> torch.Tensor:
     """
     One-step lookahead: pick delta that minimizes (V + gamma*E_pred + cost).
@@ -280,42 +305,78 @@ def choose_delta_one_step(
     if C <= 0:
         return torch.zeros_like(s)
 
-    # Evaluate each candidate independently; C is small by design (v0).
-    best_score = torch.full((B,), float("inf"), device=device, dtype=torch.float32)
-    best_delta = torch.zeros((B,), device=device, dtype=torch.float32)
+    # Vectorized candidate evaluation (reduces Python overhead & improves GPU utilization).
+    L = float(read_port.length - 1)
+    cand = candidates.to(device=device, dtype=torch.float32)  # [C]
+    s0 = s.to(dtype=torch.float32)  # [B]
+    s_new = (s0.unsqueeze(0) + float(pointer_drift) + cand.unsqueeze(1)).clamp(0.0, L)  # [C,B]
 
-    state_flat = entity.state.flat
+    y_flat = read_port.read(s_new.reshape(-1))  # [C*B,D]
+    D = int(y_flat.shape[1])
+    y = y_flat.view(C, B, D)
+
+    y_in = y
+    if noise_std > 0:
+        y_in = y + float(noise_std) * torch.randn_like(y)
+
+    state_flat = entity.state.flat  # [B,S]
+    state_rep = state_flat.unsqueeze(0).expand(C, B, -1).reshape(C * B, -1)
     prev_w = getattr(entity, "_prev_chart_weights", None)
+    prev_rep = None
+    if prev_w is not None:
+        prev_rep = prev_w.unsqueeze(0).expand(C, B, -1).reshape(C * B, -1)
 
-    for j in range(C):
-        d = candidates[j]
-        s_new = (s + d).clamp(0.0, float(read_port.length - 1))
-        y = read_port.read(s_new)
-        y_in = y
-        if noise_std > 0:
-            y_in = y + float(noise_std) * torch.randn_like(y)
+    out = entity.forward_tensor(
+        state_flat=state_rep,
+        u_dict={"default": y_in.reshape(C * B, D)},
+        dt=float(dt),
+        prev_chart_weights=prev_rep,
+        prediction_error=None,
+        detach_next_prev_weights=True,
+        compute_action=False,
+        skip_free_energy=True,
+    )
+    next_state = ContactState(entity.dim_q, C * B, entity.state.device, out["next_state_flat"])
+    y_hat = decoder(next_state.q).view(C, B, D)
+    pred_err = (y_hat - y).pow(2).mean(dim=2)  # [C,B]
 
-        out = entity.forward_tensor(
-            state_flat=state_flat,
-            u_dict={"default": y_in},
-            dt=float(dt),
-            prev_chart_weights=prev_w,
-            prediction_error=None,
-            detach_next_prev_weights=True,
-            skip_free_energy=True,
-        )
-        next_state = ContactState(entity.dim_q, B, entity.state.device, out["next_state_flat"])
-        y_hat = decoder(next_state.q)
-        pred_err_ps = (y_hat - y).pow(2).mean(dim=1)
+    V_ps = compute_v_term_per_sample(entity, next_state).view(C, B)  # [C,B]
+    score = V_ps + float(gamma_pred) * pred_err
+    score = score + float(cost_weight) * (cand.pow(2).unsqueeze(1))
 
-        V_ps = compute_v_term_per_sample(entity, next_state)
-        score = V_ps + float(gamma_pred) * pred_err_ps + float(cost_weight) * (d**2)
+    if float(anti_lock_weight) > 0.0:
+        sigma = max(float(anti_lock_sigma), 1e-6)
+        score = score + float(anti_lock_weight) * torch.exp(-0.5 * (cand / sigma).pow(2)).unsqueeze(1)
 
-        better = score < best_score
-        best_score = torch.where(better, score, best_score)
-        best_delta = torch.where(better, d.expand_as(best_delta), best_delta)
+    if float(revisit_weight) > 0.0 and recent_s is not None and int(recent_s.numel()) > 0:
+        s_new_round = s_new.round().to(dtype=torch.long)  # [C,B]
+        hit = (recent_s.unsqueeze(0) == s_new_round.unsqueeze(1)).any(dim=1).to(dtype=score.dtype)  # [C,B]
+        score = score + float(revisit_weight) * hit
 
-    return best_delta
+    best_idx = score.argmin(dim=0)  # [B]
+    return cand[best_idx]
+
+
+def _entity_forward_step_fast(
+    *,
+    entity,
+    u_dict: Dict[str, torch.Tensor],
+    dt: float,
+    skip_free_energy: bool = True,
+    compute_action: bool = False,
+) -> None:
+    out = entity.forward_tensor(
+        state_flat=entity.state.flat,
+        u_dict=u_dict,
+        dt=float(dt),
+        prev_chart_weights=getattr(entity, "_prev_chart_weights", None),
+        prediction_error=None,
+        detach_next_prev_weights=True,
+        compute_action=bool(compute_action),
+        skip_free_energy=bool(skip_free_energy),
+    )
+    entity.state = ContactState(entity.dim_q, entity.state.batch_size, entity.state.device, out["next_state_flat"])
+    entity._prev_chart_weights = out["next_prev_chart_weights"]
 
 
 def _binary_auc(scores: torch.Tensor, labels: torch.Tensor) -> float:
@@ -398,6 +459,11 @@ def run_online_steps(
     gamma_pred: float,
     cost_weight: float,
     noise_std: float,
+    pointer_drift: float,
+    anti_lock_weight: float,
+    anti_lock_sigma: float,
+    revisit_weight: float,
+    revisit_window: int,
     log_f,
     tag: str,
     log_every: int,
@@ -410,14 +476,26 @@ def run_online_steps(
     s = torch.rand(batch_size, device=device) * float(read_port.length - 1)
     cand = torch.tensor(list(candidates), device=device, dtype=torch.float32) * float(step_size)
 
-    pred_curve: List[float] = []
-    F_curve: List[float] = []
-    delta_curve: List[float] = []
-    last_parts: Dict[str, float] = {}
-    last_s_mean = float("nan")
-    last_s_std = float("nan")
-    last_pred_err = float("nan")
-    last_delta = float("nan")
+    entity.enter_online()
+
+    recent_s: Optional[torch.Tensor] = None
+    recent_len = 0
+    recent_ptr = 0
+    if float(revisit_weight) > 0.0 and int(revisit_window) > 0:
+        K = int(revisit_window)
+        recent_s = torch.full((K, batch_size), -1, device=device, dtype=torch.long)
+        recent_s[0] = s.detach().round().to(dtype=torch.long)
+        recent_len = 1
+        recent_ptr = 1 % K
+
+    pred_curve = torch.empty(int(steps), device=device, dtype=torch.float32)
+    F_curve = torch.empty(int(steps), device=device, dtype=torch.float32)
+    delta_curve = torch.empty(int(steps), device=device, dtype=torch.float32)
+    last_parts: Dict[str, torch.Tensor] = {}
+    last_s_mean = torch.tensor(float("nan"), device=device)
+    last_s_std = torch.tensor(float("nan"), device=device)
+    last_pred_err = torch.tensor(float("nan"), device=device)
+    last_delta = torch.tensor(float("nan"), device=device)
 
     for t in range(int(steps)):
         if mode == "passive":
@@ -434,19 +512,32 @@ def run_online_steps(
                 gamma_pred=gamma_pred,
                 cost_weight=cost_weight,
                 noise_std=noise_std,
+                pointer_drift=float(pointer_drift),
+                anti_lock_weight=float(anti_lock_weight),
+                anti_lock_sigma=float(anti_lock_sigma),
+                revisit_weight=float(revisit_weight),
+                recent_s=(recent_s[:recent_len] if recent_s is not None and recent_len > 0 else None),
             )
         else:
             raise ValueError(f"unknown mode: {mode}")
 
-        s = (s + delta).clamp(0.0, float(read_port.length - 1))
+        s_new = (s + float(pointer_drift) + delta).clamp(0.0, float(read_port.length - 1))
+        revisit_penalty_ps: Optional[torch.Tensor] = None
+        if float(revisit_weight) > 0.0 and recent_s is not None and recent_len > 0:
+            s_new_round = s_new.detach().round().to(dtype=torch.long)
+            hit = (recent_s[:recent_len] == s_new_round.unsqueeze(0)).any(dim=0).to(dtype=s_new.dtype)
+            revisit_penalty_ps = float(revisit_weight) * hit
+            # push new pointer into ring buffer
+            recent_s[recent_ptr] = s_new_round
+            recent_ptr = (recent_ptr + 1) % int(recent_s.shape[0])
+            recent_len = min(recent_len + 1, int(recent_s.shape[0]))
+        s = s_new
         y = read_port.read(s)
         y_in = y
         if noise_std > 0:
             y_in = y + float(noise_std) * torch.randn_like(y)
 
-        entity.phase = getattr(entity, "phase", None)  # no-op, explicit for readability
-        entity.enter_online()
-        entity.step({"default": y_in}, dt=float(dt))
+        _entity_forward_step_fast(entity=entity, u_dict={"default": y_in}, dt=float(dt))
 
         # Reconstruction (same-step)
         y_hat = decoder(entity.state.q)
@@ -460,6 +551,9 @@ def run_online_steps(
             beta_kl=beta_kl,
             gamma_pred=gamma_pred,
             cost_weight=cost_weight,
+            anti_lock_weight=float(anti_lock_weight),
+            anti_lock_sigma=float(anti_lock_sigma),
+            revisit_penalty_per_sample=revisit_penalty_ps,
         )
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
@@ -469,17 +563,18 @@ def run_online_steps(
         # Truncate BPTT: detach state
         entity.state = ContactState(entity.dim_q, batch_size, device, entity.state.flat.detach())
 
-        pred_mean = float(pred_err_ps.detach().mean().item())
-        last_pred_err = pred_mean
-        pred_curve.append(pred_mean)
-        F_curve.append(parts["F"])
-        delta_curve.append(float(delta.detach().mean().item()))
+        pred_mean = pred_err_ps.detach().mean().to(dtype=torch.float32)
+        pred_curve[int(t)] = pred_mean
+        F_curve[int(t)] = loss.detach().to(dtype=torch.float32)
+        delta_curve[int(t)] = delta.detach().mean().to(dtype=torch.float32)
         last_parts = parts
-        last_s_mean = float(s.detach().mean().item())
-        last_s_std = float(s.detach().std().item())
-        last_delta = float(delta.detach().mean().item())
+        last_s_mean = s.detach().mean()
+        last_s_std = s.detach().std()
+        last_pred_err = pred_mean
+        last_delta = delta.detach().mean()
 
         if log_f is not None and (int(log_every) > 0) and (t % int(log_every) == 0 or t == int(steps) - 1):
+            parts_f = _parts_to_float(parts)
             rec = {
                 "tag": tag,
                 "phase": "online",
@@ -488,22 +583,26 @@ def run_online_steps(
                 "s_mean": float(s.detach().mean().item()),
                 "s_std": float(s.detach().std().item()),
                 "delta_mean": float(delta.detach().mean().item()),
-                "pred_err": pred_mean,
-                **parts,
+                "pred_err": float(pred_mean.detach().item()),
+                "pointer_drift": float(pointer_drift),
+                **parts_f,
             }
             log_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-    return {
-        "pred_err": pred_curve,
-        "F": F_curve,
-        "delta": delta_curve,
+    curves = {
+        "pred_err": pred_curve.detach().cpu().tolist(),
+        "F": F_curve.detach().cpu().tolist(),
+        "delta": delta_curve.detach().cpu().tolist(),
         "final": {
-            "s_mean": last_s_mean,
-            "s_std": last_s_std,
-            "delta_mean": last_delta,
-            "pred_err": last_pred_err,
-            **last_parts,
+            "s_mean": float(last_s_mean.detach().cpu().item()),
+            "s_std": float(last_s_std.detach().cpu().item()),
+            "delta_mean": float(last_delta.detach().cpu().item()),
+            "pred_err": float(last_pred_err.detach().cpu().item()),
+            **_parts_to_float(last_parts),
         },
+    }
+    return {
+        **curves,
     }
 
 
@@ -525,6 +624,11 @@ def run_fixed_rhythm_episodes(
     gamma_pred: float,
     cost_weight: float,
     noise_std: float,
+    pointer_drift: float,
+    anti_lock_weight: float,
+    anti_lock_sigma: float,
+    revisit_weight: float,
+    revisit_window: int,
     replay_mode: str,
     log_f,
     label: int,
@@ -556,9 +660,21 @@ def run_fixed_rhythm_episodes(
         reset_experience(entity)
         # Fresh pointer per episode, away from edges
         s = torch.rand(batch_size, device=device) * float(read_port.length - 1)
-        s_hist: List[torch.Tensor] = []
+        # Keep only the last `tail_window` pointer positions on-device; copy once per episode.
+        s_tail = torch.empty((tail_window, batch_size), device=device, dtype=torch.long)
+
+        recent_s: Optional[torch.Tensor] = None
+        recent_len = 0
+        recent_ptr = 0
+        if float(revisit_weight) > 0.0 and int(revisit_window) > 0:
+            K = int(revisit_window)
+            recent_s = torch.full((K, batch_size), -1, device=device, dtype=torch.long)
+            recent_s[0] = s.detach().round().to(dtype=torch.long)
+            recent_len = 1
+            recent_ptr = 1 % K
 
         # Online
+        entity.enter_online()
         for t in range(int(online_steps)):
             delta = choose_delta_one_step(
                 entity=entity,
@@ -571,17 +687,32 @@ def run_fixed_rhythm_episodes(
                 gamma_pred=gamma_pred,
                 cost_weight=cost_weight,
                 noise_std=noise_std,
+                pointer_drift=float(pointer_drift),
+                anti_lock_weight=float(anti_lock_weight),
+                anti_lock_sigma=float(anti_lock_sigma),
+                revisit_weight=float(revisit_weight),
+                recent_s=(recent_s[:recent_len] if recent_s is not None and recent_len > 0 else None),
             )
-            s = (s + delta).clamp(0.0, float(read_port.length - 1))
-            s_hist.append(s.detach().round().to(torch.long).cpu())
+            s_new = (s + float(pointer_drift) + delta).clamp(0.0, float(read_port.length - 1))
+            revisit_penalty_ps: Optional[torch.Tensor] = None
+            if float(revisit_weight) > 0.0 and recent_s is not None and recent_len > 0:
+                s_new_round = s_new.detach().round().to(dtype=torch.long)
+                hit = (recent_s[:recent_len] == s_new_round.unsqueeze(0)).any(dim=0).to(dtype=s_new.dtype)
+                revisit_penalty_ps = float(revisit_weight) * hit
+                recent_s[recent_ptr] = s_new_round
+                recent_ptr = (recent_ptr + 1) % int(recent_s.shape[0])
+                recent_len = min(recent_len + 1, int(recent_s.shape[0]))
+            s = s_new
+            s_tail[int(t) % int(tail_window)] = s.detach().round().to(dtype=torch.long)
 
             y = read_port.read(s)
             y_in = y
             if noise_std > 0:
                 y_in = y + float(noise_std) * torch.randn_like(y)
 
-            entity.enter_online()
-            entity.step({"default": y_in}, dt=float(dt))
+            _entity_forward_step_fast(entity=entity, u_dict={"default": y_in}, dt=float(dt))
+            # Fill experience buffer for offline replay conditioning (reward is a dummy scalar in this verifier).
+            entity.experience.push(y_in, None, entity.state.flat, 0.0)
 
             y_hat = decoder(entity.state.q)
             pred_err_ps = (y_hat - y).pow(2).mean(dim=1)
@@ -593,6 +724,9 @@ def run_fixed_rhythm_episodes(
                 beta_kl=beta_kl,
                 gamma_pred=gamma_pred,
                 cost_weight=cost_weight,
+                anti_lock_weight=float(anti_lock_weight),
+                anti_lock_sigma=float(anti_lock_sigma),
+                revisit_penalty_per_sample=revisit_penalty_ps,
             )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -601,6 +735,7 @@ def run_fixed_rhythm_episodes(
             entity.state = ContactState(entity.dim_q, batch_size, device, entity.state.flat.detach())
 
             if log_f is not None and (int(log_every) > 0) and (t % int(log_every) == 0 or t == online_steps - 1):
+                parts_f = _parts_to_float(parts)
                 rec = {
                     "tag": tag,
                     "episode": int(ep),
@@ -610,17 +745,20 @@ def run_fixed_rhythm_episodes(
                     "s_mean": float(s.detach().mean().item()),
                     "delta_mean": float(delta.detach().mean().item()),
                     "pred_err": float(pred_err_ps.detach().mean().item()),
-                    **parts,
+                    "pointer_drift": float(pointer_drift),
+                    **parts_f,
                 }
                 log_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
         # E2: detect short cycles in pointer tail (per sample)
-        if s_hist:
-            seq = torch.stack(s_hist, dim=0)  # [T,B]
-            T = int(seq.shape[0])
-            tail = seq[max(0, T - tail_window) :].tolist()  # List[Tail][B]
+        T = int(online_steps)
+        W = min(int(tail_window), max(0, T))
+        if W > 0:
+            start = int(T - W)
+            idx = [(start + k) % int(tail_window) for k in range(W)]
+            tail = s_tail[idx].detach().cpu().tolist()  # List[W][B]
             for b in range(batch_size):
-                tokens = [int(tail[k][b]) for k in range(len(tail))]
+                tokens = [int(tail[k][b]) for k in range(W)]
                 cycle_total += 1
                 if _detect_tail_cycle(tokens, max_period=max_period, min_repeats=min_repeats) is not None:
                     cycle_hits += 1
@@ -628,22 +766,37 @@ def run_fixed_rhythm_episodes(
         # Offline (freeze env)
         entity.enter_offline()
         offline_q: List[torch.Tensor] = []
-        for t in range(int(offline_steps)):
-            entity.offline_step(dt=float(dt), replay_mode=replay_mode)
-            offline_q.append(entity.state.q.detach().cpu())
-            if log_f is not None and (int(log_every) > 0) and (t % int(log_every) == 0 or t == offline_steps - 1):
-                rec = {
-                    "tag": tag,
-                    "episode": int(ep),
-                    "label": int(label),
-                    "phase": "offline",
-                    "t": int(t),
-                    "q_norm": float(entity.state.q.detach().norm(dim=1).mean().item()),
-                    "p_norm": float(entity.state.p.detach().norm(dim=1).mean().item()),
-                }
-                log_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        # Offline is not trained in this verifier; avoid building autograd graphs.
+        with torch.no_grad():
+            for t in range(int(offline_steps)):
+                u_off: Dict[str, torch.Tensor] = {}
+                exp = getattr(entity, "experience", None)
+                exp_size = int(getattr(exp, "size", 0) or 0) if exp is not None else 0
+                if replay_mode != "none" and exp is not None and exp_size > 0:
+                    replay = exp.sample_replay(batch_size, mode=replay_mode)
+                    if replay is not None:
+                        replay_state = replay["states"].to(device)
+                        if replay_state.shape[0] < batch_size:
+                            pad = replay_state[0:1].expand(batch_size - replay_state.shape[0], -1)
+                            replay_state = torch.cat([replay_state, pad], dim=0)
+                        replay_q = replay_state[:, : entity.dim_q]
+                        u_off["replay"] = 0.1 * (replay_q - entity.state.q)
 
-        q_mean = torch.stack(offline_q, dim=0).mean(dim=0) if offline_q else entity.state.q.detach().cpu()
+                _entity_forward_step_fast(entity=entity, u_dict=u_off, dt=float(dt))
+                offline_q.append(entity.state.q.detach())
+                if log_f is not None and (int(log_every) > 0) and (t % int(log_every) == 0 or t == offline_steps - 1):
+                    rec = {
+                        "tag": tag,
+                        "episode": int(ep),
+                        "label": int(label),
+                        "phase": "offline",
+                        "t": int(t),
+                        "q_norm": float(entity.state.q.detach().norm(dim=1).mean().item()),
+                        "p_norm": float(entity.state.p.detach().norm(dim=1).mean().item()),
+                    }
+                    log_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+        q_mean = torch.stack(offline_q, dim=0).mean(dim=0).detach().cpu() if offline_q else entity.state.q.detach().cpu()
         all_feats.append(q_mean)
         all_labels.append(torch.full((batch_size,), int(label), dtype=torch.long))
 
@@ -704,6 +857,13 @@ def main() -> None:
     parser.add_argument("--step_size", type=float, default=1.0)
     parser.add_argument("--candidates", type=str, default="-2,-1,0,1,2")
 
+    # v0.1: anti dark-room (still within a single scalar F; optional, default off for v0 reproducibility)
+    parser.add_argument("--pointer_drift", type=float, default=0.0)
+    parser.add_argument("--anti_lock_weight", type=float, default=0.0)
+    parser.add_argument("--anti_lock_sigma", type=float, default=1.0)
+    parser.add_argument("--revisit_weight", type=float, default=0.0)
+    parser.add_argument("--revisit_window", type=int, default=0)
+
     parser.add_argument("--e0_steps", type=int, default=200)
     parser.add_argument("--episodes_per_class", type=int, default=8)
     parser.add_argument("--online_steps", type=int, default=80)
@@ -748,6 +908,11 @@ def main() -> None:
         "sigma": float(args.sigma),
         "step_size": float(args.step_size),
         "candidates": args.candidates,
+        "pointer_drift": float(args.pointer_drift),
+        "anti_lock_weight": float(args.anti_lock_weight),
+        "anti_lock_sigma": float(args.anti_lock_sigma),
+        "revisit_weight": float(args.revisit_weight),
+        "revisit_window": int(args.revisit_window),
         "e0_steps": int(args.e0_steps),
         "episodes_per_class": int(args.episodes_per_class),
         "online_steps": int(args.online_steps),
@@ -824,6 +989,11 @@ def main() -> None:
                     gamma_pred=float(args.gamma_pred),
                     cost_weight=float(args.cost_weight),
                     noise_std=float(args.noise_std),
+                    pointer_drift=float(args.pointer_drift),
+                    anti_lock_weight=float(args.anti_lock_weight),
+                    anti_lock_sigma=float(args.anti_lock_sigma),
+                    revisit_weight=float(args.revisit_weight),
+                    revisit_window=int(args.revisit_window),
                     log_f=log_f,
                     tag=f"e0_{mode}",
                     log_every=int(args.log_every),
@@ -836,6 +1006,8 @@ def main() -> None:
                     "V_term_final": float(curves.get("final", {}).get("V_term", float("nan"))),
                     "E_pred_final": float(curves.get("final", {}).get("E_pred", float("nan"))),
                     "cost_final": float(curves.get("final", {}).get("cost", float("nan"))),
+                    "anti_lock_final": float(curves.get("final", {}).get("anti_lock", float("nan"))),
+                    "revisit_final": float(curves.get("final", {}).get("revisit", float("nan"))),
                 }
                 with open(os.path.join(save_dir, f"e0_{mode}_curves.json"), "w", encoding="utf-8") as f:
                     json.dump(curves, f, ensure_ascii=False)
@@ -868,6 +1040,11 @@ def main() -> None:
                 gamma_pred=float(args.gamma_pred),
                 cost_weight=float(args.cost_weight),
                 noise_std=float(args.noise_std),
+                pointer_drift=float(args.pointer_drift),
+                anti_lock_weight=float(args.anti_lock_weight),
+                anti_lock_sigma=float(args.anti_lock_sigma),
+                revisit_weight=float(args.revisit_weight),
+                revisit_window=int(args.revisit_window),
                 replay_mode=str(args.replay_mode),
                 log_f=log_f,
                 label=0,
@@ -891,6 +1068,11 @@ def main() -> None:
                 gamma_pred=float(args.gamma_pred),
                 cost_weight=float(args.cost_weight),
                 noise_std=float(args.noise_std),
+                pointer_drift=float(args.pointer_drift),
+                anti_lock_weight=float(args.anti_lock_weight),
+                anti_lock_sigma=float(args.anti_lock_sigma),
+                revisit_weight=float(args.revisit_weight),
+                revisit_window=int(args.revisit_window),
                 replay_mode=str(args.replay_mode),
                 log_f=log_f,
                 label=1,
@@ -935,6 +1117,10 @@ def main() -> None:
         f.write(f"- Vocab size: `{int(args.vocab_size)}`\n")
         f.write(f"- dim_q/dim_u: `{int(args.dim_q)}`\n")
         f.write(f"- Kernel: `{cfg['kernel'] if 'kernel' in cfg else 'gaussian_trunc_renorm'}` (σ={float(args.sigma)})\n")
+        f.write(
+            f"- v0.1 options: drift={float(args.pointer_drift)} anti_lock={float(args.anti_lock_weight)} "
+            f"(σ={float(args.anti_lock_sigma)}) revisit={float(args.revisit_weight)} (win={int(args.revisit_window)})\n"
+        )
         f.write(f"- Online/Offline: `{int(args.online_steps)}` / `{int(args.offline_steps)}` (fixed rhythm)\n")
         f.write("\n## Outputs\n")
         f.write(f"- `run_config.json`\n- `log.jsonl`\n- `summary.json`\n\n")
