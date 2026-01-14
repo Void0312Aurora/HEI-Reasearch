@@ -703,17 +703,33 @@ class SoulEntity(nn.Module):
     #    A3: z更新机制
     # ========================
     
-    def update_z(self, prediction_error: torch.Tensor, lr_z: float = 0.01):
+    def update_z(self, prediction_error: torch.Tensor, lr_z: float = 0.01, state: Optional[ContactState] = None):
         """
         更新自主上下文z
         
         z代表实体的"意图/偏好"，通过最小化预测误差来适应
         """
         z_val = self.z.detach().clone().requires_grad_(True)
-        
-        KL = 0.5 * (z_val ** 2).sum()
-        F = KL + prediction_error.mean()
-        
+
+        beta_kl = float(self.config.get("beta_kl", 0.01))
+        gamma_pred = float(self.config.get("gamma_pred", 1.0))
+
+        KL = 0.5 * (z_val ** 2).sum() * beta_kl
+        F = KL + gamma_pred * prediction_error.mean()
+
+        # Align with A3 semantics: include viability term V(q,z) when state is available.
+        if state is None:
+            state = self.state
+        if state is not None:
+            q = state.q.detach()
+            z_batch = z_val.expand(q.shape[0], -1)
+            V_inp = torch.cat([q, z_batch], dim=1)
+            V = self.net_V(V_inp)
+            stiffness = getattr(self.internal_gen, "stiffness", 0.0)
+            if stiffness > 0:
+                V = V + 0.5 * stiffness * (q ** 2).sum(dim=1, keepdim=True)
+            F = F + V.mean()
+
         grad_z = torch.autograd.grad(F, z_val, create_graph=False)[0]
         
         with torch.no_grad():

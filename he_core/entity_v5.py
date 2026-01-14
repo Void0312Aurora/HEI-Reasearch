@@ -276,7 +276,7 @@ class UnifiedGeometricEntityV5(nn.Module):
             return self.generator.get_action(s, port_name, weights=chart_weights)
         return torch.zeros(batch_size, self.dim_u, device=state_flat.device)
 
-    def update_z(self, prediction_error: torch.Tensor, lr_z: float = 0.01):
+    def update_z(self, prediction_error: torch.Tensor, lr_z: float = 0.01, state: Optional[ContactState] = None):
         """
         L3: Update autonomous context z via gradient descent on F.
         This is the "Autonomous Will" - z adapts to minimize prediction error.
@@ -286,10 +286,24 @@ class UnifiedGeometricEntityV5(nn.Module):
         # Make z require grad for this computation
         z_val = self.z.detach().clone().requires_grad_(True)
         
-        # Compute F using temporary z value
-        # F = KL(z) + prediction_error
-        KL = 0.5 * (z_val ** 2).sum()
-        F = KL + prediction_error.mean()
+        beta_kl = float(self.config.get("beta_kl", 0.01))
+        gamma_pred = float(self.config.get("gamma_pred", 1.0))
+
+        # Compute F using temporary z value (A3-aligned)
+        KL = 0.5 * (z_val ** 2).sum() * beta_kl
+        F = KL + gamma_pred * prediction_error.mean()
+
+        if state is None:
+            state = self.state
+        if state is not None:
+            q = state.q.detach()
+            z_batch = z_val.expand(q.shape[0], -1)
+            inp = torch.cat([q, z_batch], dim=1)
+            V = self.net_V(inp)
+            stiffness = getattr(self.internal_gen, "stiffness", 0.0)
+            if stiffness > 0:
+                V = V + 0.5 * stiffness * (q ** 2).sum(dim=1, keepdim=True)
+            F = F + V.mean()
         
         # Compute gradient
         grad_z = torch.autograd.grad(F, z_val, create_graph=False)[0]
