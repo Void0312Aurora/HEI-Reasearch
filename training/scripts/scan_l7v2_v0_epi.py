@@ -107,6 +107,19 @@ def main() -> None:
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--save_root", default="checkpoints/l7v2_v0p4_jace_scan")
     ap.add_argument("--timeout_s", type=int, default=3600)
+    ap.add_argument(
+        "--expected_direction",
+        type=str,
+        default="any",
+        choices=["gt", "lt", "any"],
+        help="Sign-controllability rule using w_pos/w_neg: gt -> proxy_pos>proxy_neg; lt -> proxy_pos<proxy_neg; any -> |delta|>=min_delta.",
+    )
+    ap.add_argument(
+        "--min_delta_proxy",
+        type=float,
+        default=0.0,
+        help="Minimum |proxy_pos-proxy_neg| to count as controllable (helps avoid noise-edge cases).",
+    )
 
     # Grid
     ap.add_argument("--seeds", type=str, default="0,1,2")
@@ -134,7 +147,7 @@ def main() -> None:
     ap.add_argument("--step_size", type=float, default=1.0)
     ap.add_argument("--candidates", type=str, default="1,2")
     ap.add_argument("--pointer_drift", type=float, default=0.3)
-    ap.add_argument("--pointer_bounds", type=str, default="clamp", choices=["clamp", "reflect"])
+    ap.add_argument("--pointer_bounds", type=str, default="clamp", choices=["clamp", "reflect", "wrap"])
     ap.add_argument("--lookahead_steps", type=int, default=1)
     ap.add_argument("--lookahead_discount", type=float, default=0.9)
     ap.add_argument("--cover_weight", type=float, default=0.02)
@@ -306,35 +319,121 @@ def main() -> None:
             "eps_values": eps_values,
             "pred_floors": pred_floors,
             "run_full": bool(run_e1e2),
+            "expected_direction": str(args.expected_direction),
+            "min_delta_proxy": float(args.min_delta_proxy),
         },
         "groups": [],
+        "summary_by_eps_floor": [],
     }
 
     by_group: Dict[Tuple[int, float, float], List[FlatResult]] = {}
     for fr in flat:
         by_group.setdefault(fr.key_group(), []).append(fr)
 
+    expected = str(args.expected_direction).strip().lower()
+    min_delta = float(args.min_delta_proxy)
+    if not _isfinite(min_delta) or min_delta < 0.0:
+        min_delta = 0.0
+
+    def _pick_pair(rs: List[FlatResult]) -> Tuple[Optional[FlatResult], Optional[FlatResult]]:
+        neg = [r for r in rs if float(r.epi_weight) < 0.0]
+        pos = [r for r in rs if float(r.epi_weight) > 0.0]
+        r_neg = max(neg, key=lambda r: float(r.epi_weight)) if neg else None  # closest to 0
+        r_pos = min(pos, key=lambda r: float(r.epi_weight)) if pos else None  # closest to 0
+        if r_neg is None or r_pos is None:
+            # Fallback: use global min/max weights.
+            w_min = min(r.epi_weight for r in rs)
+            w_max = max(r.epi_weight for r in rs)
+            r_neg = next((r for r in rs if r.epi_weight == w_min), None)
+            r_pos = next((r for r in rs if r.epi_weight == w_max), None)
+        return r_neg, r_pos
+
+    def _direction(delta: float) -> str:
+        if not _isfinite(delta):
+            return "nan"
+        if delta > min_delta:
+            return "pos_gt_neg"
+        if delta < -min_delta:
+            return "pos_lt_neg"
+        return "close"
+
+    def _ok_from_dir(dir_s: str) -> bool:
+        if expected == "gt":
+            return dir_s == "pos_gt_neg"
+        if expected == "lt":
+            return dir_s == "pos_lt_neg"
+        if expected == "any":
+            return dir_s in ("pos_gt_neg", "pos_lt_neg")
+        return False
+
     for (seed, eps, floor), runs in sorted(by_group.items(), key=lambda x: x[0]):
         runs = sorted(runs, key=lambda r: float(r.epi_weight))
-        # Find min/max weights (for typical +/- grids).
-        w_min = min(r.epi_weight for r in runs)
-        w_max = max(r.epi_weight for r in runs)
-        r_min = next((r for r in runs if r.epi_weight == w_min), None)
-        r_max = next((r for r in runs if r.epi_weight == w_max), None)
-        proxy_min = float(r_min.e0_active().get("epi_proxy_final", float("nan"))) if r_min else float("nan")
-        proxy_max = float(r_max.e0_active().get("epi_proxy_final", float("nan"))) if r_max else float("nan")
-        ok = _isfinite(proxy_min) and _isfinite(proxy_max) and (proxy_max > proxy_min)
+        r_neg, r_pos = _pick_pair(runs)
+
+        w_neg = float(r_neg.epi_weight) if r_neg else float("nan")
+        w_pos = float(r_pos.epi_weight) if r_pos else float("nan")
+
+        e0_neg = r_neg.e0_active() if r_neg else {}
+        e0_pos = r_pos.e0_active() if r_pos else {}
+
+        proxy_neg = float(e0_neg.get("epi_proxy_final", float("nan")))
+        proxy_pos = float(e0_pos.get("epi_proxy_final", float("nan")))
+        delta_proxy = (proxy_pos - proxy_neg) if (_isfinite(proxy_neg) and _isfinite(proxy_pos)) else float("nan")
+        dir_s = _direction(delta_proxy)
+        ok = _ok_from_dir(dir_s)
+
+        def _flt(d: Dict[str, Any], k: str) -> float:
+            try:
+                return float(d.get(k, float("nan")))
+            except Exception:
+                return float("nan")
+
         group["groups"].append(
             {
                 "seed": int(seed),
                 "epi_obs_eps": float(eps),
                 "epi_pred_floor": float(floor),
-                "w_min": float(w_min),
-                "w_max": float(w_max),
-                "epi_proxy_min": proxy_min,
-                "epi_proxy_max": proxy_max,
-                "delta_proxy": (proxy_max - proxy_min) if (_isfinite(proxy_min) and _isfinite(proxy_max)) else float("nan"),
+                "w_neg": w_neg,
+                "w_pos": w_pos,
+                "epi_proxy_neg": proxy_neg,
+                "epi_proxy_pos": proxy_pos,
+                "delta_proxy_pos_minus_neg": delta_proxy,
+                "abs_delta_proxy": abs(delta_proxy) if _isfinite(delta_proxy) else float("nan"),
+                "direction": dir_s,
+                "expected_direction": expected,
+                "min_delta_proxy": min_delta,
                 "sign_controllable": bool(ok),
+                "delta_mean_neg": _flt(e0_neg, "delta_mean_final"),
+                "delta_mean_pos": _flt(e0_pos, "delta_mean_final"),
+                "V_term_neg": _flt(e0_neg, "V_term_final"),
+                "V_term_pos": _flt(e0_pos, "V_term_final"),
+                "pred_err_neg": _flt(e0_neg, "pred_err_final"),
+                "pred_err_pos": _flt(e0_pos, "pred_err_final"),
+            }
+        )
+
+    # Higher-level summary by (eps, pred_floor), aggregating over seeds.
+    by_eps_floor: Dict[Tuple[float, float], List[Dict[str, Any]]] = {}
+    for g in group["groups"]:
+        by_eps_floor.setdefault((float(g["epi_obs_eps"]), float(g["epi_pred_floor"])), []).append(g)
+    for (eps, floor), gs in sorted(by_eps_floor.items(), key=lambda x: x[0]):
+        n = len(gs)
+        n_ok = sum(1 for g in gs if bool(g.get("sign_controllable")))
+        dirs = [str(g.get("direction")) for g in gs]
+        n_gt = sum(1 for d in dirs if d == "pos_gt_neg")
+        n_lt = sum(1 for d in dirs if d == "pos_lt_neg")
+        n_close = sum(1 for d in dirs if d == "close")
+        abs_deltas = [float(g["abs_delta_proxy"]) for g in gs if _isfinite(float(g.get("abs_delta_proxy", float("nan"))))]
+        group["summary_by_eps_floor"].append(
+            {
+                "epi_obs_eps": float(eps),
+                "epi_pred_floor": float(floor),
+                "n_groups": int(n),
+                "n_ok": int(n_ok),
+                "n_pos_gt_neg": int(n_gt),
+                "n_pos_lt_neg": int(n_lt),
+                "n_close": int(n_close),
+                "mean_abs_delta_proxy": float(sum(abs_deltas) / len(abs_deltas)) if abs_deltas else float("nan"),
             }
         )
 
@@ -346,4 +445,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

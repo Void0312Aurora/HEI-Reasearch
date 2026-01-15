@@ -130,7 +130,7 @@ def main() -> None:
     ap.add_argument("--candidates", type=str, default="1,2")
 
     ap.add_argument("--pointer_drift", type=float, default=0.3)
-    ap.add_argument("--pointer_bounds", type=str, default="clamp", choices=["clamp", "reflect"])
+    ap.add_argument("--pointer_bounds", type=str, default="clamp", choices=["clamp", "reflect", "wrap"])
     ap.add_argument("--anti_lock_weight", type=float, default=0.0)
     ap.add_argument("--anti_lock_sigma", type=float, default=0.5)
     ap.add_argument("--revisit_weight", type=float, default=0.0)

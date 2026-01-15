@@ -319,6 +319,10 @@ def _apply_pointer_bounds(s: torch.Tensor, *, max_s: float, mode: str) -> torch.
         period = max_t * 2.0
         x = torch.remainder(s, period)
         return torch.where(x <= max_t, x, period - x)
+    if m == "wrap":
+        # Ring pointer: wrap into [0, max_s] (period is max_s+1 because bounds are inclusive).
+        period = s.new_tensor(max_s + 1.0)
+        return torch.remainder(s, period)
     raise ValueError(f"unknown pointer_bounds mode: {mode}")
 
 
@@ -1508,6 +1512,1543 @@ def _detect_tail_cycle(tokens: Sequence[int], *, max_period: int, min_repeats: i
     return None
 
 
+def _pick_vocab_token_id(vocab: CharVocab, candidates: Sequence[str]) -> Optional[int]:
+    for tok in candidates:
+        idx = vocab.token_to_id.get(str(tok))
+        if idx is None:
+            continue
+        idx_i = int(idx)
+        if idx_i in (vocab.pad_id, vocab.unk_id):
+            continue
+        return idx_i
+    return None
+
+
+def _pick_e3_markers(vocab: CharVocab) -> Tuple[int, int, str, str]:
+    """
+    Pick two distinct marker token ids for E3 that are likely to exist in the vocabulary.
+    Falls back to the first available non-special tokens.
+    """
+    a_pref = ["A", "甲", "①", "Ⅰ", "一", "0", "◇", "□", "◎", "※"]
+    b_pref = ["B", "乙", "②", "Ⅱ", "二", "1", "◆", "■", "●", "※"]
+    a_id = _pick_vocab_token_id(vocab, a_pref)
+    b_id = _pick_vocab_token_id(vocab, b_pref)
+    if a_id is not None and b_id is not None and a_id != b_id:
+        return a_id, b_id, str(vocab.id_to_token[a_id]), str(vocab.id_to_token[b_id])
+
+    # Fallback: first two non-special ids.
+    ids = [i for i in range(len(vocab.id_to_token)) if i not in (vocab.pad_id, vocab.unk_id)]
+    if len(ids) < 2:
+        raise RuntimeError("vocab too small for E3 markers")
+    a_id = int(ids[0] if a_id is None else a_id)
+    b_id = int(ids[1] if b_id is None or b_id == a_id else b_id)
+    if a_id == b_id:
+        b_id = int(ids[1])
+    return a_id, b_id, str(vocab.id_to_token[a_id]), str(vocab.id_to_token[b_id])
+
+
+def _pick_e3_kv_keys(vocab: CharVocab, *, exclude_ids: Sequence[int]) -> Tuple[int, int, str, str]:
+    """
+    Pick two distinct token ids to act as keys in E3+ (key-value binding).
+    """
+    exclude = {int(vocab.pad_id), int(vocab.unk_id)}
+    exclude.update(int(x) for x in exclude_ids)
+    k1_pref = ["K", "键", "Ⓚ", "κ", "甲", "X", "☆", "○", "◇", "□"]
+    k2_pref = ["Q", "钥", "Ⓠ", "η", "乙", "Y", "★", "●", "◆", "■"]
+    k1 = _pick_vocab_token_id(vocab, k1_pref)
+    k2 = _pick_vocab_token_id(vocab, k2_pref)
+    if k1 is not None and int(k1) in exclude:
+        k1 = None
+    if k2 is not None and int(k2) in exclude:
+        k2 = None
+    if k1 is not None and k2 is not None and int(k1) != int(k2):
+        return int(k1), int(k2), str(vocab.id_to_token[int(k1)]), str(vocab.id_to_token[int(k2)])
+
+    # Fallback: first two non-special ids not in exclude.
+    ids = [i for i in range(len(vocab.id_to_token)) if i not in exclude]
+    if len(ids) < 2:
+        raise RuntimeError("vocab too small for E3+ keys")
+    k1_id = int(ids[0] if k1 is None else int(k1))
+    k2_id = int(ids[1] if k2 is None or int(k2) == k1_id else int(k2))
+    if k2_id == k1_id:
+        k2_id = int(ids[1])
+    return k1_id, k2_id, str(vocab.id_to_token[k1_id]), str(vocab.id_to_token[k2_id])
+
+
+def _make_allowed_token_ids(
+    *,
+    vocab: CharVocab,
+    marker_ids: Sequence[int],
+    device: str,
+) -> torch.Tensor:
+    exclude = {int(vocab.pad_id), int(vocab.unk_id)}
+    exclude.update(int(x) for x in marker_ids)
+    ids = [i for i in range(len(vocab.id_to_token)) if i not in exclude]
+    if not ids:
+        raise RuntimeError("no allowed token ids (check vocab_size / exclusions)")
+    return torch.tensor(ids, device=device, dtype=torch.long)
+
+
+def run_e3_marker_reading(
+    *,
+    entity,
+    decoder: nn.Module,
+    embedding: nn.Embedding,
+    vocab: CharVocab,
+    optimizer: torch.optim.Optimizer,
+    device: str,
+    batch_size: int,
+    pairs: int,
+    seq_len: int,
+    clue_len: int,
+    clue_margin: int,
+    policy: str,
+    fixate_steps: int,
+    fixate_mad_mult: float,
+    boundary_window: int,
+    read_sigma: float,
+    online_steps: int,
+    offline_steps: int,
+    dt: float,
+    step_size: float,
+    candidates: Sequence[float],
+    beta_kl: float,
+    gamma_pred: float,
+    cost_weight: float,
+    cost_power: float,
+    cost_offset: float,
+    noise_std: float,
+    pointer_drift: float,
+    pointer_bounds: str,
+    anti_lock_weight: float,
+    anti_lock_sigma: float,
+    revisit_weight: float,
+    revisit_window: int,
+    lookahead_steps: int,
+    lookahead_discount: float,
+    pref_repeat_weight: float,
+    cover_weight: float,
+    cover_sigma: float,
+    cover_window: int,
+    cover_warmup_frac: float,
+    epi_weight: float,
+    epi_normalize: int,
+    epi_mode: str,
+    epi_obs_eps: float,
+    epi_pred_floor: float,
+    replay_mode: str,
+    seed: int,
+    log_f,
+    tag: str,
+    log_every: int,
+) -> Dict[str, object]:
+    """
+    E3 (minimal reading/understanding closed-loop):
+      - Build a synthetic token sequence where the ONLY class difference is a localized "clue patch".
+      - Agent must actively sample (pointer) to observe the patch.
+      - Verifier is automatic: we know the clue span.
+
+    Returns summary dict with:
+      - hit_rate / first_hit stats
+      - linear probe metrics on mean offline q
+      - pointer short-cycle diagnostics (non-boundary separated)
+    """
+    entity.train()
+    decoder.train()
+    epi_mode_s = str(epi_mode or "chart_entropy").strip().lower()
+    policy_s = str(policy or "active").strip().lower()
+    if policy_s not in ("active", "active_fixate", "passive", "random", "frozen"):
+        raise ValueError(f"unknown e3 policy: {policy}")
+    fixate_steps_i = int(max(0, int(fixate_steps))) if policy_s == "active_fixate" else 0
+    fixate_mad_mult_f = float(fixate_mad_mult) if policy_s == "active_fixate" else 0.0
+    if not math.isfinite(fixate_mad_mult_f) or fixate_mad_mult_f <= 0.0:
+        fixate_mad_mult_f = 0.0
+
+    marker_a, marker_b, tok_a, tok_b = _pick_e3_markers(vocab)
+    allowed_ids = _make_allowed_token_ids(vocab=vocab, marker_ids=[marker_a, marker_b], device=device)
+
+    CAND = torch.tensor(list(candidates), device=device, dtype=torch.float32) * float(step_size)
+    C = int(CAND.numel())
+    if C <= 0:
+        raise ValueError("empty candidates")
+
+    pairs = int(max(1, int(pairs)))
+    seq_len = int(max(32, int(seq_len)))
+    clue_len = int(max(1, int(clue_len)))
+    clue_margin = int(max(0, int(clue_margin)))
+    online_steps = int(max(1, int(online_steps)))
+    offline_steps = int(max(0, int(offline_steps)))
+    if clue_margin * 2 + clue_len >= seq_len:
+        clue_margin = max(0, (seq_len - clue_len) // 4)
+    read_sigma = float(read_sigma)
+    if not math.isfinite(read_sigma) or read_sigma <= 0.0:
+        read_sigma = 2.0
+    boundary_window = int(boundary_window)
+    if boundary_window <= 0:
+        boundary_window = int(max(1, round(3.0 * float(read_sigma))))
+    boundary_window = int(min(boundary_window, max(1, (seq_len - 1) // 2)))
+
+    # E2-like pointer cycle diagnostics (quantize to int)
+    cycle_hits = 0
+    boundary_cycle_hits = 0
+    cycle_total = 0
+    max_period = 8
+    min_repeats = 3
+    tail_window = 32
+    boundary_low = 0
+    boundary_high = int(seq_len - 1)
+
+    feats_all: List[torch.Tensor] = []
+    labs_all: List[torch.Tensor] = []
+    hit_any_all: List[torch.Tensor] = []
+    first_hit_all: List[torch.Tensor] = []
+    dwell_all: List[torch.Tensor] = []
+    span_all: List[torch.Tensor] = []
+
+    base_marker_violations = 0
+    base_marker_count_total = 0
+    clue_start_list: List[int] = []
+    clue_edge_min = int(1e9)
+
+    delta_sum = 0.0
+    delta_abs_sum = 0.0
+    delta_count = 0
+    boundary_steps = 0
+    boundary_total = 0
+    fixate_trigger_total = 0
+    fixate_step_total = 0
+
+    # For fairness, each pair shares the same base sequence & clue position; only the marker id differs.
+    for ep in range(pairs):
+        base = allowed_ids[torch.randint(0, int(allowed_ids.numel()), (seq_len,), device=device)]
+        base_marker_count = int(((base == int(marker_a)) | (base == int(marker_b))).sum().item())
+        base_marker_count_total += base_marker_count
+        if base_marker_count != 0:
+            base_marker_violations += 1
+        if clue_len < seq_len:
+            pos_hi = int(seq_len - clue_margin - clue_len)
+            pos_lo = int(clue_margin)
+            if pos_hi <= pos_lo:
+                pos_lo = 0
+                pos_hi = int(seq_len - clue_len)
+            clue_start = int(torch.randint(pos_lo, pos_hi + 1, (1,), device=device).item())
+        else:
+            clue_start = 0
+        clue_end = int(min(seq_len, clue_start + clue_len))
+        clue_start_list.append(int(clue_start))
+        clue_edge_min = int(min(clue_edge_min, clue_start, int(seq_len - clue_end)))
+
+        label_order = [(0, marker_a), (1, marker_b)]
+        random.shuffle(label_order)
+        for label, marker_id in label_order:
+            token_ids = base.clone()
+            token_ids[clue_start:clue_end] = int(marker_id)
+            read_port = GaussianTruncRenormReadPort(token_ids=token_ids, embedding=embedding, sigma=float(read_sigma)).to(
+                device
+            )
+
+            entity.reset(batch_size=batch_size, device=device)
+            reset_experience(entity)
+
+            # Start pointer away from edges to reduce boundary artifacts.
+            start_margin = int(max(1, round(3.0 * float(read_port.sigma))))
+            s = torch.rand(batch_size, device=device) * float(max(1.0, read_port.length - 1 - 2 * start_margin)) + float(
+                start_margin
+            )
+
+            token_ids_port = getattr(read_port, "token_ids", None)
+            prev_tok: Optional[torch.Tensor] = None
+            if float(pref_repeat_weight) > 0.0 and isinstance(token_ids_port, torch.Tensor) and token_ids_port.ndim == 1:
+                idx0 = s.detach().round().to(dtype=torch.long).clamp(0, int(read_port.length - 1))
+                prev_tok = token_ids_port[idx0]
+
+            recent_s: Optional[torch.Tensor] = None
+            recent_len = 0
+            recent_ptr = 0
+            if float(revisit_weight) > 0.0 and int(revisit_window) > 0:
+                K = int(revisit_window)
+                recent_s = torch.full((K, batch_size), -1, device=device, dtype=torch.long)
+                recent_s[0] = s.detach().round().to(dtype=torch.long)
+                recent_len = 1
+                recent_ptr = 1 % K
+
+            cover_s: Optional[torch.Tensor] = None
+            cover_len = 0
+            cover_ptr = 0
+            if float(cover_weight) > 0.0 and int(cover_window) > 0:
+                Kc = int(cover_window)
+                cover_s = torch.empty((Kc, batch_size), device=device, dtype=torch.float32)
+                cover_s[0] = s.detach().to(dtype=torch.float32)
+                cover_len = 1
+                cover_ptr = 1 % Kc
+
+            warmup_frac = float(cover_warmup_frac)
+            if not math.isfinite(warmup_frac) or warmup_frac <= 0.0:
+                warmup_steps = 0
+            else:
+                warmup_steps = int(round(float(online_steps) * max(0.0, min(warmup_frac, 1.0))))
+
+            hit_any = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            first_hit = torch.full((batch_size,), -1, device=device, dtype=torch.int32)
+            dwell = torch.zeros((batch_size,), device=device, dtype=torch.int32)
+            s_min = s.detach().round().to(dtype=torch.long)
+            s_max = s_min.clone()
+
+            # Pointer tail for cycle diagnostics
+            s_tail = torch.empty((tail_window, batch_size), device=device, dtype=torch.long)
+
+            fixate_left: Optional[torch.Tensor] = None
+            if fixate_steps_i > 0:
+                fixate_left = torch.zeros((batch_size,), device=device, dtype=torch.int32)
+
+            entity.enter_online()
+            for t in range(int(online_steps)):
+                fixate_mask: Optional[torch.Tensor] = None
+                if fixate_left is not None:
+                    fixate_mask = fixate_left > 0
+                    fixate_step_total += int(fixate_mask.sum().item())
+
+                # Coverage warmup scaling (optional)
+                if warmup_steps > 0:
+                    cover_scale = min(1.0, float(t + 1) / float(max(1, warmup_steps)))
+                else:
+                    cover_scale = 1.0
+                eff_cover_weight = float(cover_weight) * float(cover_scale)
+
+                if policy_s in ("active", "active_fixate"):
+                    rng_devices: List[int] = []
+                    if str(device).startswith("cuda") and torch.cuda.is_available():
+                        rng_devices = [int(torch.cuda.current_device())]
+                    with torch.random.fork_rng(devices=rng_devices, enabled=(float(noise_std) > 0.0)):
+                        delta = choose_delta_one_step(
+                            entity=entity,
+                            decoder=decoder,
+                            read_port=read_port,
+                            s=s,
+                            candidates=CAND,
+                            dt=dt,
+                            beta_kl=beta_kl,
+                            gamma_pred=gamma_pred,
+                            cost_weight=cost_weight,
+                            cost_power=float(cost_power),
+                            cost_offset=float(cost_offset),
+                            noise_std=noise_std,
+                            pointer_drift=float(pointer_drift),
+                            pointer_bounds=str(pointer_bounds),
+                            anti_lock_weight=float(anti_lock_weight),
+                            anti_lock_sigma=float(anti_lock_sigma),
+                            revisit_weight=float(revisit_weight),
+                            recent_s=(recent_s[:recent_len] if recent_s is not None and recent_len > 0 else None),
+                            lookahead_steps=int(lookahead_steps),
+                            lookahead_discount=float(lookahead_discount),
+                            pref_repeat_weight=float(pref_repeat_weight),
+                            token_ids=token_ids_port,
+                            prev_token_ids=prev_tok,
+                            cover_weight=float(eff_cover_weight),
+                            cover_sigma=float(cover_sigma),
+                            cover_recent_s=(cover_s[:cover_len] if cover_s is not None and cover_len > 0 else None),
+                            epi_weight=float(epi_weight),
+                            epi_normalize=int(epi_normalize),
+                            epi_mode=str(epi_mode_s),
+                            epi_obs_eps=float(epi_obs_eps),
+                            epi_pred_floor=float(epi_pred_floor),
+                        )
+                elif policy_s == "random":
+                    delta = CAND[torch.randint(0, C, (batch_size,), device=device)]
+                else:
+                    delta = torch.zeros((batch_size,), device=device, dtype=s.dtype)
+
+                if fixate_mask is not None:
+                    delta = delta * (~fixate_mask).to(dtype=delta.dtype)
+
+                drift_eff = 0.0 if policy_s == "frozen" else float(pointer_drift)
+                if fixate_mask is not None:
+                    drift = float(drift_eff) * (~fixate_mask).to(dtype=s.dtype)
+                else:
+                    drift = float(drift_eff)
+                s_new = _apply_pointer_bounds(
+                    s + drift + delta,
+                    max_s=float(read_port.length - 1),
+                    mode=str(pointer_bounds),
+                )
+                s_round = s_new.detach().round().to(dtype=torch.long).clamp(0, int(read_port.length - 1))
+                s_tail[int(t) % int(tail_window)] = s_round
+                s_min = torch.minimum(s_min, s_round)
+                s_max = torch.maximum(s_max, s_round)
+
+                delta_sum += float(delta.detach().sum().item())
+                delta_abs_sum += float(delta.detach().abs().sum().item())
+                delta_count += int(delta.numel())
+
+                near_boundary = (s_round <= int(boundary_window)) | (
+                    s_round >= int(read_port.length - 1 - boundary_window)
+                )
+                boundary_steps += int(near_boundary.sum().item())
+                boundary_total += int(near_boundary.numel())
+
+                hit = (s_round >= int(clue_start)) & (s_round < int(clue_end))
+                dwell = dwell + hit.to(dtype=dwell.dtype)
+                first_hit = torch.where((first_hit < 0) & hit, torch.full_like(first_hit, int(t)), first_hit)
+                hit_any = hit_any | hit
+
+                # Book-keeping for penalties
+                if recent_s is not None:
+                    recent_s[recent_ptr] = s_round
+                    recent_ptr = (recent_ptr + 1) % int(revisit_window)
+                    recent_len = min(int(revisit_window), recent_len + 1)
+                if cover_s is not None:
+                    cover_s[cover_ptr] = s_new.detach().to(dtype=torch.float32)
+                    cover_ptr = (cover_ptr + 1) % int(cover_window)
+                    cover_len = min(int(cover_window), cover_len + 1)
+                if prev_tok is not None and token_ids_port is not None:
+                    prev_tok = token_ids_port[s_round]
+
+                # Observation and training step
+                y = read_port.read(s_new)  # [B,D]
+                y_in = y
+                if float(noise_std) > 0.0:
+                    y_in = y + float(noise_std) * torch.randn_like(y)
+
+                out = entity.forward_tensor(
+                    state_flat=entity.state.flat,
+                    u_dict={"default": y_in},
+                    dt=float(dt),
+                    prev_chart_weights=getattr(entity, "_prev_chart_weights", None),
+                    prediction_error=None,
+                    detach_next_prev_weights=True,
+                    compute_action=False,
+                    skip_free_energy=True,
+                )
+                entity.state = ContactState(entity.dim_q, batch_size, device, out["next_state_flat"])
+                entity._prev_chart_weights = out["next_prev_chart_weights"]
+
+                y_hat = decoder(entity.state.q)
+                pred_err_ps = (y_hat - y).pow(2).mean(dim=1)
+
+                loss, parts = compute_loss(
+                    entity=entity,
+                    state=entity.state,
+                    pred_err_per_sample=pred_err_ps,
+                    action_delta=delta,
+                    beta_kl=beta_kl,
+                    gamma_pred=gamma_pred,
+                    cost_weight=cost_weight,
+                    cost_power=float(cost_power),
+                    cost_offset=float(cost_offset),
+                    anti_lock_weight=float(anti_lock_weight),
+                    anti_lock_sigma=float(anti_lock_sigma),
+                    revisit_penalty_per_sample=None,
+                    pref_penalty_per_sample=None,
+                    cover_penalty_per_sample=None,
+                    epi_penalty_per_sample=None,
+                )
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(list(entity.parameters()) + list(decoder.parameters()), max_norm=1.0)
+                optimizer.step()
+
+                entity.state = ContactState(entity.dim_q, batch_size, device, entity.state.flat.detach())
+                s = s_new.detach()
+
+                if fixate_left is not None:
+                    fixate_left = torch.clamp(fixate_left - 1, min=0)
+                    pe = pred_err_ps.detach()
+                    med = pe.median()
+                    mad = (pe - med).abs().median()
+                    mad_mult = float(fixate_mad_mult_f)
+                    if math.isfinite(mad_mult) and mad_mult > 0.0 and float(mad.item()) > 1e-12:
+                        thr = med + mad_mult * mad
+                        trigger = pe > thr
+                        if trigger.any():
+                            fixate_trigger_total += int(trigger.sum().item())
+                            fixate_left = torch.where(
+                                trigger,
+                                torch.full_like(fixate_left, fixate_steps_i),
+                                fixate_left,
+                            )
+
+                if log_f is not None and (int(log_every) > 0) and (t % int(log_every) == 0 or t == int(online_steps) - 1):
+                    rec = {
+                        "tag": str(tag),
+                        "phase": "e3_online",
+                        "episode": int(ep),
+                        "label": int(label),
+                        "policy": str(policy_s),
+                        "t": int(t),
+                        "clue_start": int(clue_start),
+                        "clue_end": int(clue_end),
+                        "base_marker_count": int(base_marker_count),
+                        "hit_rate_so_far": float(hit_any.float().mean().item()),
+                        "delta_mean": float(delta.detach().mean().item()),
+                        "delta_abs_mean": float(delta.detach().abs().mean().item()),
+                        "near_boundary_rate": float(near_boundary.float().mean().item()),
+                        "pred_err": float(pred_err_ps.detach().mean().item()),
+                        "F": float(loss.detach().item()),
+                        "fixate_rate": (
+                            float(fixate_mask.float().mean().item()) if fixate_mask is not None else float("nan")
+                        ),
+                        **_parts_to_float(parts),
+                    }
+                    log_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+            # E2-like cycle metrics at end of episode (online only)
+            W = min(int(online_steps), int(tail_window))
+            if W > 0:
+                start = int(int(online_steps) - W)
+                idx = [(start + k) % int(tail_window) for k in range(W)]
+                tail = s_tail[idx].detach().cpu().tolist()
+                for b in range(batch_size):
+                    tokens = [int(tail[k][b]) for k in range(W)]
+                    cycle_total += 1
+                    cyc = _detect_tail_cycle(tokens, max_period=max_period, min_repeats=min_repeats)
+                    if cyc is not None:
+                        cycle_hits += 1
+                        _, pattern = cyc
+                        if pattern and all((x == boundary_low) or (x == boundary_high) for x in pattern):
+                            boundary_cycle_hits += 1
+
+            # Offline: freeze env, optionally inject replay.
+            entity.enter_offline()
+            offline_q: List[torch.Tensor] = []
+            with torch.no_grad():
+                for t in range(int(offline_steps)):
+                    u_off: Dict[str, torch.Tensor] = {}
+                    exp = getattr(entity, "experience", None)
+                    exp_size = int(getattr(exp, "size", 0) or 0) if exp is not None else 0
+                    if replay_mode != "none" and exp is not None and exp_size > 0:
+                        replay = exp.sample_replay(batch_size, mode=replay_mode)
+                        if replay is not None:
+                            replay_state = replay["states"].to(device)
+                            if replay_state.shape[0] < batch_size:
+                                pad = replay_state[0:1].expand(batch_size - replay_state.shape[0], -1)
+                                replay_state = torch.cat([replay_state, pad], dim=0)
+                            replay_q = replay_state[:, : entity.dim_q]
+                            u_off["replay"] = 0.1 * (replay_q - entity.state.q)
+
+                    _entity_forward_step_fast(entity=entity, u_dict=u_off, dt=float(dt))
+                    offline_q.append(entity.state.q.detach())
+
+            q_mean = torch.stack(offline_q, dim=0).mean(dim=0).detach().cpu() if offline_q else entity.state.q.detach().cpu()
+            feats_all.append(q_mean)
+            labs_all.append(torch.full((batch_size,), int(label), dtype=torch.long))
+            hit_any_all.append(hit_any.detach().cpu())
+            first_hit_all.append(first_hit.detach().cpu())
+            dwell_all.append(dwell.detach().cpu())
+            span_all.append((s_max - s_min).detach().cpu().to(dtype=torch.int32))
+
+    feats = torch.cat(feats_all, dim=0) if feats_all else torch.zeros((0, entity.dim_q))
+    labs = torch.cat(labs_all, dim=0) if labs_all else torch.zeros((0,), dtype=torch.long)
+    hit_any_cat = torch.cat(hit_any_all, dim=0) if hit_any_all else torch.zeros((0,), dtype=torch.bool)
+    first_hit_cat = torch.cat(first_hit_all, dim=0) if first_hit_all else torch.zeros((0,), dtype=torch.int32)
+    dwell_cat = torch.cat(dwell_all, dim=0) if dwell_all else torch.zeros((0,), dtype=torch.int32)
+    span_cat = torch.cat(span_all, dim=0) if span_all else torch.zeros((0,), dtype=torch.int32)
+
+    # Probe separability
+    probe = train_linear_probe(feats, labs, seed=int(seed))
+    labs_shuf = labs[torch.randperm(int(labs.numel()))] if int(labs.numel()) > 0 else labs
+    probe_shuf = train_linear_probe(feats, labs_shuf, seed=int(seed) + 1)
+
+    # Hit stats
+    total = int(hit_any_cat.numel())
+    hit_rate = float(hit_any_cat.float().mean().item()) if total > 0 else float("nan")
+    hit_mask = hit_any_cat.bool()
+    if int(hit_mask.sum().item()) > 0:
+        first_hits = first_hit_cat[hit_mask].to(dtype=torch.float32)
+        first_hit_mean = float(first_hits.mean().item())
+        first_hit_med = float(first_hits.median().item())
+        dwell_hits = dwell_cat[hit_mask].to(dtype=torch.float32)
+        dwell_hit_mean = float(dwell_hits.mean().item())
+        dwell_hit_med = float(dwell_hits.median().item())
+        span_hits = span_cat[hit_mask].to(dtype=torch.float32)
+        span_hit_mean = float(span_hits.mean().item())
+        span_hit_med = float(span_hits.median().item())
+    else:
+        first_hit_mean = float("nan")
+        first_hit_med = float("nan")
+        dwell_hit_mean = float("nan")
+        dwell_hit_med = float("nan")
+        span_hit_mean = float("nan")
+        span_hit_med = float("nan")
+
+    # Probe separability conditional on exposure (hit/no-hit), to separate "can write when hit"
+    # from "overall diluted by low hit_rate".
+    n_hit = int(hit_mask.sum().item()) if total > 0 else 0
+    n_nohit = int(total - n_hit)
+    probe_hit = {"acc": float("nan"), "auc": float("nan")}
+    probe_hit_shuf = {"acc": float("nan"), "auc": float("nan")}
+    probe_nohit = {"acc": float("nan"), "auc": float("nan")}
+    probe_nohit_shuf = {"acc": float("nan"), "auc": float("nan")}
+    if n_hit >= 10:
+        feats_hit = feats[hit_mask]
+        labs_hit = labs[hit_mask]
+        probe_hit = train_linear_probe(feats_hit, labs_hit, seed=int(seed) + 100)
+        labs_hit_shuf = labs_hit[torch.randperm(int(labs_hit.numel()))]
+        probe_hit_shuf = train_linear_probe(feats_hit, labs_hit_shuf, seed=int(seed) + 101)
+    if n_nohit >= 10:
+        feats_nohit = feats[~hit_mask]
+        labs_nohit = labs[~hit_mask]
+        probe_nohit = train_linear_probe(feats_nohit, labs_nohit, seed=int(seed) + 200)
+        labs_nohit_shuf = labs_nohit[torch.randperm(int(labs_nohit.numel()))]
+        probe_nohit_shuf = train_linear_probe(feats_nohit, labs_nohit_shuf, seed=int(seed) + 201)
+
+    non_boundary_hits = int(cycle_hits - boundary_cycle_hits)
+    denom = max(1, int(cycle_total))
+    e2 = {
+        "ptr_cycle_rate": float(cycle_hits / denom),
+        "ptr_cycle_hits": int(cycle_hits),
+        "ptr_cycle_total": int(cycle_total),
+        "ptr_cycle_rate_non_boundary": float(non_boundary_hits / denom),
+        "ptr_cycle_hits_non_boundary": int(non_boundary_hits),
+        "ptr_cycle_rate_boundary": float(boundary_cycle_hits / denom),
+        "ptr_cycle_hits_boundary": int(boundary_cycle_hits),
+        "ptr_cycle_boundary_low": int(boundary_low),
+        "ptr_cycle_boundary_high": int(boundary_high),
+    }
+
+    return {
+        "task": "marker_patch",
+        "policy": str(policy_s),
+        "markers": {"A": {"id": int(marker_a), "token": tok_a}, "B": {"id": int(marker_b), "token": tok_b}},
+        "seq_len": int(seq_len),
+        "clue_len": int(clue_len),
+        "clue_margin": int(clue_margin),
+        "boundary_window": int(boundary_window),
+        "fixate_steps": int(fixate_steps_i),
+        "fixate_mad_mult": float(fixate_mad_mult_f),
+        "fixate_trigger_rate": float(fixate_trigger_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))),
+        "fixate_step_rate": float(fixate_step_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))),
+        "base_marker_violations": int(base_marker_violations),
+        "base_marker_count_total": int(base_marker_count_total),
+        "clue_edge_min": int(clue_edge_min if clue_edge_min < int(1e8) else -1),
+        "clue_start_min": int(min(clue_start_list) if clue_start_list else -1),
+        "clue_start_max": int(max(clue_start_list) if clue_start_list else -1),
+        "hit_rate": float(hit_rate),
+        "first_hit_mean": float(first_hit_mean),
+        "first_hit_median": float(first_hit_med),
+        "dwell_mean": float(dwell_cat.to(dtype=torch.float32).mean().item()) if total > 0 else float("nan"),
+        "dwell_hit_mean": float(dwell_hit_mean),
+        "dwell_hit_median": float(dwell_hit_med),
+        "span_mean": float(span_cat.to(dtype=torch.float32).mean().item()) if total > 0 else float("nan"),
+        "span_hit_mean": float(span_hit_mean),
+        "span_hit_median": float(span_hit_med),
+        "delta_mean": float(delta_sum / max(1, int(delta_count))),
+        "delta_abs_mean": float(delta_abs_sum / max(1, int(delta_count))),
+        "near_boundary_rate": float(boundary_steps / max(1, int(boundary_total))),
+        "probe_acc": float(probe["acc"]),
+        "probe_auc": float(probe["auc"]),
+        "probe_acc_shuffled": float(probe_shuf["acc"]),
+        "probe_auc_shuffled": float(probe_shuf["auc"]),
+        "probe_n_hit": int(n_hit),
+        "probe_acc_hit": float(probe_hit["acc"]),
+        "probe_auc_hit": float(probe_hit["auc"]),
+        "probe_acc_hit_shuffled": float(probe_hit_shuf["acc"]),
+        "probe_auc_hit_shuffled": float(probe_hit_shuf["auc"]),
+        "probe_n_nohit": int(n_nohit),
+        "probe_acc_nohit": float(probe_nohit["acc"]),
+        "probe_auc_nohit": float(probe_nohit["auc"]),
+        "probe_acc_nohit_shuffled": float(probe_nohit_shuf["acc"]),
+        "probe_auc_nohit_shuffled": float(probe_nohit_shuf["auc"]),
+        "n_samples": int(total),
+        "feature": "mean_offline_q",
+        "ptr_cycles": e2,
+    }
+
+
+def run_e3_kv_swap(
+    *,
+    entity,
+    decoder: nn.Module,
+    embedding: nn.Embedding,
+    vocab: CharVocab,
+    optimizer: torch.optim.Optimizer,
+    device: str,
+    batch_size: int,
+    pairs: int,
+    seq_len: int,
+    key_len: int,
+    value_len: int,
+    clue_margin: int,
+    policy: str,
+    fixate_steps: int,
+    fixate_mad_mult: float,
+    fixate_mode: str,
+    fixate_scan_radius: int,
+    boundary_window: int,
+    read_sigma: float,
+    online_steps: int,
+    offline_steps: int,
+    dt: float,
+    step_size: float,
+    candidates: Sequence[float],
+    beta_kl: float,
+    gamma_pred: float,
+    cost_weight: float,
+    cost_power: float,
+    cost_offset: float,
+    noise_std: float,
+    pointer_drift: float,
+    pointer_bounds: str,
+    anti_lock_weight: float,
+    anti_lock_sigma: float,
+    revisit_weight: float,
+    revisit_window: int,
+    lookahead_steps: int,
+    lookahead_discount: float,
+    pref_repeat_weight: float,
+    cover_weight: float,
+    cover_sigma: float,
+    cover_window: int,
+    cover_warmup_frac: float,
+    epi_weight: float,
+    epi_normalize: int,
+    epi_mode: str,
+    epi_obs_eps: float,
+    epi_pred_floor: float,
+    replay_mode: str,
+    query_steps: int,
+    query_key: str,
+    val_align: int,
+    speak: int,
+    speak_vocab: int,
+    speak_loss_weight: float,
+    speak_use: int,
+    speak_back_threshold: float,
+    seed: int,
+    log_f,
+    tag: str,
+    log_every: int,
+) -> Dict[str, object]:
+    """
+    E3+ (key→value binding; minimal structure):
+      - Two key-value pairs are embedded at random positions:
+          K1 -> V?, K2 -> V?
+      - Label is whether the mapping is (K1->A,K2->B) vs (K1->B,K2->A).
+      - Base sequence and positions are shared between the two labels (only values are swapped).
+      - Verifier is automatic: we know the key/value spans.
+
+    NOTE: Without an explicit "query/readout" phase, this task is intentionally close to a negative control:
+    both labels contain the same multiset of tokens (A and B), so the latent may not linearly separate.
+
+    When `query_steps>0`, we add a query-driven readout phase: we inject the query key embedding as input,
+    and train the decoder to reconstruct the corresponding value embedding. This makes key→value binding
+    enter the prediction-error term, creating a learnable signal.
+
+    hit_rate refers to `resolved_any_rate`: observed at least one complete (key,value) pair (any key).
+    resolved_rate refers to a stricter, query-relevant notion when `query_steps>0` (queried pair complete).
+    """
+    entity.train()
+    decoder.train()
+    epi_mode_s = str(epi_mode or "chart_entropy").strip().lower()
+    policy_s = str(policy or "active").strip().lower()
+    if policy_s not in ("active", "active_fixate", "passive", "random", "frozen"):
+        raise ValueError(f"unknown e3 policy: {policy}")
+    fixate_steps_i = int(max(0, int(fixate_steps))) if policy_s == "active_fixate" else 0
+    fixate_mad_mult_f = float(fixate_mad_mult) if policy_s == "active_fixate" else 0.0
+    if not math.isfinite(fixate_mad_mult_f) or fixate_mad_mult_f <= 0.0:
+        fixate_mad_mult_f = 0.0
+    fixate_mode_s = str(fixate_mode or "freeze").strip().lower()
+    if policy_s != "active_fixate" or fixate_steps_i <= 0:
+        fixate_mode_s = "freeze"
+    if fixate_mode_s in ("", "0", "off", "false", "freeze"):
+        fixate_mode_s = "freeze"
+    if fixate_mode_s not in ("freeze", "backward_uniform", "both_uniform"):
+        raise ValueError(f"unknown fixate_mode: {fixate_mode}")
+    fixate_scan_radius_i = int(max(0, int(fixate_scan_radius)))
+
+    query_steps_i = int(max(0, int(query_steps)))
+    query_key_s = str(query_key or "none").strip().lower()
+    if query_steps_i <= 0:
+        query_key_s = "none"
+    if query_key_s in ("", "0", "off", "false", "none", "no"):
+        query_key_s = "none"
+    if query_key_s not in ("none", "k1", "k2", "random"):
+        raise ValueError(f"unknown query_key: {query_key}")
+    if query_key_s == "none":
+        query_steps_i = 0
+
+    val_align_i = int(val_align) if isinstance(val_align, (int, float, str)) else 0
+    val_align_i = 1 if val_align_i != 0 else 0
+
+    speak_i = int(speak) if isinstance(speak, (int, float, str)) else 0
+    speak_i = 1 if speak_i != 0 else 0
+    speak_use_i = int(speak_use) if isinstance(speak_use, (int, float, str)) else 0
+    speak_use_i = 1 if speak_use_i != 0 else 0
+    speak_vocab_i = int(max(0, int(speak_vocab)))
+    speak_loss_w = float(speak_loss_weight)
+    if not math.isfinite(speak_loss_w) or speak_loss_w < 0.0:
+        speak_loss_w = 0.0
+    speak_back_thr = float(speak_back_threshold)
+    if not math.isfinite(speak_back_thr):
+        speak_back_thr = 0.9
+    speak_back_thr = float(max(0.0, min(1.0, speak_back_thr)))
+    if speak_vocab_i < 2:
+        speak_i = 0
+        speak_use_i = 0
+        speak_loss_w = 0.0
+    if speak_i == 0:
+        speak_use_i = 0
+        speak_loss_w = 0.0
+
+    speak_head: Optional[nn.Module] = None
+    speak_emb: Optional[nn.Module] = None
+    if speak_i != 0:
+        speak_head = getattr(entity, "e3_speak_head", None)
+        speak_emb = getattr(entity, "e3_speak_emb", None)
+        if not isinstance(speak_head, nn.Module) or not isinstance(speak_emb, nn.Module):
+            raise RuntimeError(
+                "E3 speak enabled but missing modules on entity. "
+                "Expected `entity.e3_speak_head` and `entity.e3_speak_emb`."
+            )
+
+    val_a, val_b, tok_a, tok_b = _pick_e3_markers(vocab)
+    key1, key2, tok_k1, tok_k2 = _pick_e3_kv_keys(vocab, exclude_ids=[val_a, val_b])
+    allowed_ids = _make_allowed_token_ids(vocab=vocab, marker_ids=[val_a, val_b, key1, key2], device=device)
+
+    CAND = torch.tensor(list(candidates), device=device, dtype=torch.float32) * float(step_size)
+    C = int(CAND.numel())
+    if C <= 0:
+        raise ValueError("empty candidates")
+
+    pairs = int(max(1, int(pairs)))
+    seq_len = int(max(64, int(seq_len)))
+    key_len = int(max(1, int(key_len)))
+    value_len = int(max(1, int(value_len)))
+    clue_margin = int(max(0, int(clue_margin)))
+    online_steps = int(max(1, int(online_steps)))
+    offline_steps = int(max(0, int(offline_steps)))
+    pair_span = int(key_len + value_len)
+    if clue_margin * 2 + pair_span * 2 >= seq_len:
+        clue_margin = max(0, (seq_len - pair_span * 2) // 4)
+
+    read_sigma = float(read_sigma)
+    if not math.isfinite(read_sigma) or read_sigma <= 0.0:
+        read_sigma = 2.0
+    boundary_window = int(boundary_window)
+    if boundary_window <= 0:
+        boundary_window = int(max(1, round(3.0 * float(read_sigma))))
+    boundary_window = int(min(boundary_window, max(1, (seq_len - 1) // 2)))
+
+    # E2-like pointer cycle diagnostics (quantize to int)
+    cycle_hits = 0
+    boundary_cycle_hits = 0
+    cycle_total = 0
+    max_period = 8
+    min_repeats = 3
+    tail_window = 32
+    boundary_low = 0
+    boundary_high = int(seq_len - 1)
+
+    feats_all: List[torch.Tensor] = []
+    labs_all: List[torch.Tensor] = []
+    resolved_all: List[torch.Tensor] = []
+    resolved_any_all: List[torch.Tensor] = []
+    val_hit_all: List[torch.Tensor] = []
+    first_hit_all: List[torch.Tensor] = []
+    dwell_all: List[torch.Tensor] = []
+    span_all: List[torch.Tensor] = []
+
+    base_marker_violations = 0
+    base_marker_count_total = 0
+    key1_pos_list: List[int] = []
+    key2_pos_list: List[int] = []
+    edge_min = int(1e9)
+
+    delta_sum = 0.0
+    delta_abs_sum = 0.0
+    delta_count = 0
+    boundary_steps = 0
+    boundary_total = 0
+    fixate_trigger_total = 0
+    fixate_step_total = 0
+    val_align_trigger_total = 0
+    val_align_step_total = 0
+    query_k1_total = 0
+    query_total = 0
+    query_hit_total = 0
+    query_correct_total = 0
+    query_correct_hit_total = 0
+    speak_total = 0
+    speak_correct_total = 0
+    speak_back_total = 0
+    speak_ce_sum = 0.0
+    speak_ce_count = 0
+
+    # For fairness, each pair shares the same base sequence & positions; only the value assignment differs.
+    for ep in range(pairs):
+        base = allowed_ids[torch.randint(0, int(allowed_ids.numel()), (seq_len,), device=device)]
+        base_bad = int(((base == int(val_a)) | (base == int(val_b)) | (base == int(key1)) | (base == int(key2))).sum().item())
+        base_marker_count_total += base_bad
+        if base_bad != 0:
+            base_marker_violations += 1
+
+        pos_lo = int(clue_margin)
+        pos_hi = int(seq_len - clue_margin - pair_span)
+        if pos_hi <= pos_lo:
+            pos_lo = 0
+            pos_hi = int(max(0, seq_len - pair_span))
+
+        k1_pos = int(torch.randint(pos_lo, pos_hi + 1, (1,), device=device).item()) if pos_hi >= pos_lo else 0
+        tries = 0
+        k2_pos = k1_pos
+        while tries < 64:
+            cand_pos = int(torch.randint(pos_lo, pos_hi + 1, (1,), device=device).item()) if pos_hi >= pos_lo else 0
+            a0, a1 = k1_pos, k1_pos + pair_span
+            b0, b1 = cand_pos, cand_pos + pair_span
+            if (b1 <= a0 - clue_margin) or (a1 <= b0 - clue_margin):
+                k2_pos = cand_pos
+                break
+            tries += 1
+        if k2_pos == k1_pos:
+            k2_pos = int(max(pos_lo, min(pos_hi, k1_pos + pair_span + clue_margin)))
+
+        key1_pos_list.append(int(k1_pos))
+        key2_pos_list.append(int(k2_pos))
+        v1_start = int(k1_pos + key_len)
+        v1_end = int(min(seq_len, v1_start + value_len))
+        v2_start = int(k2_pos + key_len)
+        v2_end = int(min(seq_len, v2_start + value_len))
+        edge_min = int(min(edge_min, k1_pos, k2_pos, seq_len - v1_end, seq_len - v2_end))
+
+        label_order = [(0, int(val_a), int(val_b)), (1, int(val_b), int(val_a))]
+        random.shuffle(label_order)
+        for label, v_for_k1, v_for_k2 in label_order:
+            token_ids = base.clone()
+            token_ids[int(k1_pos) : int(k1_pos + key_len)] = int(key1)
+            token_ids[int(k2_pos) : int(k2_pos + key_len)] = int(key2)
+            token_ids[v1_start:v1_end] = int(v_for_k1)
+            token_ids[v2_start:v2_end] = int(v_for_k2)
+
+            read_port = GaussianTruncRenormReadPort(token_ids=token_ids, embedding=embedding, sigma=float(read_sigma)).to(
+                device
+            )
+
+            entity.reset(batch_size=batch_size, device=device)
+            reset_experience(entity)
+
+            # Start pointer away from edges to reduce boundary artifacts.
+            start_margin = int(max(1, round(3.0 * float(read_port.sigma))))
+            s = torch.rand(batch_size, device=device) * float(max(1.0, read_port.length - 1 - 2 * start_margin)) + float(
+                start_margin
+            )
+
+            token_ids_port = getattr(read_port, "token_ids", None)
+            prev_tok: Optional[torch.Tensor] = None
+            if float(pref_repeat_weight) > 0.0 and isinstance(token_ids_port, torch.Tensor) and token_ids_port.ndim == 1:
+                idx0 = s.detach().round().to(dtype=torch.long).clamp(0, int(read_port.length - 1))
+                prev_tok = token_ids_port[idx0]
+
+            recent_s: Optional[torch.Tensor] = None
+            recent_len = 0
+            recent_ptr = 0
+            if float(revisit_weight) > 0.0 and int(revisit_window) > 0:
+                K = int(revisit_window)
+                recent_s = torch.full((K, batch_size), -1, device=device, dtype=torch.long)
+                recent_s[0] = s.detach().round().to(dtype=torch.long)
+                recent_len = 1
+                recent_ptr = 1 % K
+
+            cover_s: Optional[torch.Tensor] = None
+            cover_len = 0
+            cover_ptr = 0
+            if float(cover_weight) > 0.0 and int(cover_window) > 0:
+                Kc = int(cover_window)
+                cover_s = torch.empty((Kc, batch_size), device=device, dtype=torch.float32)
+                cover_s[0] = s.detach().to(dtype=torch.float32)
+                cover_len = 1
+                cover_ptr = 1 % Kc
+
+            warmup_frac = float(cover_warmup_frac)
+            if not math.isfinite(warmup_frac) or warmup_frac <= 0.0:
+                warmup_steps = 0
+            else:
+                warmup_steps = int(round(float(online_steps) * max(0.0, min(warmup_frac, 1.0))))
+
+            k1_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            k2_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            v1_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            v2_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            val_any = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            first_hit = torch.full((batch_size,), -1, device=device, dtype=torch.int32)
+            dwell = torch.zeros((batch_size,), device=device, dtype=torch.int32)
+            s_min = s.detach().round().to(dtype=torch.long)
+            s_max = s_min.clone()
+
+            # Pointer tail for cycle diagnostics
+            s_tail = torch.empty((tail_window, batch_size), device=device, dtype=torch.long)
+
+            query_is_k1: Optional[torch.Tensor] = None
+            query_ids: Optional[torch.Tensor] = None
+            query_target_ids: Optional[torch.Tensor] = None
+            if query_key_s != "none":
+                if query_key_s == "k1":
+                    query_is_k1 = torch.ones((batch_size,), device=device, dtype=torch.bool)
+                elif query_key_s == "k2":
+                    query_is_k1 = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+                else:
+                    query_is_k1 = torch.rand((batch_size,), device=device) < 0.5
+                query_k1_total += int(query_is_k1.sum().item())
+                query_total += int(query_is_k1.numel())
+                query_ids = torch.where(
+                    query_is_k1,
+                    torch.full((batch_size,), int(key1), device=device, dtype=torch.long),
+                    torch.full((batch_size,), int(key2), device=device, dtype=torch.long),
+                )
+                query_target_ids = torch.where(
+                    query_is_k1,
+                    torch.full((batch_size,), int(v_for_k1), device=device, dtype=torch.long),
+                    torch.full((batch_size,), int(v_for_k2), device=device, dtype=torch.long),
+                )
+
+            fixate_left: Optional[torch.Tensor] = None
+            if fixate_steps_i > 0:
+                fixate_left = torch.zeros((batch_size,), device=device, dtype=torch.int32)
+
+            val_align_prev_in_val: Optional[torch.Tensor] = None
+            if val_align_i != 0:
+                val_align_prev_in_val = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+
+            entity.enter_online()
+            for t in range(int(online_steps)):
+                fixate_mask: Optional[torch.Tensor] = None
+                if fixate_left is not None:
+                    fixate_mask = fixate_left > 0
+                    fixate_step_total += int(fixate_mask.sum().item())
+
+                in_val_mask: Optional[torch.Tensor] = None
+                if (
+                    isinstance(token_ids_port, torch.Tensor)
+                    and token_ids_port.ndim == 1
+                    and (val_align_prev_in_val is not None or speak_i != 0)
+                ):
+                    s_round_cur = s.detach().round().to(dtype=torch.long).clamp(0, int(read_port.length - 1))
+                    tok_cur = token_ids_port[s_round_cur]
+                    in_val_mask = (tok_cur == int(val_a)) | (tok_cur == int(val_b))
+
+                val_align_mask: Optional[torch.Tensor] = None
+                if val_align_prev_in_val is not None and in_val_mask is not None:
+                    val_align_mask = in_val_mask
+                    val_align_step_total += int(val_align_mask.sum().item())
+                    start = val_align_mask & (~val_align_prev_in_val)
+                    if start.any():
+                        val_align_trigger_total += int(start.sum().item())
+                    val_align_prev_in_val = val_align_mask
+
+                speak_probs: Optional[torch.Tensor] = None
+                speak_ce: Optional[torch.Tensor] = None
+                speak_back_mask: Optional[torch.Tensor] = None
+                if speak_i != 0 and speak_head is not None and speak_emb is not None and in_val_mask is not None:
+                    speak_logits = speak_head(entity.state.q.detach())  # [B,V]
+                    speak_probs = torch.softmax(speak_logits, dim=1)
+                    if speak_loss_w > 0.0:
+                        speak_ce = torch.nn.functional.cross_entropy(speak_logits, in_val_mask.to(dtype=torch.long))
+                    if speak_use_i != 0:
+                        back_prob = speak_probs[:, 1]  # class 1 == BACK
+                        speak_back_mask = back_prob >= float(speak_back_thr)
+                    speak_pred = speak_probs.argmax(dim=1)
+                    speak_total += int(speak_pred.numel())
+                    speak_correct_total += int((speak_pred == in_val_mask.to(dtype=torch.long)).sum().item())
+                    if speak_ce is not None:
+                        speak_ce_sum += float(speak_ce.detach().item())
+                        speak_ce_count += 1
+
+                # Coverage warmup scaling (optional)
+                if warmup_steps > 0:
+                    cover_scale = min(1.0, float(t + 1) / float(max(1, warmup_steps)))
+                else:
+                    cover_scale = 1.0
+                eff_cover_weight = float(cover_weight) * float(cover_scale)
+
+                if policy_s in ("active", "active_fixate"):
+                    rng_devices: List[int] = []
+                    if str(device).startswith("cuda") and torch.cuda.is_available():
+                        rng_devices = [int(torch.cuda.current_device())]
+                    with torch.random.fork_rng(devices=rng_devices, enabled=(float(noise_std) > 0.0)):
+                        delta = choose_delta_one_step(
+                            entity=entity,
+                            decoder=decoder,
+                            read_port=read_port,
+                            s=s,
+                            candidates=CAND,
+                            dt=dt,
+                            beta_kl=beta_kl,
+                            gamma_pred=gamma_pred,
+                            cost_weight=cost_weight,
+                            cost_power=float(cost_power),
+                            cost_offset=float(cost_offset),
+                            noise_std=noise_std,
+                            pointer_drift=float(pointer_drift),
+                            pointer_bounds=str(pointer_bounds),
+                            anti_lock_weight=float(anti_lock_weight),
+                            anti_lock_sigma=float(anti_lock_sigma),
+                            revisit_weight=float(revisit_weight),
+                            recent_s=(recent_s[:recent_len] if recent_s is not None and recent_len > 0 else None),
+                            lookahead_steps=int(lookahead_steps),
+                            lookahead_discount=float(lookahead_discount),
+                            pref_repeat_weight=float(pref_repeat_weight),
+                            token_ids=token_ids_port,
+                            prev_token_ids=prev_tok,
+                            cover_weight=float(eff_cover_weight),
+                            cover_sigma=float(cover_sigma),
+                            cover_recent_s=(cover_s[:cover_len] if cover_s is not None and cover_len > 0 else None),
+                            epi_weight=float(epi_weight),
+                            epi_normalize=int(epi_normalize),
+                            epi_mode=str(epi_mode_s),
+                            epi_obs_eps=float(epi_obs_eps),
+                            epi_pred_floor=float(epi_pred_floor),
+                        )
+                elif policy_s == "random":
+                    delta = CAND[torch.randint(0, C, (batch_size,), device=device)]
+                else:
+                    delta = torch.zeros((batch_size,), device=device, dtype=s.dtype)
+
+                if fixate_mask is not None:
+                    if fixate_mode_s == "freeze":
+                        delta = delta * (~fixate_mask).to(dtype=delta.dtype)
+                    else:
+                        # Local micro-scan during fixation (E3+): attempt to resolve key/value alignment.
+                        # By default, use a backwards scan window tied to value_len.
+                        radius = int(fixate_scan_radius_i) if int(fixate_scan_radius_i) > 0 else int(value_len)
+                        radius = int(max(0, radius))
+                        if radius <= 0:
+                            delta_fix = torch.zeros_like(delta)
+                        elif fixate_mode_s == "backward_uniform":
+                            back = torch.randint(0, radius + 1, (batch_size,), device=device, dtype=torch.long)
+                            delta_fix = (-back).to(dtype=delta.dtype) * float(step_size)
+                        else:
+                            span = int(2 * radius + 1)
+                            offs = torch.randint(0, span, (batch_size,), device=device, dtype=torch.long) - int(radius)
+                            delta_fix = offs.to(dtype=delta.dtype) * float(step_size)
+                        delta = torch.where(fixate_mask, delta_fix, delta)
+
+                drift_eff = 0.0 if policy_s == "frozen" else float(pointer_drift)
+                if fixate_mask is not None:
+                    drift = float(drift_eff) * (~fixate_mask).to(dtype=s.dtype)
+                else:
+                    drift = s.new_full((batch_size,), float(drift_eff))
+
+                back_mask: Optional[torch.Tensor] = None
+                if val_align_mask is not None:
+                    # v0p11: de-privileged alignment.
+                    # If currently inside a value span (A/B), step backward by one token until exiting the span.
+                    # Since base sequences exclude A/B, exiting the span lands on the (unknown) key token.
+                    # Apply after fixation so it can override freeze; cancel drift so stepping is exact.
+                    back_mask = val_align_mask
+
+                if speak_back_mask is not None:
+                    speak_back_total += int(speak_back_mask.sum().item())
+                    back_mask = speak_back_mask if back_mask is None else (back_mask | speak_back_mask)
+
+                if back_mask is not None:
+                    drift = drift * (~back_mask).to(dtype=s.dtype)
+                    delta = torch.where(back_mask, delta.new_full((batch_size,), -float(step_size)), delta)
+
+                s_new = _apply_pointer_bounds(
+                    s + drift + delta,
+                    max_s=float(read_port.length - 1),
+                    mode=str(pointer_bounds),
+                )
+                s_round = s_new.detach().round().to(dtype=torch.long).clamp(0, int(read_port.length - 1))
+                s_tail[int(t) % int(tail_window)] = s_round
+                s_min = torch.minimum(s_min, s_round)
+                s_max = torch.maximum(s_max, s_round)
+
+                delta_sum += float(delta.detach().sum().item())
+                delta_abs_sum += float(delta.detach().abs().sum().item())
+                delta_count += int(delta.numel())
+
+                near_boundary = (s_round <= int(boundary_window)) | (
+                    s_round >= int(read_port.length - 1 - boundary_window)
+                )
+                boundary_steps += int(near_boundary.sum().item())
+                boundary_total += int(near_boundary.numel())
+
+                k1_hit = (s_round >= int(k1_pos)) & (s_round < int(k1_pos + key_len))
+                k2_hit = (s_round >= int(k2_pos)) & (s_round < int(k2_pos + key_len))
+                k1_seen = k1_seen | k1_hit
+                k2_seen = k2_seen | k2_hit
+                v1_hit = (s_round >= int(v1_start)) & (s_round < int(v1_end))
+                v2_hit = (s_round >= int(v2_start)) & (s_round < int(v2_end))
+                v1_seen = v1_seen | v1_hit
+                v2_seen = v2_seen | v2_hit
+                hit_val = v1_hit | v2_hit
+                val_any = val_any | hit_val
+                dwell = dwell + hit_val.to(dtype=dwell.dtype)
+                first_hit = torch.where((first_hit < 0) & hit_val, torch.full_like(first_hit, int(t)), first_hit)
+
+                # Book-keeping for penalties
+                if recent_s is not None:
+                    recent_s[recent_ptr] = s_round
+                    recent_ptr = (recent_ptr + 1) % int(revisit_window)
+                    recent_len = min(int(revisit_window), recent_len + 1)
+                if cover_s is not None:
+                    cover_s[cover_ptr] = s_new.detach().to(dtype=torch.float32)
+                    cover_ptr = (cover_ptr + 1) % int(cover_window)
+                    cover_len = min(int(cover_window), cover_len + 1)
+                if prev_tok is not None and token_ids_port is not None:
+                    prev_tok = token_ids_port[s_round]
+
+                # Observation and training step
+                y = read_port.read(s_new)  # [B,D]
+                y_in = y
+                if float(noise_std) > 0.0:
+                    y_in = y + float(noise_std) * torch.randn_like(y)
+
+                u_dict = {"default": y_in}
+                if speak_probs is not None and speak_emb is not None:
+                    u_dict["speak"] = speak_probs @ speak_emb.weight
+                out = entity.forward_tensor(
+                    state_flat=entity.state.flat,
+                    u_dict=u_dict,
+                    dt=float(dt),
+                    prev_chart_weights=getattr(entity, "_prev_chart_weights", None),
+                    prediction_error=None,
+                    detach_next_prev_weights=True,
+                    compute_action=False,
+                    skip_free_energy=True,
+                )
+                entity.state = ContactState(entity.dim_q, batch_size, device, out["next_state_flat"])
+                entity._prev_chart_weights = out["next_prev_chart_weights"]
+
+                y_hat = decoder(entity.state.q)
+                pred_err_ps = (y_hat - y).pow(2).mean(dim=1)
+
+                loss, parts = compute_loss(
+                    entity=entity,
+                    state=entity.state,
+                    pred_err_per_sample=pred_err_ps,
+                    action_delta=delta,
+                    beta_kl=beta_kl,
+                    gamma_pred=gamma_pred,
+                    cost_weight=cost_weight,
+                    cost_power=float(cost_power),
+                    cost_offset=float(cost_offset),
+                    anti_lock_weight=float(anti_lock_weight),
+                    anti_lock_sigma=float(anti_lock_sigma),
+                    revisit_penalty_per_sample=None,
+                    pref_penalty_per_sample=None,
+                    cover_penalty_per_sample=None,
+                    epi_penalty_per_sample=None,
+                )
+                loss_total = loss
+                if speak_ce is not None and speak_loss_w > 0.0:
+                    loss_total = loss_total + float(speak_loss_w) * speak_ce
+                optimizer.zero_grad(set_to_none=True)
+                loss_total.backward()
+                torch.nn.utils.clip_grad_norm_(list(entity.parameters()) + list(decoder.parameters()), max_norm=1.0)
+                optimizer.step()
+
+                entity.state = ContactState(entity.dim_q, batch_size, device, entity.state.flat.detach())
+                s = s_new.detach()
+
+                if fixate_left is not None:
+                    fixate_left = torch.clamp(fixate_left - 1, min=0)
+                    pe = pred_err_ps.detach()
+                    med = pe.median()
+                    mad = (pe - med).abs().median()
+                    mad_mult = float(fixate_mad_mult_f)
+                    if math.isfinite(mad_mult) and mad_mult > 0.0 and float(mad.item()) > 1e-12:
+                        thr = med + mad_mult * mad
+                        trigger = pe > thr
+                        if trigger.any():
+                            fixate_trigger_total += int(trigger.sum().item())
+                            fixate_left = torch.where(
+                                trigger,
+                                torch.full_like(fixate_left, fixate_steps_i),
+                                fixate_left,
+                            )
+
+                if log_f is not None and (int(log_every) > 0) and (t % int(log_every) == 0 or t == int(online_steps) - 1):
+                    resolved_so_far = ((k1_seen & v1_seen) | (k2_seen & v2_seen)).float().mean().item()
+                    speak_acc = float("nan")
+                    if speak_probs is not None and in_val_mask is not None:
+                        speak_acc = float((speak_probs.argmax(dim=1) == in_val_mask.to(dtype=torch.long)).float().mean().item())
+                    rec = {
+                        "tag": str(tag),
+                        "phase": "e3kv_online",
+                        "episode": int(ep),
+                        "label": int(label),
+                        "policy": str(policy_s),
+                        "t": int(t),
+                        "k1_pos": int(k1_pos),
+                        "k2_pos": int(k2_pos),
+                        "key_len": int(key_len),
+                        "v1_span": [int(v1_start), int(v1_end)],
+                        "v2_span": [int(v2_start), int(v2_end)],
+                        "val_hit_rate_so_far": float(val_any.float().mean().item()),
+                        "resolved_rate_so_far": float(resolved_so_far),
+                        "delta_mean": float(delta.detach().mean().item()),
+                        "delta_abs_mean": float(delta.detach().abs().mean().item()),
+                        "near_boundary_rate": float(near_boundary.float().mean().item()),
+                        "pred_err": float(pred_err_ps.detach().mean().item()),
+                        "F": float(loss.detach().item()),
+                        "loss_total": float(loss_total.detach().item()),
+                        "fixate_rate": (
+                            float(fixate_mask.float().mean().item()) if fixate_mask is not None else float("nan")
+                        ),
+                        "val_align_rate": (
+                            float(val_align_mask.float().mean().item()) if val_align_mask is not None else float("nan")
+                        ),
+                        "speak_ce": (float(speak_ce.detach().item()) if speak_ce is not None else float("nan")),
+                        "speak_acc": float(speak_acc),
+                        "speak_back_rate": (
+                            float(speak_back_mask.float().mean().item()) if speak_back_mask is not None else float("nan")
+                        ),
+                        **_parts_to_float(parts),
+                    }
+                    log_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+            resolved_any = (k1_seen & v1_seen) | (k2_seen & v2_seen)
+            if query_is_k1 is not None:
+                resolved_query = torch.where(query_is_k1, k1_seen & v1_seen, k2_seen & v2_seen)
+            else:
+                resolved_query = resolved_any
+
+            # E2-like cycle metrics at end of episode (online only)
+            W = min(int(online_steps), int(tail_window))
+            if W > 0:
+                start = int(int(online_steps) - W)
+                idx = [(start + k) % int(tail_window) for k in range(W)]
+                tail = s_tail[idx].detach().cpu().tolist()
+                for b in range(batch_size):
+                    tokens = [int(tail[k][b]) for k in range(W)]
+                    cycle_total += 1
+                    cyc = _detect_tail_cycle(tokens, max_period=max_period, min_repeats=min_repeats)
+                    if cyc is not None:
+                        cycle_hits += 1
+                        _, pattern = cyc
+                        if pattern and all((x == boundary_low) or (x == boundary_high) for x in pattern):
+                            boundary_cycle_hits += 1
+
+            # Offline: freeze env, optionally inject replay.
+            entity.enter_offline()
+            offline_q: List[torch.Tensor] = []
+            with torch.no_grad():
+                for _ in range(int(offline_steps)):
+                    u_off: Dict[str, torch.Tensor] = {}
+                    exp = getattr(entity, "experience", None)
+                    exp_size = int(getattr(exp, "size", 0) or 0) if exp is not None else 0
+                    if replay_mode != "none" and exp is not None and exp_size > 0:
+                        replay = exp.sample_replay(batch_size, mode=replay_mode)
+                        if replay is not None:
+                            replay_state = replay["states"].to(device)
+                            if replay_state.shape[0] < batch_size:
+                                pad = replay_state[0:1].expand(batch_size - replay_state.shape[0], -1)
+                                replay_state = torch.cat([replay_state, pad], dim=0)
+                            replay_q = replay_state[:, : entity.dim_q]
+                            u_off["replay"] = 0.1 * (replay_q - entity.state.q)
+                    _entity_forward_step_fast(entity=entity, u_dict=u_off, dt=float(dt))
+                    offline_q.append(entity.state.q.detach())
+
+            q_off_mean = (
+                torch.stack(offline_q, dim=0).mean(dim=0).detach().cpu() if offline_q else entity.state.q.detach().cpu()
+            )
+
+            q_feat = q_off_mean
+            if query_steps_i > 0 and query_ids is not None and query_target_ids is not None:
+                # Query/readout phase: input=key embedding, target=value embedding.
+                entity.enter_online()
+                query_in = embedding(query_ids).detach()
+                query_target = embedding(query_target_ids).detach()
+                train_mask = resolved_query.detach()
+                for _ in range(query_steps_i):
+                    out = entity.forward_tensor(
+                        state_flat=entity.state.flat,
+                        u_dict={"default": query_in},
+                        dt=float(dt),
+                        prev_chart_weights=getattr(entity, "_prev_chart_weights", None),
+                        prediction_error=None,
+                        detach_next_prev_weights=True,
+                        compute_action=False,
+                        skip_free_energy=True,
+                    )
+                    entity.state = ContactState(entity.dim_q, batch_size, device, out["next_state_flat"])
+                    entity._prev_chart_weights = out["next_prev_chart_weights"]
+
+                    y_hat = decoder(entity.state.q)
+                    pred_err_ps = (y_hat - query_target).pow(2).mean(dim=1)
+                    if train_mask.any():
+                        pred_err_hit = pred_err_ps[train_mask].mean()
+                        optimizer.zero_grad(set_to_none=True)
+                        pred_err_hit.backward()
+                        torch.nn.utils.clip_grad_norm_(list(entity.parameters()) + list(decoder.parameters()), max_norm=1.0)
+                        optimizer.step()
+                    entity.state = ContactState(entity.dim_q, batch_size, device, entity.state.flat.detach())
+
+                with torch.no_grad():
+                    emb_a = embedding.weight[int(val_a)].detach().view(1, -1)
+                    emb_b = embedding.weight[int(val_b)].detach().view(1, -1)
+                    dist_a = (y_hat.detach() - emb_a).pow(2).mean(dim=1)
+                    dist_b = (y_hat.detach() - emb_b).pow(2).mean(dim=1)
+                    pred_is_b = dist_b < dist_a
+                    tgt_is_b = query_target_ids == int(val_b)
+                    correct = pred_is_b == tgt_is_b
+                    query_correct_total += int(correct.sum().item())
+                    if train_mask.any():
+                        query_hit_total += int(train_mask.sum().item())
+                        query_correct_hit_total += int(correct[train_mask].sum().item())
+
+                # For a stable, cross-episode diagnostic, use the predicted observation (y_hat) as the feature
+                # (embedding space is fixed; q space can drift while weights learn).
+                q_feat = y_hat.detach().cpu()
+
+            feats_all.append(q_feat)
+            labs_all.append(torch.full((batch_size,), int(label), dtype=torch.long))
+            resolved_all.append(resolved_query.detach().cpu() if query_steps_i > 0 else resolved_any.detach().cpu())
+            resolved_any_all.append(resolved_any.detach().cpu())
+            val_hit_all.append(val_any.detach().cpu())
+            first_hit_all.append(first_hit.detach().cpu())
+            dwell_all.append(dwell.detach().cpu())
+            span_all.append((s_max - s_min).detach().cpu().to(dtype=torch.int32))
+
+    feats = torch.cat(feats_all, dim=0) if feats_all else torch.zeros((0, entity.dim_q))
+    labs = torch.cat(labs_all, dim=0) if labs_all else torch.zeros((0,), dtype=torch.long)
+    resolved_cat = torch.cat(resolved_all, dim=0) if resolved_all else torch.zeros((0,), dtype=torch.bool)
+    resolved_any_cat = torch.cat(resolved_any_all, dim=0) if resolved_any_all else torch.zeros((0,), dtype=torch.bool)
+    val_hit_cat = torch.cat(val_hit_all, dim=0) if val_hit_all else torch.zeros((0,), dtype=torch.bool)
+    first_hit_cat = torch.cat(first_hit_all, dim=0) if first_hit_all else torch.zeros((0,), dtype=torch.int32)
+    dwell_cat = torch.cat(dwell_all, dim=0) if dwell_all else torch.zeros((0,), dtype=torch.int32)
+    span_cat = torch.cat(span_all, dim=0) if span_all else torch.zeros((0,), dtype=torch.int32)
+
+    probe = train_linear_probe(feats, labs, seed=int(seed))
+    labs_shuf = labs[torch.randperm(int(labs.numel()))] if int(labs.numel()) > 0 else labs
+    probe_shuf = train_linear_probe(feats, labs_shuf, seed=int(seed) + 1)
+
+    total = int(resolved_cat.numel())
+    resolved_rate = float(resolved_cat.float().mean().item()) if total > 0 else float("nan")
+    resolved_any_rate = (
+        float(resolved_any_cat.float().mean().item()) if int(resolved_any_cat.numel()) > 0 else float("nan")
+    )
+    val_hit_rate = float(val_hit_cat.float().mean().item()) if total > 0 else float("nan")
+    hit_mask = resolved_cat.bool()
+
+    if int(hit_mask.sum().item()) > 0:
+        first_hits = first_hit_cat[hit_mask].to(dtype=torch.float32)
+        first_hit_mean = float(first_hits.mean().item())
+        first_hit_med = float(first_hits.median().item())
+        dwell_hits = dwell_cat[hit_mask].to(dtype=torch.float32)
+        dwell_hit_mean = float(dwell_hits.mean().item())
+        dwell_hit_med = float(dwell_hits.median().item())
+        span_hits = span_cat[hit_mask].to(dtype=torch.float32)
+        span_hit_mean = float(span_hits.mean().item())
+        span_hit_med = float(span_hits.median().item())
+    else:
+        first_hit_mean = float("nan")
+        first_hit_med = float("nan")
+        dwell_hit_mean = float("nan")
+        dwell_hit_med = float("nan")
+        span_hit_mean = float("nan")
+        span_hit_med = float("nan")
+
+    n_hit = int(hit_mask.sum().item()) if total > 0 else 0
+    n_nohit = int(total - n_hit)
+    probe_hit = {"acc": float("nan"), "auc": float("nan")}
+    probe_hit_shuf = {"acc": float("nan"), "auc": float("nan")}
+    probe_nohit = {"acc": float("nan"), "auc": float("nan")}
+    probe_nohit_shuf = {"acc": float("nan"), "auc": float("nan")}
+    if n_hit >= 10:
+        feats_hit = feats[hit_mask]
+        labs_hit = labs[hit_mask]
+        probe_hit = train_linear_probe(feats_hit, labs_hit, seed=int(seed) + 100)
+        labs_hit_shuf = labs_hit[torch.randperm(int(labs_hit.numel()))]
+        probe_hit_shuf = train_linear_probe(feats_hit, labs_hit_shuf, seed=int(seed) + 101)
+    if n_nohit >= 10:
+        feats_nohit = feats[~hit_mask]
+        labs_nohit = labs[~hit_mask]
+        probe_nohit = train_linear_probe(feats_nohit, labs_nohit, seed=int(seed) + 200)
+        labs_nohit_shuf = labs_nohit[torch.randperm(int(labs_nohit.numel()))]
+        probe_nohit_shuf = train_linear_probe(feats_nohit, labs_nohit_shuf, seed=int(seed) + 201)
+
+    non_boundary_hits = int(cycle_hits - boundary_cycle_hits)
+    denom = max(1, int(cycle_total))
+    e2 = {
+        "ptr_cycle_rate": float(cycle_hits / denom),
+        "ptr_cycle_hits": int(cycle_hits),
+        "ptr_cycle_total": int(cycle_total),
+        "ptr_cycle_rate_non_boundary": float(non_boundary_hits / denom),
+        "ptr_cycle_hits_non_boundary": int(non_boundary_hits),
+        "ptr_cycle_rate_boundary": float(boundary_cycle_hits / denom),
+        "ptr_cycle_hits_boundary": int(boundary_cycle_hits),
+        "ptr_cycle_boundary_low": int(boundary_low),
+        "ptr_cycle_boundary_high": int(boundary_high),
+    }
+
+    return {
+        "task": "kv_swap",
+        "policy": str(policy_s),
+        "query_key": str(query_key_s),
+        "query_steps": int(query_steps_i),
+        "query_k1_rate": (float(query_k1_total / max(1, int(query_total))) if query_steps_i > 0 else float("nan")),
+        "query_acc": (float(query_correct_total / max(1, int(query_total))) if query_steps_i > 0 else float("nan")),
+        "query_acc_hit": (
+            float(query_correct_hit_total / max(1, int(query_hit_total))) if query_steps_i > 0 else float("nan")
+        ),
+        "keys": {"K1": {"id": int(key1), "token": tok_k1}, "K2": {"id": int(key2), "token": tok_k2}},
+        "values": {"A": {"id": int(val_a), "token": tok_a}, "B": {"id": int(val_b), "token": tok_b}},
+        "seq_len": int(seq_len),
+        "key_len": int(key_len),
+        "value_len": int(value_len),
+        "clue_margin": int(clue_margin),
+        "boundary_window": int(boundary_window),
+        "fixate_steps": int(fixate_steps_i),
+        "fixate_mad_mult": float(fixate_mad_mult_f),
+        "fixate_mode": str(fixate_mode_s),
+        "fixate_scan_radius": int(fixate_scan_radius_i),
+        "fixate_trigger_rate": float(fixate_trigger_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))),
+        "fixate_step_rate": float(fixate_step_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))),
+        "val_align": bool(val_align_i != 0),
+        "val_align_trigger_rate": float(
+            val_align_trigger_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))
+        ),
+        "val_align_step_rate": float(val_align_step_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))),
+        "speak": bool(speak_i != 0),
+        "speak_use": bool(speak_use_i != 0),
+        "speak_vocab": int(speak_vocab_i),
+        "speak_loss_weight": float(speak_loss_w),
+        "speak_back_threshold": float(speak_back_thr),
+        "speak_acc": (float(speak_correct_total / max(1, int(speak_total))) if speak_i != 0 else float("nan")),
+        "speak_ce": (float(speak_ce_sum / max(1, int(speak_ce_count))) if speak_i != 0 else float("nan")),
+        "speak_back_rate": float(speak_back_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))),
+        "base_marker_violations": int(base_marker_violations),
+        "base_marker_count_total": int(base_marker_count_total),
+        "edge_min": int(edge_min if edge_min < int(1e8) else -1),
+        "k1_pos_min": int(min(key1_pos_list) if key1_pos_list else -1),
+        "k1_pos_max": int(max(key1_pos_list) if key1_pos_list else -1),
+        "k2_pos_min": int(min(key2_pos_list) if key2_pos_list else -1),
+        "k2_pos_max": int(max(key2_pos_list) if key2_pos_list else -1),
+        "val_hit_rate": float(val_hit_rate),
+        "resolved_any_rate": float(resolved_any_rate),
+        "resolved_rate": float(resolved_rate),
+        "first_hit_mean": float(first_hit_mean),
+        "first_hit_median": float(first_hit_med),
+        "dwell_mean": float(dwell_cat.to(dtype=torch.float32).mean().item()) if total > 0 else float("nan"),
+        "dwell_hit_mean": float(dwell_hit_mean),
+        "dwell_hit_median": float(dwell_hit_med),
+        "span_mean": float(span_cat.to(dtype=torch.float32).mean().item()) if total > 0 else float("nan"),
+        "span_hit_mean": float(span_hit_mean),
+        "span_hit_median": float(span_hit_med),
+        "delta_mean": float(delta_sum / max(1, int(delta_count))),
+        "delta_abs_mean": float(delta_abs_sum / max(1, int(delta_count))),
+        "near_boundary_rate": float(boundary_steps / max(1, int(boundary_total))),
+        "probe_acc": float(probe["acc"]),
+        "probe_auc": float(probe["auc"]),
+        "probe_acc_shuffled": float(probe_shuf["acc"]),
+        "probe_auc_shuffled": float(probe_shuf["auc"]),
+        "probe_n_hit": int(n_hit),
+        "probe_acc_hit": float(probe_hit["acc"]),
+        "probe_auc_hit": float(probe_hit["auc"]),
+        "probe_acc_hit_shuffled": float(probe_hit_shuf["acc"]),
+        "probe_auc_hit_shuffled": float(probe_hit_shuf["auc"]),
+        "probe_n_nohit": int(n_nohit),
+        "probe_acc_nohit": float(probe_nohit["acc"]),
+        "probe_auc_nohit": float(probe_nohit["auc"]),
+        "probe_acc_nohit_shuffled": float(probe_nohit_shuf["acc"]),
+        "probe_auc_nohit_shuffled": float(probe_nohit_shuf["auc"]),
+        "n_samples": int(total),
+        "feature": ("query_pred_y_hat" if query_steps_i > 0 else "mean_offline_q"),
+        "ptr_cycles": e2,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--save_dir", type=str, default="checkpoints/l7v2_v0_verify")
@@ -1543,7 +3084,7 @@ def main() -> None:
 
     # v0.1: anti dark-room (still within a single scalar F; optional, default off for v0 reproducibility)
     parser.add_argument("--pointer_drift", type=float, default=0.0)
-    parser.add_argument("--pointer_bounds", type=str, default="clamp", choices=["clamp", "reflect"])
+    parser.add_argument("--pointer_bounds", type=str, default="clamp", choices=["clamp", "reflect", "wrap"])
     parser.add_argument("--anti_lock_weight", type=float, default=0.0)
     parser.add_argument("--anti_lock_sigma", type=float, default=1.0)
     parser.add_argument("--revisit_weight", type=float, default=0.0)
@@ -1574,6 +3115,84 @@ def main() -> None:
 
     parser.add_argument("--run_e0", type=int, default=1)
     parser.add_argument("--run_e1e2", type=int, default=1)
+    parser.add_argument("--run_e3", type=int, default=0)
+    parser.add_argument("--e3_task", type=str, default="marker_patch", choices=["marker_patch", "kv_swap"])
+    parser.add_argument("--e3_pairs", type=int, default=8, help="Number of base episodes (each yields 2 classes).")
+    parser.add_argument("--e3_seq_len", type=int, default=4096)
+    parser.add_argument("--e3_clue_len", type=int, default=32)
+    parser.add_argument("--e3_key_len", type=int, default=1, help="E3 kv_swap: key span length (default 1).")
+    parser.add_argument("--e3_clue_margin", type=int, default=64)
+    parser.add_argument(
+        "--e3_policy",
+        type=str,
+        default="active",
+        choices=["active", "active_fixate", "passive", "random", "frozen"],
+    )
+    parser.add_argument("--e3_fixate_steps", type=int, default=8, help="active_fixate: fixation steps after surprise trigger.")
+    parser.add_argument(
+        "--e3_fixate_mad_mult",
+        type=float,
+        default=6.0,
+        help="active_fixate: trigger if pred_err > median + k*MAD (k=this).",
+    )
+    parser.add_argument(
+        "--e3_fixate_mode",
+        type=str,
+        default="freeze",
+        choices=["freeze", "backward_uniform", "both_uniform"],
+        help="active_fixate: fixation behavior (freeze pointer or run a local micro-scan).",
+    )
+    parser.add_argument(
+        "--e3_fixate_scan_radius",
+        type=int,
+        default=0,
+        help="active_fixate: scan radius for non-freeze modes (0 -> use value_len for kv_swap).",
+    )
+    parser.add_argument(
+        "--e3_query_steps",
+        type=int,
+        default=0,
+        help="E3 kv_swap: number of query/readout training steps (0 disables query readout).",
+    )
+    parser.add_argument(
+        "--e3_query_key",
+        type=str,
+        default="none",
+        choices=["none", "k1", "k2", "random"],
+        help="E3 kv_swap: which key to query during query/readout phase.",
+    )
+    parser.add_argument(
+        "--e3_val_align",
+        type=int,
+        default=0,
+        help="E3 kv_swap: if 1, value-hit triggers a one-step alignment to the corresponding key on the next step.",
+    )
+    parser.add_argument("--e3_speak", type=int, default=0, help="E3 kv_swap: enable a discrete 'speak' (inner-language) port.")
+    parser.add_argument(
+        "--e3_speak_vocab",
+        type=int,
+        default=2,
+        help="E3 kv_swap: speak vocab size (>=2). Index 1 is treated as BACK for e3_speak_use.",
+    )
+    parser.add_argument(
+        "--e3_speak_loss_weight",
+        type=float,
+        default=0.1,
+        help="E3 kv_swap: supervised speak CE loss weight (label = in_val_mask). 0 disables.",
+    )
+    parser.add_argument(
+        "--e3_speak_use",
+        type=int,
+        default=1,
+        help="E3 kv_swap: if 1, use speak token BACK to override pointer delta (non-differentiable threshold).",
+    )
+    parser.add_argument(
+        "--e3_speak_back_threshold",
+        type=float,
+        default=0.9,
+        help="E3 kv_swap: threshold for BACK probability when e3_speak_use=1.",
+    )
+    parser.add_argument("--e3_boundary_window", type=int, default=0, help="0 = auto (3*sigma).")
     parser.add_argument("--log_every", type=int, default=10)
     args = parser.parse_args()
 
@@ -1640,6 +3259,27 @@ def main() -> None:
         "online_steps": int(args.online_steps),
         "offline_steps": int(args.offline_steps),
         "replay_mode": args.replay_mode,
+        "run_e3": int(args.run_e3),
+        "e3_task": str(args.e3_task),
+        "e3_pairs": int(args.e3_pairs),
+        "e3_seq_len": int(args.e3_seq_len),
+        "e3_clue_len": int(args.e3_clue_len),
+        "e3_key_len": int(args.e3_key_len),
+        "e3_clue_margin": int(args.e3_clue_margin),
+        "e3_policy": str(args.e3_policy),
+        "e3_fixate_steps": int(args.e3_fixate_steps),
+        "e3_fixate_mad_mult": float(args.e3_fixate_mad_mult),
+        "e3_fixate_mode": str(args.e3_fixate_mode),
+        "e3_fixate_scan_radius": int(args.e3_fixate_scan_radius),
+        "e3_query_steps": int(args.e3_query_steps),
+        "e3_query_key": str(args.e3_query_key),
+        "e3_val_align": int(args.e3_val_align),
+        "e3_speak": int(args.e3_speak),
+        "e3_speak_vocab": int(args.e3_speak_vocab),
+        "e3_speak_loss_weight": float(args.e3_speak_loss_weight),
+        "e3_speak_use": int(args.e3_speak_use),
+        "e3_speak_back_threshold": float(args.e3_speak_back_threshold),
+        "e3_boundary_window": int(args.e3_boundary_window),
     }
     with open(os.path.join(save_dir, "run_config.json"), "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
@@ -1676,6 +3316,23 @@ def main() -> None:
         }
     ).to(device)
     decoder = ObsDecoder(int(args.dim_q), int(args.dim_q), hidden=0).to(device)
+
+    e3_task_init = str(args.e3_task or "marker_patch").strip().lower()
+    if int(args.run_e3) == 1 and int(args.e3_speak) != 0 and e3_task_init != "kv_swap":
+        raise ValueError("--e3_speak is currently only supported for --e3_task kv_swap")
+    if int(args.run_e3) == 1 and e3_task_init == "kv_swap" and int(args.e3_speak) != 0:
+        speak_vocab = int(args.e3_speak_vocab)
+        if speak_vocab < 2:
+            raise ValueError(f"--e3_speak_vocab must be >=2 (got {speak_vocab})")
+        if "speak" not in entity.get_available_interfaces():
+            entity.add_interface("speak", int(args.dim_q))
+        entity.e3_speak_head = nn.Linear(int(args.dim_q), speak_vocab).to(device)
+        entity.e3_speak_emb = nn.Embedding(speak_vocab, int(args.dim_q)).to(device)
+        with torch.no_grad():
+            entity.e3_speak_emb.weight.zero_()
+            entity.e3_speak_head.weight.zero_()
+            if entity.e3_speak_head.bias is not None:
+                entity.e3_speak_head.bias.zero_()
 
     init_entity = {k: v.detach().clone() for k, v in entity.state_dict().items()}
     init_decoder = {k: v.detach().clone() for k, v in decoder.state_dict().items()}
@@ -1879,6 +3536,140 @@ def main() -> None:
                 "A": e2_a,
                 "B": e2_b,
             }
+
+        if int(args.run_e3) == 1:
+            # E3: minimal reading closed-loop (localized evidence); from fresh init weights.
+            entity.load_state_dict(init_entity, strict=True)
+            decoder.load_state_dict(init_decoder, strict=True)
+            opt = make_optimizer(
+                entity=entity,
+                decoder=decoder,
+                lr=float(args.lr),
+                weight_decay=float(args.weight_decay),
+                train_v=(int(args.train_v) == 1),
+                lr_v=(None if args.lr_v is None else float(args.lr_v)),
+            )
+            e3_task = str(args.e3_task or "marker_patch").strip().lower()
+            if e3_task == "marker_patch":
+                e3 = run_e3_marker_reading(
+                    entity=entity,
+                    decoder=decoder,
+                    embedding=emb,
+                    vocab=vocab,
+                    optimizer=opt,
+                    device=device,
+                    batch_size=int(args.batch_size),
+                    pairs=int(args.e3_pairs),
+                    seq_len=int(args.e3_seq_len),
+                    clue_len=int(args.e3_clue_len),
+                    clue_margin=int(args.e3_clue_margin),
+                    policy=str(args.e3_policy),
+                    fixate_steps=int(args.e3_fixate_steps),
+                    fixate_mad_mult=float(args.e3_fixate_mad_mult),
+                    boundary_window=int(args.e3_boundary_window),
+                    read_sigma=float(args.sigma),
+                    online_steps=int(args.online_steps),
+                    offline_steps=int(args.offline_steps),
+                    dt=float(args.dt),
+                    step_size=float(args.step_size),
+                    candidates=candidates,
+                    beta_kl=float(args.beta_kl),
+                    gamma_pred=float(args.gamma_pred),
+                    cost_weight=float(args.cost_weight),
+                    cost_power=float(args.cost_power),
+                    cost_offset=float(args.cost_offset),
+                    noise_std=float(args.noise_std),
+                    pointer_drift=float(args.pointer_drift),
+                    pointer_bounds=str(args.pointer_bounds),
+                    anti_lock_weight=float(args.anti_lock_weight),
+                    anti_lock_sigma=float(args.anti_lock_sigma),
+                    revisit_weight=float(args.revisit_weight),
+                    revisit_window=int(args.revisit_window),
+                    lookahead_steps=int(args.lookahead_steps),
+                    lookahead_discount=float(args.lookahead_discount),
+                    pref_repeat_weight=float(args.pref_repeat_weight),
+                    cover_weight=float(args.cover_weight),
+                    cover_sigma=float(args.cover_sigma),
+                    cover_window=int(args.cover_window),
+                    cover_warmup_frac=float(args.cover_warmup_frac),
+                    epi_weight=float(args.epi_weight),
+                    epi_normalize=int(args.epi_normalize),
+                    epi_mode=str(args.epi_mode),
+                    epi_obs_eps=float(args.epi_obs_eps),
+                    epi_pred_floor=float(args.epi_pred_floor),
+                    replay_mode=str(args.replay_mode),
+                    seed=int(args.seed),
+                    log_f=log_f,
+                    tag="e3",
+                    log_every=int(args.log_every),
+                )
+            elif e3_task == "kv_swap":
+                e3 = run_e3_kv_swap(
+                    entity=entity,
+                    decoder=decoder,
+                    embedding=emb,
+                    vocab=vocab,
+                    optimizer=opt,
+                    device=device,
+                    batch_size=int(args.batch_size),
+                    pairs=int(args.e3_pairs),
+                    seq_len=int(args.e3_seq_len),
+                    key_len=int(args.e3_key_len),
+                    value_len=int(args.e3_clue_len),
+                    clue_margin=int(args.e3_clue_margin),
+                    policy=str(args.e3_policy),
+                    fixate_steps=int(args.e3_fixate_steps),
+                    fixate_mad_mult=float(args.e3_fixate_mad_mult),
+                    fixate_mode=str(args.e3_fixate_mode),
+                    fixate_scan_radius=int(args.e3_fixate_scan_radius),
+                    boundary_window=int(args.e3_boundary_window),
+                    read_sigma=float(args.sigma),
+                    online_steps=int(args.online_steps),
+                    offline_steps=int(args.offline_steps),
+                    dt=float(args.dt),
+                    step_size=float(args.step_size),
+                    candidates=candidates,
+                    beta_kl=float(args.beta_kl),
+                    gamma_pred=float(args.gamma_pred),
+                    cost_weight=float(args.cost_weight),
+                    cost_power=float(args.cost_power),
+                    cost_offset=float(args.cost_offset),
+                    noise_std=float(args.noise_std),
+                    pointer_drift=float(args.pointer_drift),
+                    pointer_bounds=str(args.pointer_bounds),
+                    anti_lock_weight=float(args.anti_lock_weight),
+                    anti_lock_sigma=float(args.anti_lock_sigma),
+                    revisit_weight=float(args.revisit_weight),
+                    revisit_window=int(args.revisit_window),
+                    lookahead_steps=int(args.lookahead_steps),
+                    lookahead_discount=float(args.lookahead_discount),
+                    pref_repeat_weight=float(args.pref_repeat_weight),
+                    cover_weight=float(args.cover_weight),
+                    cover_sigma=float(args.cover_sigma),
+                    cover_window=int(args.cover_window),
+                    cover_warmup_frac=float(args.cover_warmup_frac),
+                    epi_weight=float(args.epi_weight),
+                    epi_normalize=int(args.epi_normalize),
+                    epi_mode=str(args.epi_mode),
+                    epi_obs_eps=float(args.epi_obs_eps),
+                    epi_pred_floor=float(args.epi_pred_floor),
+                    replay_mode=str(args.replay_mode),
+                    query_steps=int(args.e3_query_steps),
+                    query_key=str(args.e3_query_key),
+                    val_align=int(args.e3_val_align),
+                    speak=int(args.e3_speak),
+                    speak_vocab=int(args.e3_speak_vocab),
+                    speak_loss_weight=float(args.e3_speak_loss_weight),
+                    speak_use=int(args.e3_speak_use),
+                    speak_back_threshold=float(args.e3_speak_back_threshold),
+                    seed=int(args.seed),
+                    log_f=log_f,
+                    tag="e3kv",
+                    log_every=int(args.log_every),
+                )
+            else:
+                raise ValueError(f"unknown e3_task: {args.e3_task}")
+            summary["E3"] = e3
 
     with open(os.path.join(save_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
