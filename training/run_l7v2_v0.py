@@ -379,6 +379,14 @@ def choose_delta_one_step(
     epi_mode: str = "chart_entropy",
     epi_obs_eps: float = 1.0,
     epi_pred_floor: float = 0.0,
+    mix_back_prob: Optional[torch.Tensor] = None,  # [B] in [0,1]
+    mix_back_delta: float = -1.0,
+    mix_back_delta_per_sample: Optional[torch.Tensor] = None,  # [B] float
+    phase_mask: Optional[torch.Tensor] = None,  # [B] in {0,1}: 1 => fine phase
+    phase_fine_max_step: float = 0.0,
+    phase_fine_weight: float = 0.0,
+    phase_coarse_min_step: float = 0.0,
+    phase_coarse_weight: float = 0.0,
 ) -> torch.Tensor:
     """
     One-step lookahead: pick delta that minimizes (V + gamma*E_pred + cost).
@@ -412,6 +420,52 @@ def choose_delta_one_step(
     state_cur = state_rep  # [C*B,S]
     prev_cur = prev_rep  # [C*B,num_charts] or None
 
+    # Optional: continuous per-sample mix toward a "BACK" delta (used by E3 speak control).
+    mix_prob: Optional[torch.Tensor] = None
+    cand_step = cand.unsqueeze(1)  # [C,1] (broadcasts to [C,B])
+    if mix_back_prob is not None:
+        mix_prob = mix_back_prob.to(device=device, dtype=torch.float32).flatten()
+        if int(mix_prob.numel()) != B:
+            raise ValueError(f"mix_back_prob must have shape [B]={B}, got {tuple(mix_prob.shape)}")
+        mix_prob = mix_prob.clamp(0.0, 1.0).view(1, B)  # [1,B]
+        back_delta_ps: Optional[torch.Tensor] = None
+        if mix_back_delta_per_sample is not None:
+            back_delta_ps = mix_back_delta_per_sample.to(device=device, dtype=torch.float32).flatten()
+            if int(back_delta_ps.numel()) != B:
+                raise ValueError(f"mix_back_delta_per_sample must have shape [B]={B}, got {tuple(back_delta_ps.shape)}")
+            back_delta_ps = back_delta_ps.view(1, B)
+        else:
+            back_delta = float(mix_back_delta)
+            if not math.isfinite(back_delta):
+                back_delta = -1.0
+            back_delta_ps = cand_step.new_full((1, B), float(back_delta))
+        cand_step = (1.0 - mix_prob) * cand.view(C, 1) + mix_prob * back_delta_ps  # [C,B]
+
+    # Optional: phase-dependent step-size shaping (used by E3 kv_text coarse→fine retrieval).
+    # Apply on the first simulated step only (k==0) to avoid overweighting in lookahead.
+    phase_penalty_first: Optional[torch.Tensor] = None
+    if phase_mask is not None:
+        m = phase_mask.to(device=device, dtype=torch.float32).flatten()
+        if int(m.numel()) != B:
+            raise ValueError(f"phase_mask must have shape [B]={B}, got {tuple(phase_mask.shape)}")
+        m = m.clamp(0.0, 1.0).view(1, B)  # [1,B]
+        if mix_prob is None:
+            abs_step = cand.abs().view(C, 1).expand(C, B)
+        else:
+            abs_step = cand_step.abs()
+
+        fine_max = float(phase_fine_max_step)
+        fine_w = float(phase_fine_weight)
+        coarse_min = float(phase_coarse_min_step)
+        coarse_w = float(phase_coarse_weight)
+        pen = abs_step.new_zeros((C, B))
+        if math.isfinite(fine_w) and fine_w > 0.0 and math.isfinite(fine_max) and fine_max > 0.0:
+            pen = pen + float(fine_w) * m * torch.relu(abs_step - float(fine_max))
+        if math.isfinite(coarse_w) and coarse_w > 0.0 and math.isfinite(coarse_min) and coarse_min > 0.0:
+            pen = pen + float(coarse_w) * (1.0 - m) * torch.relu(float(coarse_min) - abs_step)
+        if (pen.abs().max().item() if int(pen.numel()) > 0 else 0.0) > 0.0:
+            phase_penalty_first = pen
+
     # Terms that do not depend on the simulated state (apply each step).
     p = float(cost_power)
     if not math.isfinite(p) or p <= 0:
@@ -419,16 +473,22 @@ def choose_delta_one_step(
     off = float(cost_offset)
     if not math.isfinite(off) or off < 0:
         off = 0.0
-    step_base = float(cost_weight) * (cand.abs() + off).pow(p)  # [C]
+    if mix_prob is None:
+        step_base = float(cost_weight) * (cand.abs() + off).pow(p)  # [C]
+    else:
+        step_base = float(cost_weight) * (cand_step.abs() + off).pow(p)  # [C,B]
     if float(anti_lock_weight) > 0.0:
         sigma = max(float(anti_lock_sigma), 1e-6)
-        step_base = step_base + float(anti_lock_weight) * torch.exp(-0.5 * (cand / sigma).pow(2))
+        if mix_prob is None:
+            step_base = step_base + float(anti_lock_weight) * torch.exp(-0.5 * (cand / sigma).pow(2))
+        else:
+            step_base = step_base + float(anti_lock_weight) * torch.exp(-0.5 * (cand_step / sigma).pow(2))
 
     # Revisit penalty is evaluated on the *first* step (w.r.t. actual recent history).
     revisit_first: Optional[torch.Tensor] = None
     if float(revisit_weight) > 0.0 and recent_s is not None and int(recent_s.numel()) > 0:
         s_new_first = _apply_pointer_bounds(
-            s_cur + float(pointer_drift) + cand.unsqueeze(1),
+            s_cur + float(pointer_drift) + cand_step,
             max_s=L,
             mode=str(pointer_bounds),
         )  # [C,B]
@@ -441,7 +501,7 @@ def choose_delta_one_step(
     if float(pref_repeat_weight) > 0.0 and token_ids is not None and prev_token_ids is not None:
         if token_ids.ndim == 1 and prev_token_ids.ndim == 1 and int(prev_token_ids.numel()) == B:
             s_new_first = _apply_pointer_bounds(
-                s_cur + float(pointer_drift) + cand.unsqueeze(1),
+                s_cur + float(pointer_drift) + cand_step,
                 max_s=L,
                 mode=str(pointer_bounds),
             )  # [C,B]
@@ -455,7 +515,7 @@ def choose_delta_one_step(
     if float(cover_weight) > 0.0 and cover_recent_s is not None and int(cover_recent_s.numel()) > 0:
         sigma = max(float(cover_sigma), 1e-6)
         s_new_first = _apply_pointer_bounds(
-            s_cur + float(pointer_drift) + cand.unsqueeze(1),
+            s_cur + float(pointer_drift) + cand_step,
             max_s=L,
             mode=str(pointer_bounds),
         )  # [C,B]
@@ -471,7 +531,7 @@ def choose_delta_one_step(
         state_pre = state_cur
         prev_pre = prev_cur
         s_cur = _apply_pointer_bounds(
-            s_cur + float(pointer_drift) + cand.unsqueeze(1),
+            s_cur + float(pointer_drift) + cand_step,
             max_s=L,
             mode=str(pointer_bounds),
         )  # [C,B]
@@ -572,7 +632,12 @@ def choose_delta_one_step(
         pred_err = (y_hat - y).pow(2).mean(dim=2)  # [C,B]
 
         V_ps = compute_v_term_per_sample(entity, next_state).view(C, B)  # [C,B]
-        step_score = V_ps + float(gamma_pred) * pred_err + step_base.unsqueeze(1)
+        if mix_prob is None:
+            step_score = V_ps + float(gamma_pred) * pred_err + step_base.unsqueeze(1)
+        else:
+            step_score = V_ps + float(gamma_pred) * pred_err + step_base
+        if k == 0 and phase_penalty_first is not None:
+            step_score = step_score + phase_penalty_first
         if k == 0 and revisit_first is not None:
             step_score = step_score + revisit_first
         if k == 0 and repeat_first is not None:
@@ -588,7 +653,9 @@ def choose_delta_one_step(
             break
 
     best_idx = total.argmin(dim=0)  # [B]
-    return cand[best_idx]
+    if mix_prob is None:
+        return cand[best_idx]
+    return cand_step.gather(0, best_idx.view(1, B)).squeeze(0)
 
 
 def _entity_forward_step_fast(
@@ -846,11 +913,13 @@ def run_online_steps(
                     cover_sigma=float(cover_sigma),
                     cover_recent_s=(cover_s[:cover_len] if cover_s is not None and cover_len > 0 else None),
                     epi_weight=float(epi_weight),
-                    epi_normalize=int(epi_normalize),
-                    epi_mode=str(epi_mode_s),
-                    epi_obs_eps=float(epi_obs_eps),
-                    epi_pred_floor=float(epi_pred_floor),
-                )
+	                            epi_normalize=int(epi_normalize),
+	                            epi_mode=str(epi_mode_s),
+	                            epi_obs_eps=float(epi_obs_eps),
+	                            epi_pred_floor=float(epi_pred_floor),
+	                            mix_back_prob=(speak_back_prob if int(speak_use_i) == 2 else None),
+	                            mix_back_delta=-float(step_size),
+	                        )
         else:
             raise ValueError(f"unknown mode: {mode}")
 
@@ -1547,6 +1616,120 @@ def _pick_e3_markers(vocab: CharVocab) -> Tuple[int, int, str, str]:
     return a_id, b_id, str(vocab.id_to_token[a_id]), str(vocab.id_to_token[b_id])
 
 
+def _pick_e3_markers_text(vocab: CharVocab) -> Tuple[int, int, str, str]:
+    """
+    Marker/value selection for kv_text: prefer tokens that look less OOD inside natural-language corpora
+    (digits/punct), to avoid the active policy trivially avoiding high-surprise spans.
+    """
+    a_pref = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "甲", "①", "一", "◇"]
+    b_pref = ["1", "0", "2", "3", "4", "5", "6", "7", "8", "9", "B", "乙", "②", "二", "◆"]
+    a_id = _pick_vocab_token_id(vocab, a_pref)
+    b_id = _pick_vocab_token_id(vocab, b_pref)
+    if a_id is not None and b_id is not None and a_id != b_id:
+        return a_id, b_id, str(vocab.id_to_token[a_id]), str(vocab.id_to_token[b_id])
+    return _pick_e3_markers(vocab)
+
+
+def _pick_e3_value_pool(
+    vocab: CharVocab,
+    *,
+    exclude_ids: Sequence[int],
+    count: int,
+) -> List[int]:
+    """
+    Pick a pool of distinct token ids to serve as value symbols in E3 kv_text when using COMB-v1.
+    Prefer 1-char tokens that are less OOD inside natural-language corpora; fall back to any 1-char tokens.
+    """
+    count_i = int(max(0, int(count)))
+    if count_i <= 0:
+        return []
+    exclude = {int(vocab.pad_id), int(vocab.unk_id)}
+    exclude.update(int(x) for x in exclude_ids)
+
+    chosen: List[int] = []
+    preferred = [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        ".",
+        ",",
+        ";",
+        ":",
+        "?",
+        "!",
+        "+",
+        "-",
+        "*",
+        "/",
+        "=",
+        "_",
+        "#",
+        "@",
+        "的",
+        "是",
+        "在",
+        "一",
+        "二",
+        "三",
+        "四",
+        "五",
+        "六",
+        "七",
+        "八",
+        "九",
+        "十",
+    ]
+    for tok in preferred:
+        idx = vocab.token_to_id.get(str(tok))
+        if idx is None:
+            continue
+        idx_i = int(idx)
+        if idx_i in exclude or idx_i in chosen:
+            continue
+        chosen.append(idx_i)
+        if len(chosen) >= count_i:
+            return chosen
+
+    for idx, tok in enumerate(vocab.id_to_token):
+        idx_i = int(idx)
+        if idx_i in exclude or idx_i in chosen:
+            continue
+        if not isinstance(tok, str) or len(tok) != 1:
+            continue
+        chosen.append(idx_i)
+        if len(chosen) >= count_i:
+            return chosen
+
+    for idx in range(len(vocab.id_to_token)):
+        idx_i = int(idx)
+        if idx_i in exclude or idx_i in chosen:
+            continue
+        chosen.append(idx_i)
+        if len(chosen) >= count_i:
+            return chosen
+
+    raise RuntimeError(f"unable to pick value pool: requested={count_i} got={len(chosen)}")
+
+
 def _pick_e3_kv_keys(vocab: CharVocab, *, exclude_ids: Sequence[int]) -> Tuple[int, int, str, str]:
     """
     Pick two distinct token ids to act as keys in E3+ (key-value binding).
@@ -1587,6 +1770,187 @@ def _make_allowed_token_ids(
     if not ids:
         raise RuntimeError("no allowed token ids (check vocab_size / exclusions)")
     return torch.tensor(ids, device=device, dtype=torch.long)
+
+
+def _sample_text_span(text: str, *, length: int) -> str:
+    if not text:
+        return ""
+    if length <= 0:
+        return ""
+    n = len(text)
+    if n <= length:
+        # Repeat the text (or prefix) to reach the requested length.
+        if n == 0:
+            return ""
+        reps = (length + n - 1) // n
+        return (text * reps)[:length]
+    start = random.randint(0, n - length)
+    return text[start : start + length]
+
+
+def _pick_connector_ids(
+    vocab: CharVocab, *, exclude_ids: Sequence[int], count: int = 6
+) -> List[int]:
+    """
+    Pick a small set of connector token ids (prefer ASCII punctuation/space, fallback to frequent tokens).
+    """
+    if count <= 0:
+        return []
+    exclude = {int(vocab.pad_id), int(vocab.unk_id)}
+    exclude.update(int(x) for x in exclude_ids)
+    preferred = [" ", "=", ":", "-", ">", ".", ",", ";", "?", "/", "#", "_"]
+    chosen: List[int] = []
+    for tok in preferred:
+        idx = vocab.token_to_id.get(tok)
+        if idx is None:
+            continue
+        idx_i = int(idx)
+        if idx_i in exclude or idx_i in chosen:
+            continue
+        chosen.append(idx_i)
+        if len(chosen) >= count:
+            return chosen
+    for idx in range(len(vocab.id_to_token)):
+        if idx in exclude or idx in chosen:
+            continue
+        chosen.append(int(idx))
+        if len(chosen) >= count:
+            break
+    return chosen
+
+
+def _build_text_gap(connectors: Sequence[int], *, gap_len: int) -> List[int]:
+    if gap_len <= 0:
+        return []
+    if not connectors:
+        return [0] * gap_len
+    return [int(connectors[i % len(connectors)]) for i in range(int(gap_len))]
+
+
+def _pick_query_affixes(vocab: CharVocab, *, exclude_ids: Sequence[int]) -> Tuple[List[int], List[int]]:
+    """
+    Pick short natural-language-ish query affixes for kv_text. Returns (prefix_ids, suffix_ids).
+    Falls back to empty lists if suitable tokens are unavailable.
+    """
+    exclude = {int(vocab.pad_id), int(vocab.unk_id)}
+    exclude.update(int(x) for x in exclude_ids)
+
+    def pick(cands: Sequence[str]) -> Optional[int]:
+        idx = _pick_vocab_token_id(vocab, cands)
+        if idx is None:
+            return None
+        idx_i = int(idx)
+        if idx_i in exclude:
+            return None
+        return idx_i
+
+    prefix: List[int] = []
+    suffix: List[int] = []
+
+    ask = pick(["问", "请", "查", "求", "?", "？"])
+    if ask is not None and str(vocab.id_to_token[int(ask)]) not in ("?", "？"):
+        prefix.append(int(ask))
+
+    de = pick(["的"])
+    if de is not None:
+        suffix.append(int(de))
+    val = pick(["值", "码", "号", "数"])
+    if val is not None:
+        suffix.append(int(val))
+    qm = pick(["？", "?"])
+    if qm is not None:
+        suffix.append(int(qm))
+
+    return prefix, suffix
+
+
+def _build_query_seq(
+    key_ids: torch.Tensor,
+    *,
+    connectors: Sequence[int],
+    prefix: Optional[Sequence[int]] = None,
+    suffix: Optional[Sequence[int]] = None,
+) -> torch.Tensor:
+    """
+    Build a short query token sequence per sample.
+      - If prefix/suffix provided: [prefix..., key, suffix...]
+      - Else: [c0, key, c1, c2] using connectors.
+    """
+    B = int(key_ids.numel())
+    if B <= 0:
+        return key_ids.view(-1, 1)
+    pre = [int(x) for x in (prefix or [])]
+    suf = [int(x) for x in (suffix or [])]
+    if pre or suf:
+        cols: List[torch.Tensor] = []
+        for tok in pre:
+            cols.append(key_ids.new_full((B,), int(tok)))
+        cols.append(key_ids.to(dtype=torch.long))
+        for tok in suf:
+            cols.append(key_ids.new_full((B,), int(tok)))
+        return torch.stack(cols, dim=1)
+
+    if not connectors:
+        return key_ids.view(B, 1)
+    c0 = int(connectors[0])
+    c1 = int(connectors[1 % len(connectors)])
+    c2 = int(connectors[2 % len(connectors)])
+    return torch.stack(
+        [
+            key_ids.new_full((B,), c0),
+            key_ids.to(dtype=torch.long),
+            key_ids.new_full((B,), c1),
+            key_ids.new_full((B,), c2),
+        ],
+        dim=1,
+    )
+
+
+def _build_query_seq_two(
+    key1_ids: torch.Tensor,
+    key2_ids: torch.Tensor,
+    *,
+    connectors: Sequence[int],
+    prefix: Optional[Sequence[int]] = None,
+    suffix: Optional[Sequence[int]] = None,
+) -> torch.Tensor:
+    """
+    Build a short query token sequence per sample that contains TWO keys.
+      - If prefix/suffix provided: [prefix..., key1, key2, suffix...]
+      - Else: [c0, key1, c1, key2, c2] using connectors.
+    """
+    B = int(key1_ids.numel())
+    if B <= 0:
+        return key1_ids.view(-1, 1)
+    if int(key2_ids.numel()) != B:
+        raise ValueError("key2_ids must have same batch size as key1_ids")
+    pre = [int(x) for x in (prefix or [])]
+    suf = [int(x) for x in (suffix or [])]
+    if pre or suf:
+        cols: List[torch.Tensor] = []
+        for tok in pre:
+            cols.append(key1_ids.new_full((B,), int(tok)))
+        cols.append(key1_ids.to(dtype=torch.long))
+        cols.append(key2_ids.to(dtype=torch.long))
+        for tok in suf:
+            cols.append(key1_ids.new_full((B,), int(tok)))
+        return torch.stack(cols, dim=1)
+
+    if not connectors:
+        return torch.stack([key1_ids.to(dtype=torch.long), key2_ids.to(dtype=torch.long)], dim=1)
+    c0 = int(connectors[0])
+    c1 = int(connectors[1 % len(connectors)])
+    c2 = int(connectors[2 % len(connectors)])
+    return torch.stack(
+        [
+            key1_ids.new_full((B,), c0),
+            key1_ids.to(dtype=torch.long),
+            key1_ids.new_full((B,), c1),
+            key2_ids.to(dtype=torch.long),
+            key1_ids.new_full((B,), c2),
+        ],
+        dim=1,
+    )
 
 
 def run_e3_marker_reading(
@@ -2207,12 +2571,37 @@ def run_e3_kv_swap(
     replay_mode: str,
     query_steps: int,
     query_key: str,
+    query_mode: str,
+    query_input: str,
+    comb_mode: str,
+    comb_mod: int,
+    key_seek: int,
+    key_seek_steps: int,
+    both_window: int,
     val_align: int,
     speak: int,
     speak_vocab: int,
     speak_loss_weight: float,
     speak_use: int,
     speak_back_threshold: float,
+    speak_pos_weight: float,
+    speak_pos_weight_max: float,
+    speak_input: str,
+    speak_mix_sharpness: float,
+    two_phase: int,
+    two_phase_fine_steps: int,
+    two_phase_speak_thresh: float,
+    two_phase_trigger: str,
+    two_phase_back_delta: float,
+    two_phase_fine_max: float,
+    two_phase_fine_weight: float,
+    two_phase_coarse_min: float,
+    two_phase_coarse_weight: float,
+    kv_text_gap: int,
+    text_corpus: Optional[str],
+    task_mode: str,
+    demo: int,
+    demo_max: int,
     seed: int,
     log_f,
     tag: str,
@@ -2255,16 +2644,61 @@ def run_e3_kv_swap(
         raise ValueError(f"unknown fixate_mode: {fixate_mode}")
     fixate_scan_radius_i = int(max(0, int(fixate_scan_radius)))
 
+    task_mode_s = str(task_mode or "kv_swap").strip().lower()
+    if task_mode_s not in ("kv_swap", "kv_text"):
+        raise ValueError(f"unknown task_mode: {task_mode}")
+    text_mode = task_mode_s == "kv_text"
+
     query_steps_i = int(max(0, int(query_steps)))
+    query_mode_s = str(query_mode or "single").strip().lower()
+    if query_mode_s in ("", "0", "off", "false", "none", "no", "single", "1"):
+        query_mode_s = "single"
+    if query_mode_s in ("both", "double", "pair", "k1k2", "two"):
+        query_mode_s = "both"
+    if query_mode_s not in ("single", "both"):
+        raise ValueError(f"unknown query_mode: {query_mode}")
+
     query_key_s = str(query_key or "none").strip().lower()
-    if query_steps_i <= 0:
+    if query_steps_i <= 0 and query_mode_s != "both":
         query_key_s = "none"
     if query_key_s in ("", "0", "off", "false", "none", "no"):
-        query_key_s = "none"
+        query_key_s = "none" if query_mode_s != "both" else "k1"
     if query_key_s not in ("none", "k1", "k2", "random"):
         raise ValueError(f"unknown query_key: {query_key}")
-    if query_key_s == "none":
+    if query_key_s == "none" and query_mode_s != "both":
         query_steps_i = 0
+    if query_mode_s == "both" and query_steps_i <= 0:
+        query_steps_i = 0
+        query_mode_s = "single"
+
+    query_input_s = str(query_input or "key").strip().lower()
+    if query_input_s in ("", "0", "off", "false", "none", "no"):
+        query_input_s = "key"
+    if query_input_s not in ("key", "text"):
+        raise ValueError(f"unknown query_input: {query_input}")
+
+    comb_mode_s = str(comb_mode or "concat").strip().lower()
+    if comb_mode_s in ("", "0", "off", "false", "none", "no", "concat", "cat", "legacy"):
+        comb_mode_s = "concat"
+    elif comb_mode_s in ("add_mod", "add", "sum_mod", "sum"):
+        comb_mode_s = "add_mod"
+    else:
+        raise ValueError(f"unknown comb_mode: {comb_mode}")
+    comb_mod_i = int(max(2, int(comb_mod))) if comb_mode_s == "add_mod" else 0
+    if comb_mode_s == "add_mod" and (query_mode_s != "both" or query_steps_i <= 0):
+        raise ValueError("--e3_comb_mode=add_mod currently requires --e3_query_mode=both and --e3_query_steps>0")
+
+    key_seek_i = int(key_seek) if isinstance(key_seek, (int, float, str)) else 0
+    key_seek_i = 1 if key_seek_i != 0 else 0
+    key_seek_steps_i = int(max(0, int(key_seek_steps)))
+    if key_seek_steps_i <= 0:
+        key_seek_i = 0
+    if key_seek_i != 0 and not text_mode:
+        raise ValueError("--e3_key_seek is currently only supported for --e3_task=kv_text")
+
+    both_window_i = 0
+    if query_mode_s == "both" and query_steps_i > 0:
+        both_window_i = int(max(0, int(both_window)))
 
     val_align_i = int(val_align) if isinstance(val_align, (int, float, str)) else 0
     val_align_i = 1 if val_align_i != 0 else 0
@@ -2272,7 +2706,10 @@ def run_e3_kv_swap(
     speak_i = int(speak) if isinstance(speak, (int, float, str)) else 0
     speak_i = 1 if speak_i != 0 else 0
     speak_use_i = int(speak_use) if isinstance(speak_use, (int, float, str)) else 0
-    speak_use_i = 1 if speak_use_i != 0 else 0
+    if speak_use_i < 0:
+        speak_use_i = 0
+    if speak_use_i > 2:
+        speak_use_i = 2
     speak_vocab_i = int(max(0, int(speak_vocab)))
     speak_loss_w = float(speak_loss_weight)
     if not math.isfinite(speak_loss_w) or speak_loss_w < 0.0:
@@ -2281,6 +2718,60 @@ def run_e3_kv_swap(
     if not math.isfinite(speak_back_thr):
         speak_back_thr = 0.9
     speak_back_thr = float(max(0.0, min(1.0, speak_back_thr)))
+
+    speak_pos_w = float(speak_pos_weight)
+    if not math.isfinite(speak_pos_w) or speak_pos_w <= 0.0:
+        speak_pos_w = 0.0  # 0 => auto
+    speak_pos_w_max = float(speak_pos_weight_max)
+    if not math.isfinite(speak_pos_w_max) or speak_pos_w_max <= 0.0:
+        speak_pos_w_max = 50.0
+    speak_pos_w_max = float(max(1.0, speak_pos_w_max))
+
+    speak_input_s = str(speak_input or "q").strip().lower()
+    if speak_input_s in ("", "0", "off", "false", "none", "no"):
+        speak_input_s = "q"
+    if speak_input_s not in ("q", "y"):
+        raise ValueError(f"unknown speak_input: {speak_input}")
+
+    speak_mix_k = float(speak_mix_sharpness)
+    if not math.isfinite(speak_mix_k) or speak_mix_k <= 0.0:
+        speak_mix_k = 1.0
+
+    two_phase_i = int(two_phase) != 0
+    two_phase_fine_steps_i = int(max(0, int(two_phase_fine_steps)))
+    two_phase_speak_thr = float(two_phase_speak_thresh)
+    if not math.isfinite(two_phase_speak_thr):
+        two_phase_speak_thr = 0.6
+    two_phase_speak_thr = float(min(1.0, max(0.0, two_phase_speak_thr)))
+    two_phase_trigger_s = str(two_phase_trigger or "auto").strip().lower()
+    if two_phase_trigger_s in ("", "auto", "default"):
+        two_phase_trigger_s = "auto"
+    elif two_phase_trigger_s in ("back", "value", "val"):
+        two_phase_trigger_s = "back"
+    elif two_phase_trigger_s in ("hold", "fixate", "freeze"):
+        two_phase_trigger_s = "hold"
+    else:
+        raise ValueError(f"unknown two_phase_trigger: {two_phase_trigger}")
+    two_phase_trigger_eff_s = two_phase_trigger_s
+    if two_phase_trigger_eff_s == "auto":
+        two_phase_trigger_eff_s = "hold" if int(speak_vocab_i) >= 3 else "back"
+    two_phase_back_delta_f = float(two_phase_back_delta)
+    if not math.isfinite(two_phase_back_delta_f) or two_phase_back_delta_f <= 0.0:
+        two_phase_back_delta_f = 1.0
+    two_phase_back_delta_f = float(max(1.0, two_phase_back_delta_f))
+    two_phase_fine_max_f = float(two_phase_fine_max)
+    if not math.isfinite(two_phase_fine_max_f) or two_phase_fine_max_f <= 0.0:
+        two_phase_fine_max_f = 2.0
+    two_phase_fine_weight_f = float(two_phase_fine_weight)
+    if not math.isfinite(two_phase_fine_weight_f) or two_phase_fine_weight_f < 0.0:
+        two_phase_fine_weight_f = 0.0
+    two_phase_coarse_min_f = float(two_phase_coarse_min)
+    if not math.isfinite(two_phase_coarse_min_f) or two_phase_coarse_min_f <= 0.0:
+        two_phase_coarse_min_f = 0.0
+    two_phase_coarse_weight_f = float(two_phase_coarse_weight)
+    if not math.isfinite(two_phase_coarse_weight_f) or two_phase_coarse_weight_f < 0.0:
+        two_phase_coarse_weight_f = 0.0
+
     if speak_vocab_i < 2:
         speak_i = 0
         speak_use_i = 0
@@ -2288,6 +2779,8 @@ def run_e3_kv_swap(
     if speak_i == 0:
         speak_use_i = 0
         speak_loss_w = 0.0
+        speak_input_s = "q"
+        speak_mix_k = 1.0
 
     speak_head: Optional[nn.Module] = None
     speak_emb: Optional[nn.Module] = None
@@ -2300,9 +2793,37 @@ def run_e3_kv_swap(
                 "Expected `entity.e3_speak_head` and `entity.e3_speak_emb`."
             )
 
-    val_a, val_b, tok_a, tok_b = _pick_e3_markers(vocab)
+    if two_phase_i:
+        if speak_i == 0 or int(speak_use_i) != 2:
+            raise ValueError("--e3_two_phase requires --e3_speak=1 and --e3_speak_use=2 (mix-control)")
+        if two_phase_trigger_eff_s == "hold" and int(speak_vocab_i) < 3:
+            raise ValueError("--e3_two_phase_trigger=hold requires --e3_speak_vocab >= 3")
+        if two_phase_fine_steps_i <= 0:
+            raise ValueError("--e3_two_phase requires --e3_two_phase_fine_steps > 0")
+
+    val_a, val_b, tok_a, tok_b = (_pick_e3_markers_text(vocab) if text_mode else _pick_e3_markers(vocab))
     key1, key2, tok_k1, tok_k2 = _pick_e3_kv_keys(vocab, exclude_ids=[val_a, val_b])
-    allowed_ids = _make_allowed_token_ids(vocab=vocab, marker_ids=[val_a, val_b, key1, key2], device=device)
+    connector_ids = _pick_connector_ids(vocab, exclude_ids=[val_a, val_b, key1, key2], count=6)
+    query_prefix_ids: List[int] = []
+    query_suffix_ids: List[int] = []
+    if text_mode and query_input_s == "text":
+        query_prefix_ids, query_suffix_ids = _pick_query_affixes(vocab, exclude_ids=[val_a, val_b, key1, key2])
+
+    value_pool_ids: Optional[List[int]] = None
+    value_id_to_index: Dict[int, int] = {}
+    if comb_mode_s == "add_mod":
+        pool_exclude = [val_a, val_b, key1, key2]
+        pool_exclude.extend(int(x) for x in connector_ids)
+        pool_exclude.extend(int(x) for x in query_prefix_ids)
+        pool_exclude.extend(int(x) for x in query_suffix_ids)
+        value_pool_ids = _pick_e3_value_pool(vocab, exclude_ids=pool_exclude, count=int(comb_mod_i))
+        value_id_to_index = {int(v): int(i) for i, v in enumerate(value_pool_ids)}
+
+    value_candidate_ids = (
+        torch.tensor(value_pool_ids, device=device, dtype=torch.long)
+        if value_pool_ids is not None
+        else torch.tensor([int(val_a), int(val_b)], device=device, dtype=torch.long)
+    )
 
     CAND = torch.tensor(list(candidates), device=device, dtype=torch.float32) * float(step_size)
     C = int(CAND.numel())
@@ -2316,7 +2837,8 @@ def run_e3_kv_swap(
     clue_margin = int(max(0, int(clue_margin)))
     online_steps = int(max(1, int(online_steps)))
     offline_steps = int(max(0, int(offline_steps)))
-    pair_span = int(key_len + value_len)
+    kv_text_gap_i = int(max(0, int(kv_text_gap))) if text_mode else 0
+    pair_span = int(key_len + kv_text_gap_i + value_len)
     if clue_margin * 2 + pair_span * 2 >= seq_len:
         clue_margin = max(0, (seq_len - pair_span * 2) // 4)
 
@@ -2341,6 +2863,7 @@ def run_e3_kv_swap(
     feats_all: List[torch.Tensor] = []
     labs_all: List[torch.Tensor] = []
     resolved_all: List[torch.Tensor] = []
+    resolved_strict_all: List[torch.Tensor] = []
     resolved_any_all: List[torch.Tensor] = []
     val_hit_all: List[torch.Tensor] = []
     first_hit_all: List[torch.Tensor] = []
@@ -2367,16 +2890,84 @@ def run_e3_kv_swap(
     query_hit_total = 0
     query_correct_total = 0
     query_correct_hit_total = 0
+    # v0.12: optional "both" query mode (K1 then K2). Keep per-key and joint accuracies.
+    query_total_k1 = 0
+    query_hit_total_k1 = 0
+    query_correct_total_k1 = 0
+    query_correct_hit_total_k1 = 0
+    query_total_k2 = 0
+    query_hit_total_k2 = 0
+    query_correct_total_k2 = 0
+    query_correct_hit_total_k2 = 0
+    combine_total = 0
+    combine_hit_total = 0
+    combine_correct_total = 0
+    combine_correct_hit_total = 0
     speak_total = 0
     speak_correct_total = 0
-    speak_back_total = 0
+    speak_tp_total = 0
+    speak_fp_total = 0
+    speak_fn_total = 0
+    speak_pos_total = 0
+    speak_pred_pos_total = 0
+    speak_back_prob_sum = 0.0
+    speak_back_prob_count = 0
+    speak_back_mask_total = 0
+    speak_mix_prob_sum = 0.0
+    speak_mix_prob_count = 0
+    speak_pos_weight_sum = 0.0
+    speak_pos_weight_count = 0
     speak_ce_sum = 0.0
     speak_ce_count = 0
+    speak_hold_prob_sum = 0.0
+    speak_hold_prob_count = 0
+
+    two_phase_trigger_total = 0
+    two_phase_step_total = 0
+
+    cite_total = 0
+    cite_hit_total = 0
+    demo_enabled = int(demo) != 0
+    demo_max_i = int(max(0, int(demo_max)))
+    demo_records: List[Dict[str, object]] = []
 
     # For fairness, each pair shares the same base sequence & positions; only the value assignment differs.
     for ep in range(pairs):
-        base = allowed_ids[torch.randint(0, int(allowed_ids.numel()), (seq_len,), device=device)]
-        base_bad = int(((base == int(val_a)) | (base == int(val_b)) | (base == int(key1)) | (base == int(key2))).sum().item())
+        # Optionally sample per-episode value symbols from a pool (COMB-v1).
+        if value_pool_ids is not None:
+            val_ep_a = int(random.choice(value_pool_ids))
+            val_ep_b = int(random.choice(value_pool_ids))
+        else:
+            val_ep_a = int(val_a)
+            val_ep_b = int(val_b)
+
+        allowed_ids = _make_allowed_token_ids(vocab=vocab, marker_ids=[val_ep_a, val_ep_b, key1, key2], device=device)
+        if text_mode and text_corpus:
+            span = _sample_text_span(text_corpus, length=int(seq_len))
+            base_ids = vocab.encode(span)
+            if len(base_ids) < int(seq_len):
+                base_ids = base_ids + [vocab.unk_id] * (int(seq_len) - len(base_ids))
+            base = torch.tensor(base_ids[: int(seq_len)], device=device, dtype=torch.long)
+            if base.numel() < int(seq_len):
+                pad = base[0:1].expand(int(seq_len) - int(base.numel()))
+                base = torch.cat([base, pad], dim=0)
+            bad = (base == int(val_ep_a)) | (base == int(val_ep_b)) | (base == int(key1)) | (base == int(key2))
+            if bad.any():
+                rep = allowed_ids[torch.randint(0, int(allowed_ids.numel()), (int(bad.sum().item()),), device=device)]
+                base = base.clone()
+                base[bad] = rep
+        else:
+            base = allowed_ids[torch.randint(0, int(allowed_ids.numel()), (seq_len,), device=device)]
+        base_bad = int(
+            (
+                (base == int(val_ep_a))
+                | (base == int(val_ep_b))
+                | (base == int(key1))
+                | (base == int(key2))
+            )
+            .sum()
+            .item()
+        )
         base_marker_count_total += base_bad
         if base_bad != 0:
             base_marker_violations += 1
@@ -2388,33 +2979,65 @@ def run_e3_kv_swap(
             pos_hi = int(max(0, seq_len - pair_span))
 
         k1_pos = int(torch.randint(pos_lo, pos_hi + 1, (1,), device=device).item()) if pos_hi >= pos_lo else 0
-        tries = 0
         k2_pos = k1_pos
-        while tries < 64:
-            cand_pos = int(torch.randint(pos_lo, pos_hi + 1, (1,), device=device).item()) if pos_hi >= pos_lo else 0
-            a0, a1 = k1_pos, k1_pos + pair_span
-            b0, b1 = cand_pos, cand_pos + pair_span
-            if (b1 <= a0 - clue_margin) or (a1 <= b0 - clue_margin):
-                k2_pos = cand_pos
-                break
-            tries += 1
-        if k2_pos == k1_pos:
-            k2_pos = int(max(pos_lo, min(pos_hi, k1_pos + pair_span + clue_margin)))
+        if both_window_i > 0:
+            # "Both" curriculum: place K2 near K1 (within +/- window), avoiding overlap.
+            W = int(min(int(both_window_i), int(max(0, pos_hi - pos_lo))))
+            win_lo = int(max(pos_lo, k1_pos - W))
+            win_hi = int(min(pos_hi, k1_pos + W))
+            left_hi = int(min(win_hi, k1_pos - pair_span))
+            right_lo = int(max(win_lo, k1_pos + pair_span))
+            ranges: List[Tuple[int, int]] = []
+            if win_lo <= left_hi:
+                ranges.append((win_lo, left_hi))
+            if right_lo <= win_hi:
+                ranges.append((right_lo, win_hi))
+            if ranges:
+                if len(ranges) == 2:
+                    len0 = int(ranges[0][1] - ranges[0][0] + 1)
+                    len1 = int(ranges[1][1] - ranges[1][0] + 1)
+                    pick = 0 if random.random() < (float(len0) / float(max(1, len0 + len1))) else 1
+                    lo2, hi2 = ranges[int(pick)]
+                else:
+                    lo2, hi2 = ranges[0]
+                k2_pos = int(random.randint(int(lo2), int(hi2)))
+            else:
+                k2_pos = int(max(pos_lo, min(pos_hi, k1_pos + pair_span)))
+        else:
+            tries = 0
+            while tries < 64:
+                cand_pos = int(torch.randint(pos_lo, pos_hi + 1, (1,), device=device).item()) if pos_hi >= pos_lo else 0
+                a0, a1 = k1_pos, k1_pos + pair_span
+                b0, b1 = cand_pos, cand_pos + pair_span
+                if (b1 <= a0 - clue_margin) or (a1 <= b0 - clue_margin):
+                    k2_pos = cand_pos
+                    break
+                tries += 1
+            if k2_pos == k1_pos:
+                k2_pos = int(max(pos_lo, min(pos_hi, k1_pos + pair_span + clue_margin)))
 
         key1_pos_list.append(int(k1_pos))
         key2_pos_list.append(int(k2_pos))
-        v1_start = int(k1_pos + key_len)
+        v1_start = int(k1_pos + key_len + kv_text_gap_i)
         v1_end = int(min(seq_len, v1_start + value_len))
-        v2_start = int(k2_pos + key_len)
+        v2_start = int(k2_pos + key_len + kv_text_gap_i)
         v2_end = int(min(seq_len, v2_start + value_len))
         edge_min = int(min(edge_min, k1_pos, k2_pos, seq_len - v1_end, seq_len - v2_end))
 
-        label_order = [(0, int(val_a), int(val_b)), (1, int(val_b), int(val_a))]
+        label_order = [(0, int(val_ep_a), int(val_ep_b)), (1, int(val_ep_b), int(val_ep_a))]
         random.shuffle(label_order)
         for label, v_for_k1, v_for_k2 in label_order:
             token_ids = base.clone()
             token_ids[int(k1_pos) : int(k1_pos + key_len)] = int(key1)
             token_ids[int(k2_pos) : int(k2_pos + key_len)] = int(key2)
+            if kv_text_gap_i > 0:
+                gap_tokens = _build_text_gap(connector_ids, gap_len=kv_text_gap_i)
+                token_ids[int(k1_pos + key_len) : int(k1_pos + key_len + kv_text_gap_i)] = torch.tensor(
+                    gap_tokens, device=device, dtype=torch.long
+                )
+                token_ids[int(k2_pos + key_len) : int(k2_pos + key_len + kv_text_gap_i)] = torch.tensor(
+                    gap_tokens, device=device, dtype=torch.long
+                )
             token_ids[v1_start:v1_end] = int(v_for_k1)
             token_ids[v2_start:v2_end] = int(v_for_k2)
 
@@ -2468,6 +3091,11 @@ def run_e3_kv_swap(
             v1_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
             v2_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
             val_any = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            # De-privileged "seen" flags based on observed token ids (base excludes marker ids).
+            obs_k1_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            obs_k2_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            obs_v1_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            obs_v2_seen = torch.zeros((batch_size,), device=device, dtype=torch.bool)
             first_hit = torch.full((batch_size,), -1, device=device, dtype=torch.int32)
             dwell = torch.zeros((batch_size,), device=device, dtype=torch.int32)
             s_min = s.detach().round().to(dtype=torch.long)
@@ -2475,33 +3103,106 @@ def run_e3_kv_swap(
 
             # Pointer tail for cycle diagnostics
             s_tail = torch.empty((tail_window, batch_size), device=device, dtype=torch.long)
+            # Full pointer history (for citation selection in kv_text demo; cheap at steps<=120).
+            s_hist = torch.empty((int(online_steps), batch_size), device=device, dtype=torch.long)
+            fixate_hist: Optional[torch.Tensor] = None
+            if fixate_steps_i > 0:
+                fixate_hist = torch.zeros((int(online_steps), batch_size), device=device, dtype=torch.bool)
 
             query_is_k1: Optional[torch.Tensor] = None
             query_ids: Optional[torch.Tensor] = None
             query_target_ids: Optional[torch.Tensor] = None
-            if query_key_s != "none":
-                if query_key_s == "k1":
-                    query_is_k1 = torch.ones((batch_size,), device=device, dtype=torch.bool)
-                elif query_key_s == "k2":
-                    query_is_k1 = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+            query_ids_k1: Optional[torch.Tensor] = None
+            query_target_ids_k1: Optional[torch.Tensor] = None
+            query_ids_k2: Optional[torch.Tensor] = None
+            query_target_ids_k2: Optional[torch.Tensor] = None
+            query_target_ids_comb: Optional[torch.Tensor] = None
+            query_seq: Optional[torch.Tensor] = None
+            query_seq_k1: Optional[torch.Tensor] = None
+            query_seq_k2: Optional[torch.Tensor] = None
+            query_seq_comb: Optional[torch.Tensor] = None
+            if query_steps_i > 0:
+                if query_mode_s == "both":
+                    query_ids_k1 = torch.full((batch_size,), int(key1), device=device, dtype=torch.long)
+                    query_target_ids_k1 = torch.full((batch_size,), int(v_for_k1), device=device, dtype=torch.long)
+                    query_ids_k2 = torch.full((batch_size,), int(key2), device=device, dtype=torch.long)
+                    query_target_ids_k2 = torch.full((batch_size,), int(v_for_k2), device=device, dtype=torch.long)
+                    if query_input_s == "text":
+                        query_seq_k1 = _build_query_seq(
+                            query_ids_k1,
+                            connectors=connector_ids,
+                            prefix=(query_prefix_ids if text_mode else None),
+                            suffix=(query_suffix_ids if text_mode else None),
+                        ).to(device)
+                        query_seq_k2 = _build_query_seq(
+                            query_ids_k2,
+                            connectors=connector_ids,
+                            prefix=(query_prefix_ids if text_mode else None),
+                            suffix=(query_suffix_ids if text_mode else None),
+                        ).to(device)
+
+                    if comb_mode_s == "add_mod" and value_pool_ids is not None:
+                        i1 = value_id_to_index.get(int(v_for_k1))
+                        i2 = value_id_to_index.get(int(v_for_k2))
+                        if i1 is None or i2 is None:
+                            raise RuntimeError("comb values are not present in value_pool_ids")
+                        comb_idx = (int(i1) + int(i2)) % int(len(value_pool_ids))
+                        comb_id = int(value_pool_ids[int(comb_idx)])
+                        query_target_ids_comb = torch.full((batch_size,), int(comb_id), device=device, dtype=torch.long)
+                        if query_input_s == "text":
+                            query_seq_comb = _build_query_seq_two(
+                                query_ids_k1,
+                                query_ids_k2,
+                                connectors=connector_ids,
+                                prefix=(query_prefix_ids if text_mode else None),
+                                suffix=(query_suffix_ids if text_mode else None),
+                            ).to(device)
+                        else:
+                            query_seq_comb = _build_query_seq_two(query_ids_k1, query_ids_k2, connectors=connector_ids).to(
+                                device
+                            )
                 else:
-                    query_is_k1 = torch.rand((batch_size,), device=device) < 0.5
-                query_k1_total += int(query_is_k1.sum().item())
-                query_total += int(query_is_k1.numel())
-                query_ids = torch.where(
-                    query_is_k1,
-                    torch.full((batch_size,), int(key1), device=device, dtype=torch.long),
-                    torch.full((batch_size,), int(key2), device=device, dtype=torch.long),
-                )
-                query_target_ids = torch.where(
-                    query_is_k1,
-                    torch.full((batch_size,), int(v_for_k1), device=device, dtype=torch.long),
-                    torch.full((batch_size,), int(v_for_k2), device=device, dtype=torch.long),
-                )
+                    if query_key_s == "k1":
+                        query_is_k1 = torch.ones((batch_size,), device=device, dtype=torch.bool)
+                    elif query_key_s == "k2":
+                        query_is_k1 = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+                    else:
+                        query_is_k1 = torch.rand((batch_size,), device=device) < 0.5
+                    query_k1_total += int(query_is_k1.sum().item())
+                    query_total += int(query_is_k1.numel())
+                    query_ids = torch.where(
+                        query_is_k1,
+                        torch.full((batch_size,), int(key1), device=device, dtype=torch.long),
+                        torch.full((batch_size,), int(key2), device=device, dtype=torch.long),
+                    )
+                    query_target_ids = torch.where(
+                        query_is_k1,
+                        torch.full((batch_size,), int(v_for_k1), device=device, dtype=torch.long),
+                        torch.full((batch_size,), int(v_for_k2), device=device, dtype=torch.long),
+                    )
+                    if query_input_s == "text":
+                        query_seq = _build_query_seq(
+                            query_ids,
+                            connectors=connector_ids,
+                            prefix=(query_prefix_ids if text_mode else None),
+                            suffix=(query_suffix_ids if text_mode else None),
+                        ).to(device)
 
             fixate_left: Optional[torch.Tensor] = None
             if fixate_steps_i > 0:
                 fixate_left = torch.zeros((batch_size,), device=device, dtype=torch.int32)
+
+            key_seek_left: Optional[torch.Tensor] = None
+            key_seek_prev_in_val: Optional[torch.Tensor] = None
+            if key_seek_i != 0:
+                key_seek_left = torch.zeros((batch_size,), device=device, dtype=torch.int32)
+                key_seek_prev_in_val = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+
+            two_phase_left: Optional[torch.Tensor] = None
+            two_phase_prev_trigger: Optional[torch.Tensor] = None
+            if two_phase_i:
+                two_phase_left = torch.zeros((batch_size,), device=device, dtype=torch.int32)
+                two_phase_prev_trigger = torch.zeros((batch_size,), device=device, dtype=torch.bool)
 
             val_align_prev_in_val: Optional[torch.Tensor] = None
             if val_align_i != 0:
@@ -2513,16 +3214,58 @@ def run_e3_kv_swap(
                 if fixate_left is not None:
                     fixate_mask = fixate_left > 0
                     fixate_step_total += int(fixate_mask.sum().item())
+                    if fixate_hist is not None:
+                        fixate_hist[int(t)] = fixate_mask
 
                 in_val_mask: Optional[torch.Tensor] = None
+                in_key_mask: Optional[torch.Tensor] = None
                 if (
                     isinstance(token_ids_port, torch.Tensor)
                     and token_ids_port.ndim == 1
-                    and (val_align_prev_in_val is not None or speak_i != 0)
+                    and (val_align_prev_in_val is not None or speak_i != 0 or key_seek_left is not None)
                 ):
                     s_round_cur = s.detach().round().to(dtype=torch.long).clamp(0, int(read_port.length - 1))
                     tok_cur = token_ids_port[s_round_cur]
-                    in_val_mask = (tok_cur == int(val_a)) | (tok_cur == int(val_b))
+                    obs_k1_seen = obs_k1_seen | (tok_cur == int(key1))
+                    obs_k2_seen = obs_k2_seen | (tok_cur == int(key2))
+                    obs_v1_seen = obs_v1_seen | (tok_cur == int(v_for_k1))
+                    obs_v2_seen = obs_v2_seen | (tok_cur == int(v_for_k2))
+                    # Detect value-span membership by the *episode-specific* value token ids.
+                    # This is required for COMB-v1 where value symbols are sampled from a pool each episode.
+                    in_val_mask = (tok_cur == int(v_for_k1)) | (tok_cur == int(v_for_k2))
+                    if speak_i != 0 and int(speak_vocab_i) >= 3:
+                        in_key_mask = (tok_cur == int(key1)) | (tok_cur == int(key2))
+                    elif key_seek_left is not None:
+                        in_key_mask = (tok_cur == int(key1)) | (tok_cur == int(key2))
+
+                if key_seek_left is not None and key_seek_prev_in_val is not None and in_val_mask is not None:
+                    # Trigger key-seek when entering a value span, but only after the OTHER value has been seen.
+                    # This avoids collapsing "both" coverage into a single-pair fixation loop.
+                    both_keys = obs_k1_seen & obs_k2_seen
+                    if both_keys.any():
+                        key_seek_left = torch.where(both_keys, key_seek_left.new_zeros((batch_size,)), key_seek_left)
+
+                    start_val = in_val_mask & (~key_seek_prev_in_val)
+                    key_seek_prev_in_val = in_val_mask.detach()
+
+                    if start_val.any():
+                        tok_cur_id = tok_cur if isinstance(tok_cur, torch.Tensor) else None
+                        if tok_cur_id is not None:
+                            in_v1 = tok_cur_id == int(v_for_k1)
+                            in_v2 = tok_cur_id == int(v_for_k2)
+                        else:
+                            in_v1 = start_val.new_zeros((batch_size,), dtype=torch.bool)
+                            in_v2 = start_val.new_zeros((batch_size,), dtype=torch.bool)
+
+                        # Seek K1 only if V2 already seen; seek K2 only if V1 already seen.
+                        need_seek = (in_v1 & (~obs_k1_seen) & obs_v2_seen) | (in_v2 & (~obs_k2_seen) & obs_v1_seen)
+                        trigger = start_val & need_seek & (key_seek_left <= 0)
+                        if trigger.any():
+                            key_seek_left = torch.where(
+                                trigger,
+                                key_seek_left.new_full((batch_size,), int(key_seek_steps_i)),
+                                key_seek_left,
+                            )
 
                 val_align_mask: Optional[torch.Tensor] = None
                 if val_align_prev_in_val is not None and in_val_mask is not None:
@@ -2535,21 +3278,153 @@ def run_e3_kv_swap(
 
                 speak_probs: Optional[torch.Tensor] = None
                 speak_ce: Optional[torch.Tensor] = None
+                speak_pos_w_used = float("nan")
+                speak_hold_prob: Optional[torch.Tensor] = None
+                speak_back_prob: Optional[torch.Tensor] = None
+                speak_mix_prob: Optional[torch.Tensor] = None
                 speak_back_mask: Optional[torch.Tensor] = None
                 if speak_i != 0 and speak_head is not None and speak_emb is not None and in_val_mask is not None:
-                    speak_logits = speak_head(entity.state.q.detach())  # [B,V]
+                    speak_in = entity.state.q
+                    if speak_input_s == "y":
+                        speak_in = read_port.read(s).detach()
+                    speak_logits = speak_head(speak_in)  # [B,V]
                     speak_probs = torch.softmax(speak_logits, dim=1)
-                    if speak_loss_w > 0.0:
-                        speak_ce = torch.nn.functional.cross_entropy(speak_logits, in_val_mask.to(dtype=torch.long))
-                    if speak_use_i != 0:
-                        back_prob = speak_probs[:, 1]  # class 1 == BACK
-                        speak_back_mask = back_prob >= float(speak_back_thr)
+                    logit_diff_bin: Optional[torch.Tensor] = None
+                    if speak_probs.shape[1] > 1:
+                        # Binary logit: BACK vs (non-BACK). For V=2 this is logit1-logit0.
+                        logit_back = speak_logits[:, 1]
+                        if int(speak_logits.shape[1]) == 2:
+                            logit_not = speak_logits[:, 0]
+                        else:
+                            logits_not = torch.cat([speak_logits[:, :1], speak_logits[:, 2:]], dim=1)
+                            logit_not = torch.logsumexp(logits_not, dim=1)
+                        logit_diff_bin = logit_back - logit_not
+
+                        speak_back_prob = speak_probs[:, 1].clamp(0.0, 1.0)
+                        speak_back_prob_sum += float(speak_back_prob.detach().sum().item())
+                        speak_back_prob_count += int(speak_back_prob.numel())
+
+                        if int(speak_use_i) == 2 and logit_diff_bin is not None:
+                            # Continuous, sharpened mix-control (no hard threshold):
+                            # p_mix = sigmoid(k * logit_diff), where logit_diff is BACK vs non-BACK.
+                            speak_mix_prob = torch.sigmoid(float(speak_mix_k) * logit_diff_bin).clamp(0.0, 1.0)
+                            speak_mix_prob_sum += float(speak_mix_prob.detach().sum().item())
+                            speak_mix_prob_count += int(speak_mix_prob.numel())
+                        if speak_probs.shape[1] > 2:
+                            speak_hold_prob = speak_probs[:, 2].clamp(0.0, 1.0)
+                            speak_hold_prob_sum += float(speak_hold_prob.detach().sum().item())
+                            speak_hold_prob_count += int(speak_hold_prob.numel())
+
+                    if int(speak_vocab_i) >= 3:
+                        # 3-class speak (vocab>=3): token0=forward, token1=back, token2=hold.
+                        # Minimal de-privileged labels:
+                        #   - BACK when observing a value token (A/B)
+                        #   - HOLD when in fixation (or observing a key token, if available)
+                        target = in_val_mask.new_zeros((batch_size,), dtype=torch.long)
+                        target = torch.where(
+                            in_val_mask,
+                            target.new_full((batch_size,), 1),
+                            target,
+                        )
+                        hold_mask = (
+                            in_key_mask
+                            if in_key_mask is not None
+                            else in_val_mask.new_zeros((batch_size,), dtype=torch.bool)
+                        )
+                        if two_phase_trigger_eff_s == "hold" and fixate_mask is not None:
+                            hold_mask = hold_mask | fixate_mask
+                        if hold_mask is not None and hold_mask.any():
+                            target = torch.where(
+                                hold_mask,
+                                target.new_full((batch_size,), 2),
+                                target,
+                            )
+                    else:
+                        target = in_val_mask.to(dtype=torch.long)
                     speak_pred = speak_probs.argmax(dim=1)
                     speak_total += int(speak_pred.numel())
-                    speak_correct_total += int((speak_pred == in_val_mask.to(dtype=torch.long)).sum().item())
+                    speak_correct_total += int((speak_pred == target).sum().item())
+
+                    pred_back = speak_pred == 1
+                    tgt_back = target == 1
+                    speak_tp_total += int((pred_back & tgt_back).sum().item())
+                    speak_fp_total += int((pred_back & (~tgt_back)).sum().item())
+                    speak_fn_total += int(((~pred_back) & tgt_back).sum().item())
+                    speak_pos_total += int(tgt_back.sum().item())
+                    speak_pred_pos_total += int(pred_back.sum().item())
+
+                    if speak_loss_w > 0.0:
+                        tot = int(target.numel())
+                        pos = int(tgt_back.sum().item())
+                        neg = max(0, tot - pos)
+                        pos_w = (float(neg) / float(max(1, pos))) if pos > 0 else 1.0
+                        pos_w_hold = 1.0
+                        if int(speak_vocab_i) >= 3:
+                            tgt_hold = target == 2
+                            pos_h = int(tgt_hold.sum().item())
+                            neg_h = max(0, tot - pos_h)
+                            pos_w_hold = (float(neg_h) / float(max(1, pos_h))) if pos_h > 0 else 1.0
+                        if speak_pos_w > 0.0:
+                            pos_w = float(speak_pos_w)
+                            pos_w_hold = float(speak_pos_w)
+                        pos_w = float(min(pos_w, speak_pos_w_max))
+                        pos_w_hold = float(min(pos_w_hold, speak_pos_w_max))
+                        speak_pos_w_used = float(pos_w)
+                        speak_pos_weight_sum += float(pos_w)
+                        speak_pos_weight_count += 1
+
+                        if int(speak_vocab_i) == 2:
+                            if logit_diff_bin is None:
+                                logit_diff = speak_logits[:, 1] - speak_logits[:, 0]
+                            else:
+                                logit_diff = logit_diff_bin
+                            target_f = target.to(dtype=torch.float32)
+                            speak_ce = torch.nn.functional.binary_cross_entropy_with_logits(
+                                logit_diff,
+                                target_f,
+                                pos_weight=logit_diff.new_full((), float(pos_w)),
+                            )
+                        else:
+                            w = speak_logits.new_ones((int(speak_vocab_i),))
+                            if int(speak_vocab_i) > 1:
+                                w[1] = float(pos_w)
+                            if int(speak_vocab_i) > 2:
+                                w[2] = float(pos_w_hold)
+                            speak_ce = torch.nn.functional.cross_entropy(speak_logits, target, weight=w)
+
+                    if speak_use_i == 1 and speak_back_prob is not None:
+                        speak_back_mask = speak_back_prob >= float(speak_back_thr)
+                        speak_back_mask_total += int(speak_back_mask.sum().item())
                     if speak_ce is not None:
                         speak_ce_sum += float(speak_ce.detach().item())
                         speak_ce_count += 1
+
+                two_phase_mask: Optional[torch.Tensor] = None
+                two_phase_triggered: Optional[torch.Tensor] = None
+                if two_phase_left is not None and two_phase_prev_trigger is not None:
+                    if two_phase_trigger_eff_s == "hold":
+                        trig_prob = speak_hold_prob
+                    elif two_phase_trigger_eff_s == "back":
+                        trig_prob = speak_back_prob if speak_back_prob is not None else speak_mix_prob
+                    else:
+                        trig_prob = None
+                    if trig_prob is None:
+                        raise RuntimeError("e3_two_phase enabled but missing speak probability signal")
+                    trigger = trig_prob >= float(two_phase_speak_thr)
+                    two_phase_triggered = trigger & (~two_phase_prev_trigger)
+                    if two_phase_triggered.any():
+                        two_phase_trigger_total += int(two_phase_triggered.sum().item())
+                        two_phase_left = torch.where(
+                            two_phase_triggered,
+                            two_phase_left.new_full((batch_size,), int(two_phase_fine_steps_i)),
+                            two_phase_left,
+                        )
+                    two_phase_prev_trigger = trigger.detach()
+                    # Sustain fine-phase while trigger is high.
+                    one = two_phase_left.new_full((batch_size,), 1)
+                    two_phase_left = torch.where(trigger, torch.maximum(two_phase_left, one), two_phase_left)
+                    two_phase_mask = two_phase_left > 0
+                    two_phase_step_total += int(two_phase_mask.sum().item())
 
                 # Coverage warmup scaling (optional)
                 if warmup_steps > 0:
@@ -2562,6 +3437,17 @@ def run_e3_kv_swap(
                     rng_devices: List[int] = []
                     if str(device).startswith("cuda") and torch.cuda.is_available():
                         rng_devices = [int(torch.cuda.current_device())]
+                    mix_back_delta_ps: Optional[torch.Tensor] = None
+                    if int(speak_use_i) == 2 and speak_mix_prob is not None and two_phase_mask is not None:
+                        back_base = -float(step_size)
+                        back_fine = -float(step_size) * float(two_phase_back_delta_f)
+                        mix_back_delta_ps = s.new_full((batch_size,), back_base)
+                        if back_fine != back_base:
+                            mix_back_delta_ps = torch.where(
+                                two_phase_mask,
+                                mix_back_delta_ps.new_full((batch_size,), back_fine),
+                                mix_back_delta_ps,
+                            )
                     with torch.random.fork_rng(devices=rng_devices, enabled=(float(noise_std) > 0.0)):
                         delta = choose_delta_one_step(
                             entity=entity,
@@ -2595,6 +3481,14 @@ def run_e3_kv_swap(
                             epi_mode=str(epi_mode_s),
                             epi_obs_eps=float(epi_obs_eps),
                             epi_pred_floor=float(epi_pred_floor),
+                            mix_back_prob=(speak_mix_prob if int(speak_use_i) == 2 else None),
+                            mix_back_delta=-float(step_size),
+                            mix_back_delta_per_sample=mix_back_delta_ps,
+                            phase_mask=(two_phase_mask.to(dtype=torch.float32) if two_phase_mask is not None else None),
+                            phase_fine_max_step=float(two_phase_fine_max_f) * float(step_size),
+                            phase_fine_weight=float(two_phase_fine_weight_f),
+                            phase_coarse_min_step=float(two_phase_coarse_min_f) * float(step_size),
+                            phase_coarse_weight=float(two_phase_coarse_weight_f),
                         )
                 elif policy_s == "random":
                     delta = CAND[torch.randint(0, C, (batch_size,), device=device)]
@@ -2626,6 +3520,16 @@ def run_e3_kv_swap(
                 else:
                     drift = s.new_full((batch_size,), float(drift_eff))
 
+                key_seek_mask: Optional[torch.Tensor] = None
+                if key_seek_left is not None:
+                    key_seek_mask = key_seek_left > 0
+                    if key_seek_mask.any():
+                        # Value→key micro-read: after BOTH values have been seen, walk backward in a short burst
+                        # to increase exact key-span hits (strict-hard), without collapsing early both coverage.
+                        delta_seek = delta.new_full((batch_size,), -float(step_size))
+                        drift = drift * (~key_seek_mask).to(dtype=s.dtype)
+                        delta = torch.where(key_seek_mask, delta_seek, delta)
+
                 back_mask: Optional[torch.Tensor] = None
                 if val_align_mask is not None:
                     # v0p11: de-privileged alignment.
@@ -2635,12 +3539,15 @@ def run_e3_kv_swap(
                     back_mask = val_align_mask
 
                 if speak_back_mask is not None:
-                    speak_back_total += int(speak_back_mask.sum().item())
                     back_mask = speak_back_mask if back_mask is None else (back_mask | speak_back_mask)
 
                 if back_mask is not None:
                     drift = drift * (~back_mask).to(dtype=s.dtype)
                     delta = torch.where(back_mask, delta.new_full((batch_size,), -float(step_size)), delta)
+
+                # Continuous drift cancellation for speak mix-control (no hard threshold).
+                if int(speak_use_i) == 2 and speak_mix_prob is not None:
+                    drift = drift * (1.0 - speak_mix_prob).to(dtype=s.dtype)
 
                 s_new = _apply_pointer_bounds(
                     s + drift + delta,
@@ -2649,6 +3556,7 @@ def run_e3_kv_swap(
                 )
                 s_round = s_new.detach().round().to(dtype=torch.long).clamp(0, int(read_port.length - 1))
                 s_tail[int(t) % int(tail_window)] = s_round
+                s_hist[int(t)] = s_round
                 s_min = torch.minimum(s_min, s_round)
                 s_max = torch.maximum(s_max, s_round)
 
@@ -2740,6 +3648,12 @@ def run_e3_kv_swap(
                 entity.state = ContactState(entity.dim_q, batch_size, device, entity.state.flat.detach())
                 s = s_new.detach()
 
+                if key_seek_left is not None:
+                    key_seek_left = torch.clamp(key_seek_left - 1, min=0)
+
+                if two_phase_left is not None:
+                    two_phase_left = torch.clamp(two_phase_left - 1, min=0)
+
                 if fixate_left is not None:
                     fixate_left = torch.clamp(fixate_left - 1, min=0)
                     pe = pred_err_ps.detach()
@@ -2760,8 +3674,32 @@ def run_e3_kv_swap(
                 if log_f is not None and (int(log_every) > 0) and (t % int(log_every) == 0 or t == int(online_steps) - 1):
                     resolved_so_far = ((k1_seen & v1_seen) | (k2_seen & v2_seen)).float().mean().item()
                     speak_acc = float("nan")
+                    speak_pos_rate = float("nan")
+                    speak_pred_pos_rate = float("nan")
+                    speak_tpr = float("nan")
+                    speak_precision = float("nan")
+                    speak_back_prob_mean = float("nan")
+                    speak_back_mask_rate = float("nan")
+                    speak_mix_prob_mean = float("nan")
                     if speak_probs is not None and in_val_mask is not None:
-                        speak_acc = float((speak_probs.argmax(dim=1) == in_val_mask.to(dtype=torch.long)).float().mean().item())
+                        target = in_val_mask.to(dtype=torch.long)
+                        pred = speak_probs.argmax(dim=1)
+                        speak_acc = float((pred == target).float().mean().item())
+                        tgt_pos = target == 1
+                        pred_pos = pred == 1
+                        tp = int((pred_pos & tgt_pos).sum().item())
+                        fp = int((pred_pos & (~tgt_pos)).sum().item())
+                        fn = int(((~pred_pos) & tgt_pos).sum().item())
+                        speak_pos_rate = float(tgt_pos.float().mean().item())
+                        speak_pred_pos_rate = float(pred_pos.float().mean().item())
+                        speak_tpr = float(tp / max(1, tp + fn)) if int(tgt_pos.sum().item()) > 0 else float("nan")
+                        speak_precision = float(tp / max(1, tp + fp)) if int(pred_pos.sum().item()) > 0 else float("nan")
+                        if speak_back_prob is not None:
+                            speak_back_prob_mean = float(speak_back_prob.detach().mean().item())
+                        if speak_mix_prob is not None:
+                            speak_mix_prob_mean = float(speak_mix_prob.detach().mean().item())
+                        if speak_back_mask is not None:
+                            speak_back_mask_rate = float(speak_back_mask.float().mean().item())
                     rec = {
                         "tag": str(tag),
                         "phase": "e3kv_online",
@@ -2790,16 +3728,43 @@ def run_e3_kv_swap(
                         ),
                         "speak_ce": (float(speak_ce.detach().item()) if speak_ce is not None else float("nan")),
                         "speak_acc": float(speak_acc),
-                        "speak_back_rate": (
-                            float(speak_back_mask.float().mean().item()) if speak_back_mask is not None else float("nan")
+                        "speak_pos_rate": float(speak_pos_rate),
+                        "speak_pred_pos_rate": float(speak_pred_pos_rate),
+                        "speak_tpr": float(speak_tpr),
+                        "speak_precision": float(speak_precision),
+                        "speak_pos_weight": float(speak_pos_w_used),
+                        "speak_back_prob_mean": float(speak_back_prob_mean),
+                        "speak_back_mask_rate": float(speak_back_mask_rate),
+                        "speak_mix_sharpness": float(speak_mix_k),
+                        "speak_mix_prob_mean": float(speak_mix_prob_mean),
+                        "speak_hold_prob_mean": (
+                            float(speak_hold_prob.detach().mean().item()) if speak_hold_prob is not None else float("nan")
+                        ),
+                        "two_phase": bool(two_phase_i),
+                        "two_phase_trigger": str(two_phase_trigger_eff_s),
+                        "two_phase_rate": (
+                            float(two_phase_mask.float().mean().item()) if two_phase_mask is not None else float("nan")
+                        ),
+                        "two_phase_trigger_rate": (
+                            float(two_phase_triggered.float().mean().item())
+                            if two_phase_triggered is not None
+                            else float("nan")
                         ),
                         **_parts_to_float(parts),
                     }
                     log_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-            resolved_any = (k1_seen & v1_seen) | (k2_seen & v2_seen)
-            if query_is_k1 is not None:
-                resolved_query = torch.where(query_is_k1, k1_seen & v1_seen, k2_seen & v2_seen)
+            resolved_k1 = k1_seen & v1_seen
+            resolved_k2 = k2_seen & v2_seen
+            resolved_any = resolved_k1 | resolved_k2
+            resolved_query_strict: Optional[torch.Tensor] = None
+            if query_steps_i > 0 and query_mode_s == "both":
+                # "Both" curriculum: for query/readout we primarily need to have sampled
+                # both value spans at least once (keys can be inferred under blurred readout).
+                resolved_query_strict = resolved_k1 & resolved_k2
+                resolved_query = v1_seen & v2_seen
+            elif query_is_k1 is not None:
+                resolved_query = torch.where(query_is_k1, resolved_k1, resolved_k2)
             else:
                 resolved_query = resolved_any
 
@@ -2844,56 +3809,383 @@ def run_e3_kv_swap(
             )
 
             q_feat = q_off_mean
-            if query_steps_i > 0 and query_ids is not None and query_target_ids is not None:
-                # Query/readout phase: input=key embedding, target=value embedding.
-                entity.enter_online()
-                query_in = embedding(query_ids).detach()
-                query_target = embedding(query_target_ids).detach()
-                train_mask = resolved_query.detach()
-                for _ in range(query_steps_i):
-                    out = entity.forward_tensor(
-                        state_flat=entity.state.flat,
-                        u_dict={"default": query_in},
-                        dt=float(dt),
-                        prev_chart_weights=getattr(entity, "_prev_chart_weights", None),
-                        prediction_error=None,
-                        detach_next_prev_weights=True,
-                        compute_action=False,
-                        skip_free_energy=True,
-                    )
-                    entity.state = ContactState(entity.dim_q, batch_size, device, out["next_state_flat"])
-                    entity._prev_chart_weights = out["next_prev_chart_weights"]
+            if query_steps_i > 0:
+                def _query_one(
+                    *,
+                    q_ids: torch.Tensor,
+                    q_tgt_ids: torch.Tensor,
+                    train_mask: torch.Tensor,
+                    q_seq: Optional[torch.Tensor],
+                    cand_ids: torch.Tensor,
+                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                    entity.enter_online()
+                    q_in = embedding(q_ids).detach()
+                    q_tgt = embedding(q_tgt_ids).detach()
+                    y_hat_local = decoder(entity.state.q)
+                    for t_q in range(int(query_steps_i)):
+                        if q_seq is not None:
+                            q_len = int(q_seq.shape[1])
+                            if q_len > 0:
+                                q_in = embedding(q_seq[:, int(t_q % q_len)]).detach()
+                        out = entity.forward_tensor(
+                            state_flat=entity.state.flat,
+                            u_dict={"default": q_in},
+                            dt=float(dt),
+                            prev_chart_weights=getattr(entity, "_prev_chart_weights", None),
+                            prediction_error=None,
+                            detach_next_prev_weights=True,
+                            compute_action=False,
+                            skip_free_energy=True,
+                        )
+                        entity.state = ContactState(entity.dim_q, batch_size, device, out["next_state_flat"])
+                        entity._prev_chart_weights = out["next_prev_chart_weights"]
 
-                    y_hat = decoder(entity.state.q)
-                    pred_err_ps = (y_hat - query_target).pow(2).mean(dim=1)
-                    if train_mask.any():
-                        pred_err_hit = pred_err_ps[train_mask].mean()
-                        optimizer.zero_grad(set_to_none=True)
-                        pred_err_hit.backward()
-                        torch.nn.utils.clip_grad_norm_(list(entity.parameters()) + list(decoder.parameters()), max_norm=1.0)
-                        optimizer.step()
-                    entity.state = ContactState(entity.dim_q, batch_size, device, entity.state.flat.detach())
+                        y_hat_local = decoder(entity.state.q)
+                        pred_err_ps = (y_hat_local - q_tgt).pow(2).mean(dim=1)
+                        if train_mask.any():
+                            pred_err_hit = pred_err_ps[train_mask].mean()
+                            optimizer.zero_grad(set_to_none=True)
+                            pred_err_hit.backward()
+                            torch.nn.utils.clip_grad_norm_(list(entity.parameters()) + list(decoder.parameters()), max_norm=1.0)
+                            optimizer.step()
+                        entity.state = ContactState(entity.dim_q, batch_size, device, entity.state.flat.detach())
+                    with torch.no_grad():
+                        cand_emb = embedding.weight[cand_ids].detach()
+                        dist = (y_hat_local.detach().unsqueeze(1) - cand_emb.unsqueeze(0)).pow(2).mean(dim=2)
+                        pred_idx = dist.argmin(dim=1)
+                        pred_ids = cand_ids[pred_idx]
+                        correct = (pred_ids == q_tgt_ids).detach()
+                    return y_hat_local.detach(), correct, pred_ids.detach()
 
-                with torch.no_grad():
-                    emb_a = embedding.weight[int(val_a)].detach().view(1, -1)
-                    emb_b = embedding.weight[int(val_b)].detach().view(1, -1)
-                    dist_a = (y_hat.detach() - emb_a).pow(2).mean(dim=1)
-                    dist_b = (y_hat.detach() - emb_b).pow(2).mean(dim=1)
-                    pred_is_b = dist_b < dist_a
-                    tgt_is_b = query_target_ids == int(val_b)
-                    correct = pred_is_b == tgt_is_b
-                    query_correct_total += int(correct.sum().item())
-                    if train_mask.any():
-                        query_hit_total += int(train_mask.sum().item())
-                        query_correct_hit_total += int(correct[train_mask].sum().item())
+                if query_mode_s == "both":
+                    if (
+                        query_ids_k1 is not None
+                        and query_target_ids_k1 is not None
+                        and query_ids_k2 is not None
+                        and query_target_ids_k2 is not None
+                    ):
+                        # In both-mode, evaluate each query from the same offline-consolidated state to
+                        # avoid sequential query interference (Q1 state drift harming Q2 accuracy).
+                        state_before_query = entity.state.flat.detach().clone()
+                        prev_before_query = getattr(entity, "_prev_chart_weights", None)
+                        prev_before_query = prev_before_query.detach().clone() if prev_before_query is not None else None
 
-                # For a stable, cross-episode diagnostic, use the predicted observation (y_hat) as the feature
-                # (embedding space is fixed; q space can drift while weights learn).
-                q_feat = y_hat.detach().cpu()
+                        train_k1 = v1_seen.detach()
+                        train_k2 = v2_seen.detach()
+                        y1, c1, pred_val_ids_1 = _query_one(
+                            q_ids=query_ids_k1,
+                            q_tgt_ids=query_target_ids_k1,
+                            train_mask=train_k1,
+                            q_seq=query_seq_k1,
+                            cand_ids=value_candidate_ids,
+                        )
+                        entity.state = ContactState(entity.dim_q, batch_size, device, state_before_query)
+                        entity._prev_chart_weights = prev_before_query
+                        y2, c2, pred_val_ids_2 = _query_one(
+                            q_ids=query_ids_k2,
+                            q_tgt_ids=query_target_ids_k2,
+                            train_mask=train_k2,
+                            q_seq=query_seq_k2,
+                            cand_ids=value_candidate_ids,
+                        )
+
+                        query_total_k1 += int(c1.numel())
+                        query_correct_total_k1 += int(c1.sum().item())
+                        if train_k1.any():
+                            query_hit_total_k1 += int(train_k1.sum().item())
+                            query_correct_hit_total_k1 += int(c1[train_k1].sum().item())
+
+                        query_total_k2 += int(c2.numel())
+                        query_correct_total_k2 += int(c2.sum().item())
+                        if train_k2.any():
+                            query_hit_total_k2 += int(train_k2.sum().item())
+                            query_correct_hit_total_k2 += int(c2[train_k2].sum().item())
+
+                        both_correct = (c1 & c2)
+                        both_hit = (train_k1 & train_k2)
+                        query_total += int(both_correct.numel())
+                        query_correct_total += int(both_correct.sum().item())
+                        if both_hit.any():
+                            query_hit_total += int(both_hit.sum().item())
+                            query_correct_hit_total += int(both_correct[both_hit].sum().item())
+
+                        pred_comb_ids: Optional[torch.Tensor] = None
+                        comb_correct: Optional[torch.Tensor] = None
+                        if query_target_ids_comb is not None:
+                            # COMB-v1: run a third query from the same offline state.
+                            entity.state = ContactState(entity.dim_q, batch_size, device, state_before_query)
+                            entity._prev_chart_weights = prev_before_query
+                            _, comb_correct_t, pred_comb_ids = _query_one(
+                                q_ids=query_ids_k1,
+                                q_tgt_ids=query_target_ids_comb,
+                                train_mask=both_hit,
+                                q_seq=query_seq_comb,
+                                cand_ids=value_candidate_ids,
+                            )
+                            comb_correct = comb_correct_t
+                            combine_total += int(comb_correct_t.numel())
+                            combine_correct_total += int(comb_correct_t.sum().item())
+                            if both_hit.any():
+                                combine_hit_total += int(both_hit.sum().item())
+                                combine_correct_hit_total += int(comb_correct_t[both_hit].sum().item())
+
+                        q_feat = torch.cat([y1, y2], dim=1).detach().cpu()
+
+                        # kv_text citation stats + optional demo output (ANS1/ANS2 + CITE1/CITE2).
+                        if text_mode and isinstance(token_ids, torch.Tensor):
+                            cite_len = int(min(int(seq_len), int(key_len + kv_text_gap_i + value_len)))
+                            if cite_len <= 0:
+                                cite_len = int(min(int(seq_len), int(value_len)))
+                            if cite_len <= 0:
+                                cite_len = 1
+
+                            def _decode(ids: List[int]) -> str:
+                                out: List[str] = []
+                                for ii in ids:
+                                    tok = vocab.id_to_token[int(ii)]
+                                    if len(tok) == 1:
+                                        out.append(tok)
+                                    elif tok == vocab.unk_token:
+                                        out.append("�")
+                                    else:
+                                        out.append("?")
+                                return "".join(out)
+
+                            token_cpu = token_ids.detach().to(dtype=torch.long).cpu().tolist()
+                            s_hist_cpu = s_hist.detach().to(dtype=torch.long).cpu()
+                            fixate_hist_cpu: Optional[torch.Tensor] = (
+                                fixate_hist.detach().cpu() if fixate_hist is not None else None
+                            )
+
+                            def _positions_unique(b: int) -> List[int]:
+                                if fixate_hist_cpu is not None:
+                                    pos_fix = s_hist_cpu[:, b][fixate_hist_cpu[:, b]].tolist()
+                                    positions = pos_fix + s_hist_cpu[:, b].tolist()
+                                else:
+                                    positions = s_hist_cpu[:, b].tolist()
+                                seen_pos: set[int] = set()
+                                out: List[int] = []
+                                for p in positions:
+                                    pi = int(p)
+                                    if pi in seen_pos:
+                                        continue
+                                    seen_pos.add(pi)
+                                    out.append(pi)
+                                return out
+
+                            def _find_cite(b: int, *, key_id: int, tgt_id: int) -> Optional[Tuple[int, List[int]]]:
+                                positions_u = _positions_unique(int(b))
+                                for p in positions_u:
+                                    for off in range(int(value_len)):
+                                        start = int(p - (int(key_len) + int(kv_text_gap_i) + int(off)))
+                                        if start < 0 or start + int(cite_len) > int(seq_len):
+                                            continue
+                                        ok_key = True
+                                        for k in range(int(key_len)):
+                                            if token_cpu[int(start + k)] != int(key_id):
+                                                ok_key = False
+                                                break
+                                        if not ok_key:
+                                            continue
+                                        val_start = int(start + int(key_len) + int(kv_text_gap_i))
+                                        ok_val = True
+                                        for k in range(int(value_len)):
+                                            if token_cpu[int(val_start + k)] != int(tgt_id):
+                                                ok_val = False
+                                                break
+                                        if ok_val:
+                                            sn_ids = token_cpu[int(start) : int(start + cite_len)]
+                                            return int(start), sn_ids
+                                return None
+
+                            for b in range(batch_size):
+                                if not bool(resolved_query[b].item()):
+                                    continue
+                                cite_total += 2
+
+                                key1_id = int(query_ids_k1[b].item())
+                                tgt1_id = int(query_target_ids_k1[b].item())
+                                c1_pos = _find_cite(int(b), key_id=key1_id, tgt_id=tgt1_id)
+                                ok1 = c1_pos is not None
+                                cite_hit_total += int(ok1)
+
+                                key2_id = int(query_ids_k2[b].item())
+                                tgt2_id = int(query_target_ids_k2[b].item())
+                                c2_pos = _find_cite(int(b), key_id=key2_id, tgt_id=tgt2_id)
+                                ok2 = c2_pos is not None
+                                cite_hit_total += int(ok2)
+
+                                if not demo_enabled or demo_max_i <= 0 or len(demo_records) >= demo_max_i:
+                                    continue
+                                q1_str = (
+                                    _decode(query_seq_k1[b].tolist())
+                                    if query_seq_k1 is not None
+                                    else str(vocab.id_to_token[int(key1_id)])
+                                )
+                                q2_str = (
+                                    _decode(query_seq_k2[b].tolist())
+                                    if query_seq_k2 is not None
+                                    else str(vocab.id_to_token[int(key2_id)])
+                                )
+                                ans1 = str(vocab.id_to_token[int(pred_val_ids_1[b].item())])
+                                ans2 = str(vocab.id_to_token[int(pred_val_ids_2[b].item())])
+                                demo_records.append(
+                                    {
+                                        "Q1": q1_str,
+                                        "ANS1": ans1,
+                                        "CITE1": {
+                                            "pos": (int(c1_pos[0]) if c1_pos is not None else None),
+                                            "len": int(cite_len),
+                                            "ok": bool(ok1),
+                                        },
+                                        "SNIP1": (_decode(c1_pos[1])[:80] if c1_pos is not None else ""),
+                                        "Q2": q2_str,
+                                        "ANS2": ans2,
+                                        "CITE2": {
+                                            "pos": (int(c2_pos[0]) if c2_pos is not None else None),
+                                            "len": int(cite_len),
+                                            "ok": bool(ok2),
+                                        },
+                                        "SNIP2": (_decode(c2_pos[1])[:80] if c2_pos is not None else ""),
+                                        "COMB_MODE": str(comb_mode_s),
+                                        "COMB": (
+                                            str(vocab.id_to_token[int(pred_comb_ids[b].item())])
+                                            if pred_comb_ids is not None
+                                            else f"{ans1}{ans2}"
+                                        ),
+                                        "COMB_TRUE": (
+                                            str(vocab.id_to_token[int(query_target_ids_comb[b].item())])
+                                            if query_target_ids_comb is not None
+                                            else ""
+                                        ),
+                                        "COMB_OK": (
+                                            bool(comb_correct[b].item())
+                                            if comb_correct is not None
+                                            else None
+                                        ),
+                                    }
+                                )
+                else:
+                    if query_ids is not None and query_target_ids is not None:
+                        train_mask = resolved_query.detach()
+                        y_hat, correct, pred_val_ids = _query_one(
+                            q_ids=query_ids,
+                            q_tgt_ids=query_target_ids,
+                            train_mask=train_mask,
+                            q_seq=query_seq,
+                            cand_ids=value_candidate_ids,
+                        )
+                        query_correct_total += int(correct.sum().item())
+                        if train_mask.any():
+                            query_hit_total += int(train_mask.sum().item())
+                            query_correct_hit_total += int(correct[train_mask].sum().item())
+                        q_feat = y_hat.detach().cpu()
+
+                        # kv_text citation stats + optional demo output (ANS + CITE).
+                        if text_mode and isinstance(token_ids, torch.Tensor):
+                            cite_len = int(min(int(seq_len), int(key_len + kv_text_gap_i + value_len)))
+                            if cite_len <= 0:
+                                cite_len = int(min(int(seq_len), int(value_len)))
+                            if cite_len <= 0:
+                                cite_len = 1
+
+                            token_cpu = token_ids.detach().to(dtype=torch.long).cpu().tolist()
+                            s_hist_cpu = s_hist.detach().to(dtype=torch.long).cpu()
+                            fixate_hist_cpu: Optional[torch.Tensor] = (
+                                fixate_hist.detach().cpu() if fixate_hist is not None else None
+                            )
+
+                            for b in range(batch_size):
+                                if not bool(resolved_query[b].item()):
+                                    continue
+                                key_id = int(query_ids[b].item())
+                                tgt_id = int(query_target_ids[b].item())
+                                cite_total += 1
+                                found_pos: Optional[int] = None
+                                positions: List[int]
+                                if fixate_hist_cpu is not None:
+                                    pos_fix = s_hist_cpu[:, b][fixate_hist_cpu[:, b]].tolist()
+                                    positions = pos_fix + s_hist_cpu[:, b].tolist()
+                                else:
+                                    positions = s_hist_cpu[:, b].tolist()
+                                seen_pos: set[int] = set()
+                                positions_u: List[int] = []
+                                for p in positions:
+                                    pi = int(p)
+                                    if pi in seen_pos:
+                                        continue
+                                    seen_pos.add(pi)
+                                    positions_u.append(pi)
+
+                                for p in positions_u:
+                                    for off in range(int(value_len)):
+                                        start = int(p - (int(key_len) + int(kv_text_gap_i) + int(off)))
+                                        if start < 0 or start + int(cite_len) > int(seq_len):
+                                            continue
+                                        ok_key = True
+                                        for k in range(int(key_len)):
+                                            if token_cpu[int(start + k)] != int(key_id):
+                                                ok_key = False
+                                                break
+                                        if not ok_key:
+                                            continue
+                                        val_start = int(start + int(key_len) + int(kv_text_gap_i))
+                                        ok_val = True
+                                        for k in range(int(value_len)):
+                                            if token_cpu[int(val_start + k)] != int(tgt_id):
+                                                ok_val = False
+                                                break
+                                        if ok_val:
+                                            found_pos = int(start)
+                                            break
+                                    if found_pos is not None:
+                                        break
+
+                                ok = found_pos is not None
+                                cite_hit_total += int(ok)
+                                if not ok:
+                                    continue
+                                pos = int(found_pos)
+                                sn_ids = token_cpu[int(pos) : int(pos + cite_len)]
+
+                                if (
+                                    demo_enabled
+                                    and demo_max_i > 0
+                                    and len(demo_records) < demo_max_i
+                                    and bool(correct[b].item())
+                                ):
+                                    # Decode query + snippet for a single example.
+                                    def _decode(ids: List[int]) -> str:
+                                        out = []
+                                        for ii in ids:
+                                            tok = vocab.id_to_token[int(ii)]
+                                            if len(tok) == 1:
+                                                out.append(tok)
+                                            elif tok == vocab.unk_token:
+                                                out.append("�")
+                                            else:
+                                                out.append("?")
+                                        return "".join(out)
+
+                                    q_ids = (
+                                        query_seq[b].detach().to(dtype=torch.long).cpu().tolist()
+                                        if query_seq is not None
+                                        else [key_id]
+                                    )
+                                    demo_records.append(
+                                        {
+                                            "Q": _decode(q_ids),
+                                            "ANS": str(vocab.id_to_token[int(pred_val_ids[b].item())]),
+                                            "CITE": {"pos": int(pos), "len": int(cite_len), "ok": bool(ok)},
+                                            "SNIP": _decode(sn_ids)[:80],
+                                        }
+                                    )
 
             feats_all.append(q_feat)
             labs_all.append(torch.full((batch_size,), int(label), dtype=torch.long))
             resolved_all.append(resolved_query.detach().cpu() if query_steps_i > 0 else resolved_any.detach().cpu())
+            if resolved_query_strict is not None:
+                resolved_strict_all.append(resolved_query_strict.detach().cpu())
             resolved_any_all.append(resolved_any.detach().cpu())
             val_hit_all.append(val_any.detach().cpu())
             first_hit_all.append(first_hit.detach().cpu())
@@ -2903,6 +4195,9 @@ def run_e3_kv_swap(
     feats = torch.cat(feats_all, dim=0) if feats_all else torch.zeros((0, entity.dim_q))
     labs = torch.cat(labs_all, dim=0) if labs_all else torch.zeros((0,), dtype=torch.long)
     resolved_cat = torch.cat(resolved_all, dim=0) if resolved_all else torch.zeros((0,), dtype=torch.bool)
+    resolved_strict_cat = (
+        torch.cat(resolved_strict_all, dim=0) if resolved_strict_all else torch.zeros((0,), dtype=torch.bool)
+    )
     resolved_any_cat = torch.cat(resolved_any_all, dim=0) if resolved_any_all else torch.zeros((0,), dtype=torch.bool)
     val_hit_cat = torch.cat(val_hit_all, dim=0) if val_hit_all else torch.zeros((0,), dtype=torch.bool)
     first_hit_cat = torch.cat(first_hit_all, dim=0) if first_hit_all else torch.zeros((0,), dtype=torch.int32)
@@ -2915,6 +4210,9 @@ def run_e3_kv_swap(
 
     total = int(resolved_cat.numel())
     resolved_rate = float(resolved_cat.float().mean().item()) if total > 0 else float("nan")
+    resolved_strict_rate = (
+        float(resolved_strict_cat.float().mean().item()) if int(resolved_strict_cat.numel()) > 0 else float("nan")
+    )
     resolved_any_rate = (
         float(resolved_any_cat.float().mean().item()) if int(resolved_any_cat.numel()) > 0 else float("nan")
     )
@@ -2973,14 +4271,38 @@ def run_e3_kv_swap(
     }
 
     return {
-        "task": "kv_swap",
+        "task": str(task_mode_s),
         "policy": str(policy_s),
+        "query_mode": str(query_mode_s),
         "query_key": str(query_key_s),
+        "query_input": str(query_input_s),
+        "comb_mode": str(comb_mode_s),
+        "comb_mod": int(comb_mod_i) if comb_mode_s == "add_mod" else int(0),
+        "value_pool_size": int(value_candidate_ids.numel()),
         "query_steps": int(query_steps_i),
-        "query_k1_rate": (float(query_k1_total / max(1, int(query_total))) if query_steps_i > 0 else float("nan")),
+        "both_window": int(both_window_i) if query_steps_i > 0 and query_mode_s == "both" else int(0),
+        "query_k1_rate": (
+            (float(query_k1_total / max(1, int(query_total))) if query_mode_s == "single" else float("nan"))
+            if query_steps_i > 0
+            else float("nan")
+        ),
         "query_acc": (float(query_correct_total / max(1, int(query_total))) if query_steps_i > 0 else float("nan")),
         "query_acc_hit": (
             float(query_correct_hit_total / max(1, int(query_hit_total))) if query_steps_i > 0 else float("nan")
+        ),
+        "combine_acc": (
+            float(combine_correct_total / max(1, int(combine_total))) if combine_total > 0 else float("nan")
+        ),
+        "combine_acc_hit": (
+            float(combine_correct_hit_total / max(1, int(combine_hit_total))) if combine_hit_total > 0 else float("nan")
+        ),
+        "query_acc_k1": (float(query_correct_total_k1 / max(1, int(query_total_k1))) if query_steps_i > 0 else float("nan")),
+        "query_acc_hit_k1": (
+            float(query_correct_hit_total_k1 / max(1, int(query_hit_total_k1))) if query_steps_i > 0 else float("nan")
+        ),
+        "query_acc_k2": (float(query_correct_total_k2 / max(1, int(query_total_k2))) if query_steps_i > 0 else float("nan")),
+        "query_acc_hit_k2": (
+            float(query_correct_hit_total_k2 / max(1, int(query_hit_total_k2))) if query_steps_i > 0 else float("nan")
         ),
         "keys": {"K1": {"id": int(key1), "token": tok_k1}, "K2": {"id": int(key2), "token": tok_k2}},
         "values": {"A": {"id": int(val_a), "token": tok_a}, "B": {"id": int(val_b), "token": tok_b}},
@@ -3001,13 +4323,64 @@ def run_e3_kv_swap(
         ),
         "val_align_step_rate": float(val_align_step_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))),
         "speak": bool(speak_i != 0),
-        "speak_use": bool(speak_use_i != 0),
+        "speak_use": int(speak_use_i),
         "speak_vocab": int(speak_vocab_i),
         "speak_loss_weight": float(speak_loss_w),
         "speak_back_threshold": float(speak_back_thr),
+        "speak_input": str(speak_input_s),
+        "speak_pos_weight": float(speak_pos_w),
+        "speak_pos_weight_max": float(speak_pos_w_max),
+        "speak_pos_weight_mean": (
+            float(speak_pos_weight_sum / max(1, int(speak_pos_weight_count))) if speak_i != 0 else float("nan")
+        ),
         "speak_acc": (float(speak_correct_total / max(1, int(speak_total))) if speak_i != 0 else float("nan")),
         "speak_ce": (float(speak_ce_sum / max(1, int(speak_ce_count))) if speak_i != 0 else float("nan")),
-        "speak_back_rate": float(speak_back_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))),
+        "speak_pos_rate": (float(speak_pos_total / max(1, int(speak_total))) if speak_i != 0 else float("nan")),
+        "speak_pred_pos_rate": (
+            float(speak_pred_pos_total / max(1, int(speak_total))) if speak_i != 0 else float("nan")
+        ),
+        "speak_tpr": (
+            float(speak_tp_total / max(1, int(speak_tp_total + speak_fn_total))) if speak_i != 0 else float("nan")
+        ),
+        "speak_precision": (
+            float(speak_tp_total / max(1, int(speak_tp_total + speak_fp_total))) if speak_i != 0 else float("nan")
+        ),
+        "speak_back_prob_mean": (
+            float(speak_back_prob_sum / max(1, int(speak_back_prob_count))) if speak_i != 0 else float("nan")
+        ),
+        "speak_back_mask_rate": (
+            float(speak_back_mask_total / max(1, int(speak_back_prob_count))) if speak_i != 0 else float("nan")
+        ),
+        "speak_mix_sharpness": (float(speak_mix_k) if speak_i != 0 else float("nan")),
+        "speak_mix_prob_mean": (
+            float(speak_mix_prob_sum / max(1, int(speak_mix_prob_count))) if speak_i != 0 else float("nan")
+        ),
+        "speak_hold_prob_mean": (
+            float(speak_hold_prob_sum / max(1, int(speak_hold_prob_count)))
+            if speak_i != 0 and int(speak_hold_prob_count) > 0
+            else float("nan")
+        ),
+        "two_phase": bool(two_phase_i),
+        "two_phase_trigger": str(two_phase_trigger_eff_s) if two_phase_i else "",
+        "two_phase_fine_steps": (int(two_phase_fine_steps_i) if two_phase_i else int(0)),
+        "two_phase_speak_thresh": (float(two_phase_speak_thr) if two_phase_i else float("nan")),
+        "two_phase_back_delta": (float(two_phase_back_delta_f) if two_phase_i else float("nan")),
+        "two_phase_fine_max": (float(two_phase_fine_max_f) if two_phase_i else float("nan")),
+        "two_phase_fine_weight": (float(two_phase_fine_weight_f) if two_phase_i else float("nan")),
+        "two_phase_coarse_min": (float(two_phase_coarse_min_f) if two_phase_i else float("nan")),
+        "two_phase_coarse_weight": (float(two_phase_coarse_weight_f) if two_phase_i else float("nan")),
+        "two_phase_trigger_rate": float(
+            two_phase_trigger_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs))
+        )
+        if two_phase_i
+        else float("nan"),
+        "two_phase_step_rate": float(two_phase_step_total / max(1, int(batch_size) * int(online_steps) * 2 * int(pairs)))
+        if two_phase_i
+        else float("nan"),
+        "kv_text_gap": int(kv_text_gap_i),
+        "cite_total": int(cite_total) if text_mode else int(0),
+        "cite_hit_rate": (float(cite_hit_total / max(1, int(cite_total))) if text_mode and cite_total > 0 else float("nan")),
+        "demo": (demo_records if demo_enabled and demo_records else []),
         "base_marker_violations": int(base_marker_violations),
         "base_marker_count_total": int(base_marker_count_total),
         "edge_min": int(edge_min if edge_min < int(1e8) else -1),
@@ -3018,6 +4391,7 @@ def run_e3_kv_swap(
         "val_hit_rate": float(val_hit_rate),
         "resolved_any_rate": float(resolved_any_rate),
         "resolved_rate": float(resolved_rate),
+        "resolved_strict_rate": float(resolved_strict_rate),
         "first_hit_mean": float(first_hit_mean),
         "first_hit_median": float(first_hit_med),
         "dwell_mean": float(dwell_cat.to(dtype=torch.float32).mean().item()) if total > 0 else float("nan"),
@@ -3116,7 +4490,7 @@ def main() -> None:
     parser.add_argument("--run_e0", type=int, default=1)
     parser.add_argument("--run_e1e2", type=int, default=1)
     parser.add_argument("--run_e3", type=int, default=0)
-    parser.add_argument("--e3_task", type=str, default="marker_patch", choices=["marker_patch", "kv_swap"])
+    parser.add_argument("--e3_task", type=str, default="marker_patch", choices=["marker_patch", "kv_swap", "kv_text"])
     parser.add_argument("--e3_pairs", type=int, default=8, help="Number of base episodes (each yields 2 classes).")
     parser.add_argument("--e3_seq_len", type=int, default=4096)
     parser.add_argument("--e3_clue_len", type=int, default=32)
@@ -3162,6 +4536,69 @@ def main() -> None:
         help="E3 kv_swap: which key to query during query/readout phase.",
     )
     parser.add_argument(
+        "--e3_query_mode",
+        type=str,
+        default="single",
+        choices=["single", "both"],
+        help="E3 kv_swap: query/readout mode (single key vs both keys sequentially).",
+    )
+    parser.add_argument(
+        "--e3_query_input",
+        type=str,
+        default="key",
+        choices=["key", "text"],
+        help="E3 kv_swap/kv_text: query input (key token or short text sequence).",
+    )
+    parser.add_argument(
+        "--e3_comb_mode",
+        type=str,
+        default="concat",
+        choices=["concat", "add_mod"],
+        help="E3 kv_text BOTH: COMB task mode (concat=legacy, add_mod=(v1+v2) mod M). add_mod requires --e3_query_mode=both and --e3_query_steps>0.",
+    )
+    parser.add_argument(
+        "--e3_comb_mod",
+        type=int,
+        default=256,
+        help="E3 comb_mode=add_mod: modulus M and value-pool size (e.g., 100 or 256).",
+    )
+    parser.add_argument(
+        "--e3_key_seek",
+        type=int,
+        default=0,
+        help="E3 kv_text: enable value→key micro-read alignment during fixation (raises resolved_strict_rate).",
+    )
+    parser.add_argument(
+        "--e3_key_seek_steps",
+        type=int,
+        default=40,
+        help="E3 key_seek: number of steps to keep key-seek active after entering a value span (per sample).",
+    )
+    parser.add_argument(
+        "--e3_both_window",
+        type=int,
+        default=0,
+        help="E3 kv_swap/kv_text: when --e3_query_mode=both, constrain K2 to be within +/-window of K1 (0 disables).",
+    )
+    parser.add_argument(
+        "--e3_kv_text_gap",
+        type=int,
+        default=3,
+        help="E3 kv_text: gap length between key and value spans.",
+    )
+    parser.add_argument(
+        "--e3_demo",
+        type=int,
+        default=0,
+        help="If 1 and --e3_task=kv_text, print a small ANS+CITE demo record to stdout and store it in summary.json.",
+    )
+    parser.add_argument(
+        "--e3_demo_max",
+        type=int,
+        default=1,
+        help="Max number of demo examples to record when --e3_demo=1.",
+    )
+    parser.add_argument(
         "--e3_val_align",
         type=int,
         default=0,
@@ -3175,6 +4612,13 @@ def main() -> None:
         help="E3 kv_swap: speak vocab size (>=2). Index 1 is treated as BACK for e3_speak_use.",
     )
     parser.add_argument(
+        "--e3_speak_input",
+        type=str,
+        default="q",
+        choices=["q", "y"],
+        help="E3 speak: input to speak_head (q=internal state, y=current sensory read at pointer).",
+    )
+    parser.add_argument(
         "--e3_speak_loss_weight",
         type=float,
         default=0.1,
@@ -3184,13 +4628,86 @@ def main() -> None:
         "--e3_speak_use",
         type=int,
         default=1,
-        help="E3 kv_swap: if 1, use speak token BACK to override pointer delta (non-differentiable threshold).",
+        help="E3 kv_swap: speak control (0=off, 1=threshold BACK->delta=-step_size, 2=mix BACK prob into lookahead delta).",
     )
     parser.add_argument(
         "--e3_speak_back_threshold",
         type=float,
         default=0.9,
         help="E3 kv_swap: threshold for BACK probability when e3_speak_use=1.",
+    )
+    parser.add_argument(
+        "--e3_speak_pos_weight",
+        type=float,
+        default=0.0,
+        help="E3 speak: positive-class (BACK/in_val) weight for BCE/CE. 0 => auto (neg/pos, clipped).",
+    )
+    parser.add_argument(
+        "--e3_speak_pos_weight_max",
+        type=float,
+        default=50.0,
+        help="E3 speak: max pos_weight used for auto (or clip manual).",
+    )
+    parser.add_argument(
+        "--e3_speak_mix_sharpness",
+        type=float,
+        default=6.0,
+        help="E3 speak: sharpness k for mix-control p_mix = sigmoid(k * logit_diff(BACK vs non-BACK)).",
+    )
+    parser.add_argument(
+        "--e3_two_phase",
+        type=int,
+        default=0,
+        help="E3 kv_swap/kv_text: enable coarse→fine step-size shaping driven by the speak signal.",
+    )
+    parser.add_argument(
+        "--e3_two_phase_fine_steps",
+        type=int,
+        default=12,
+        help="E3 two-phase: number of steps to keep fine-phase after trigger (per sample).",
+    )
+    parser.add_argument(
+        "--e3_two_phase_speak_thresh",
+        type=float,
+        default=0.6,
+        help="E3 two-phase: trigger threshold on speak BACK probability to enter/keep fine-phase.",
+    )
+    parser.add_argument(
+        "--e3_two_phase_trigger",
+        type=str,
+        default="auto",
+        choices=["auto", "back", "hold"],
+        help="E3 two-phase: which speak token drives phase switching (auto: hold if vocab>=3 else back).",
+    )
+    parser.add_argument(
+        "--e3_two_phase_back_delta",
+        type=float,
+        default=4.0,
+        help="E3 two-phase: BACK delta magnitude (multiples of step_size) used while in fine-phase.",
+    )
+    parser.add_argument(
+        "--e3_two_phase_fine_max",
+        type=float,
+        default=2.0,
+        help="E3 two-phase: fine-phase max |delta| (in multiples of step_size) before penalty.",
+    )
+    parser.add_argument(
+        "--e3_two_phase_fine_weight",
+        type=float,
+        default=0.5,
+        help="E3 two-phase: fine-phase penalty weight for |delta| exceeding fine_max.",
+    )
+    parser.add_argument(
+        "--e3_two_phase_coarse_min",
+        type=float,
+        default=0.0,
+        help="E3 two-phase: coarse-phase min |delta| (multiples of step_size) below which penalty applies.",
+    )
+    parser.add_argument(
+        "--e3_two_phase_coarse_weight",
+        type=float,
+        default=0.0,
+        help="E3 two-phase: coarse-phase penalty weight for |delta| below coarse_min.",
     )
     parser.add_argument("--e3_boundary_window", type=int, default=0, help="0 = auto (3*sigma).")
     parser.add_argument("--log_every", type=int, default=10)
@@ -3273,12 +4790,31 @@ def main() -> None:
         "e3_fixate_scan_radius": int(args.e3_fixate_scan_radius),
         "e3_query_steps": int(args.e3_query_steps),
         "e3_query_key": str(args.e3_query_key),
+        "e3_query_mode": str(args.e3_query_mode),
+        "e3_query_input": str(args.e3_query_input),
+        "e3_both_window": int(args.e3_both_window),
+        "e3_kv_text_gap": int(args.e3_kv_text_gap),
+        "e3_demo": int(args.e3_demo),
+        "e3_demo_max": int(args.e3_demo_max),
         "e3_val_align": int(args.e3_val_align),
         "e3_speak": int(args.e3_speak),
         "e3_speak_vocab": int(args.e3_speak_vocab),
+        "e3_speak_input": str(args.e3_speak_input),
         "e3_speak_loss_weight": float(args.e3_speak_loss_weight),
         "e3_speak_use": int(args.e3_speak_use),
         "e3_speak_back_threshold": float(args.e3_speak_back_threshold),
+        "e3_speak_pos_weight": float(args.e3_speak_pos_weight),
+        "e3_speak_pos_weight_max": float(args.e3_speak_pos_weight_max),
+        "e3_speak_mix_sharpness": float(args.e3_speak_mix_sharpness),
+        "e3_two_phase": int(args.e3_two_phase),
+        "e3_two_phase_fine_steps": int(args.e3_two_phase_fine_steps),
+        "e3_two_phase_speak_thresh": float(args.e3_two_phase_speak_thresh),
+        "e3_two_phase_trigger": str(args.e3_two_phase_trigger),
+        "e3_two_phase_back_delta": float(args.e3_two_phase_back_delta),
+        "e3_two_phase_fine_max": float(args.e3_two_phase_fine_max),
+        "e3_two_phase_fine_weight": float(args.e3_two_phase_fine_weight),
+        "e3_two_phase_coarse_min": float(args.e3_two_phase_coarse_min),
+        "e3_two_phase_coarse_weight": float(args.e3_two_phase_coarse_weight),
         "e3_boundary_window": int(args.e3_boundary_window),
     }
     with open(os.path.join(save_dir, "run_config.json"), "w", encoding="utf-8") as f:
@@ -3318,9 +4854,9 @@ def main() -> None:
     decoder = ObsDecoder(int(args.dim_q), int(args.dim_q), hidden=0).to(device)
 
     e3_task_init = str(args.e3_task or "marker_patch").strip().lower()
-    if int(args.run_e3) == 1 and int(args.e3_speak) != 0 and e3_task_init != "kv_swap":
-        raise ValueError("--e3_speak is currently only supported for --e3_task kv_swap")
-    if int(args.run_e3) == 1 and e3_task_init == "kv_swap" and int(args.e3_speak) != 0:
+    if int(args.run_e3) == 1 and int(args.e3_speak) != 0 and e3_task_init not in ("kv_swap", "kv_text"):
+        raise ValueError("--e3_speak is currently only supported for --e3_task kv_swap/kv_text")
+    if int(args.run_e3) == 1 and e3_task_init in ("kv_swap", "kv_text") and int(args.e3_speak) != 0:
         speak_vocab = int(args.e3_speak_vocab)
         if speak_vocab < 2:
             raise ValueError(f"--e3_speak_vocab must be >=2 (got {speak_vocab})")
@@ -3333,6 +4869,11 @@ def main() -> None:
             entity.e3_speak_head.weight.zero_()
             if entity.e3_speak_head.bias is not None:
                 entity.e3_speak_head.bias.zero_()
+                if speak_vocab >= 2:
+                    # Start near "NOOP" to avoid perturbing the policy before the head learns.
+                    entity.e3_speak_head.bias[1] = -4.0
+                if speak_vocab >= 3:
+                    entity.e3_speak_head.bias[2] = -4.0
 
     init_entity = {k: v.detach().clone() for k, v in entity.state_dict().items()}
     init_decoder = {k: v.detach().clone() for k, v in decoder.state_dict().items()}
@@ -3603,7 +5144,7 @@ def main() -> None:
                     tag="e3",
                     log_every=int(args.log_every),
                 )
-            elif e3_task == "kv_swap":
+            elif e3_task in ("kv_swap", "kv_text"):
                 e3 = run_e3_kv_swap(
                     entity=entity,
                     decoder=decoder,
@@ -3656,12 +5197,37 @@ def main() -> None:
                     replay_mode=str(args.replay_mode),
                     query_steps=int(args.e3_query_steps),
                     query_key=str(args.e3_query_key),
+                    query_mode=str(args.e3_query_mode),
+                    query_input=str(args.e3_query_input),
+                    comb_mode=str(args.e3_comb_mode),
+                    comb_mod=int(args.e3_comb_mod),
+                    key_seek=int(args.e3_key_seek),
+                    key_seek_steps=int(args.e3_key_seek_steps),
+                    both_window=int(args.e3_both_window),
                     val_align=int(args.e3_val_align),
                     speak=int(args.e3_speak),
                     speak_vocab=int(args.e3_speak_vocab),
                     speak_loss_weight=float(args.e3_speak_loss_weight),
                     speak_use=int(args.e3_speak_use),
                     speak_back_threshold=float(args.e3_speak_back_threshold),
+                    speak_pos_weight=float(args.e3_speak_pos_weight),
+                    speak_pos_weight_max=float(args.e3_speak_pos_weight_max),
+                    speak_input=str(args.e3_speak_input),
+                    speak_mix_sharpness=float(args.e3_speak_mix_sharpness),
+                    two_phase=int(args.e3_two_phase),
+                    two_phase_fine_steps=int(args.e3_two_phase_fine_steps),
+                    two_phase_speak_thresh=float(args.e3_two_phase_speak_thresh),
+                    two_phase_trigger=str(args.e3_two_phase_trigger),
+                    two_phase_back_delta=float(args.e3_two_phase_back_delta),
+                    two_phase_fine_max=float(args.e3_two_phase_fine_max),
+                    two_phase_fine_weight=float(args.e3_two_phase_fine_weight),
+                    two_phase_coarse_min=float(args.e3_two_phase_coarse_min),
+                    two_phase_coarse_weight=float(args.e3_two_phase_coarse_weight),
+                    kv_text_gap=int(args.e3_kv_text_gap),
+                    text_corpus=(text_a if str(e3_task) == "kv_text" else None),
+                    task_mode=str(e3_task),
+                    demo=int(args.e3_demo),
+                    demo_max=int(args.e3_demo_max),
                     seed=int(args.seed),
                     log_f=log_f,
                     tag="e3kv",
@@ -3670,6 +5236,43 @@ def main() -> None:
             else:
                 raise ValueError(f"unknown e3_task: {args.e3_task}")
             summary["E3"] = e3
+            if int(args.e3_demo) != 0 and str(e3.get("task")) == "kv_text":
+                demos = e3.get("demo") or []
+                if isinstance(demos, list) and demos:
+                    print("=== E3-TEXT DEMO ===")
+                    for rec in demos[: max(1, int(args.e3_demo_max))]:
+                        if not isinstance(rec, dict):
+                            continue
+                        if "Q1" in rec:
+                            cite1 = rec.get("CITE1") or {}
+                            cite2 = rec.get("CITE2") or {}
+                            pos1 = cite1.get("pos", None)
+                            ln1 = cite1.get("len", None)
+                            ok1 = 1 if bool(cite1.get("ok", False)) else 0
+                            pos2 = cite2.get("pos", None)
+                            ln2 = cite2.get("len", None)
+                            ok2 = 1 if bool(cite2.get("ok", False)) else 0
+                            print(f"Q1: {rec.get('Q1', '')}")
+                            print(f"ANS1={rec.get('ANS1', '')}")
+                            print(f"CITE1=[pos={pos1},len={ln1}] CITE1_OK={ok1}")
+                            print(f"SNIP1={rec.get('SNIP1', '')}")
+                            print(f"Q2: {rec.get('Q2', '')}")
+                            print(f"ANS2={rec.get('ANS2', '')}")
+                            print(f"CITE2=[pos={pos2},len={ln2}] CITE2_OK={ok2}")
+                            print(f"SNIP2={rec.get('SNIP2', '')}")
+                            print(f"COMB={rec.get('COMB', '')}")
+                        else:
+                            q = rec.get("Q", "")
+                            ans = rec.get("ANS", "")
+                            cite = rec.get("CITE") or {}
+                            pos = cite.get("pos", None)
+                            ln = cite.get("len", None)
+                            ok = 1 if bool(cite.get("ok", False)) else 0
+                            snip = rec.get("SNIP", "")
+                            print(f"Q: {q}")
+                            print(f"ANS={ans}")
+                            print(f"CITE=[pos={pos},len={ln}] CITE_OK={ok}")
+                            print(f"SNIP={snip}")
 
     with open(os.path.join(save_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
